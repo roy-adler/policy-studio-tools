@@ -3,7 +3,12 @@
   "displayName": "Policy Studio Tools",
   "description": "Tools for Axway Policy Studio projects",
   "version": "0.0.1",
-  "publisher": "policy-studio",
+  "publisher": "RoyAdler",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/roy-adler/policy-studio-tools.git"
+  },
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -147,11 +152,14 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "package": "vsce package --no-dependencies --no-update-package-json",
+    "vscode:publish": "vsce publish --no-dependencies --no-update-package-json"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.2.1",
     "typescript": "^5.7.2",
     "vitest": "^3.0.0"
   }

@@ -1,0 +1,69 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Compile
+        run: npm run compile
+
+      - name: Compute release version
+        id: version
+        run: |
+          BASE_VERSION=$(node -p "require('./package.json').version")
+          RELEASE_VERSION="${BASE_VERSION}-build.${GITHUB_RUN_NUMBER}"
+          echo "base=${BASE_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "release=${RELEASE_VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Package extension
+        run: npm run package -- "${{ steps.version.outputs.release }}"
+
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: policy-studio-tools-vsix
+          path: policy-studio-tools-*.vsix
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.release }}
+          name: Policy Studio Tools v${{ steps.version.outputs.release }}
+          files: policy-studio-tools-*.vsix
+          generate_release_notes: true
+          prerelease: true
+
+      - name: Publish to Visual Studio Marketplace
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          if [ -z "$VSCE_PAT" ]; then
+            echo "VSCE_PAT secret not configured — skipping Visual Studio Marketplace publish."
+            exit 0
+          fi
+          npm run vscode:publish -- "${{ steps.version.outputs.release }}"
