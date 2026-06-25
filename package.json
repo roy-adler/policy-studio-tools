@@ -52,8 +52,44 @@
           "default": 100,
           "minimum": 1,
           "description": "Maximum number of circuit search results returned per query."
+        },
+        "policyStudio.sidebar.showOnActivate": {
+          "type": "boolean",
+          "default": false,
+          "description": "Focus the Policy Studio sidebar when a project is first detected in the workspace."
+        },
+        "policyStudio.sidebar.pinSearchView": {
+          "type": "boolean",
+          "default": true,
+          "description": "Keep the Circuit Search view expanded in the sidebar."
         }
       }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "policy-studio",
+          "title": "Policy Studio",
+          "icon": "media/policy-studio-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "policy-studio": [
+        {
+          "id": "policyStudio.projects",
+          "name": "Projects"
+        },
+        {
+          "id": "policyStudio.tools",
+          "name": "Tools"
+        },
+        {
+          "id": "policyStudio.circuitSearch",
+          "name": "Circuit Search",
+          "type": "webview"
+        }
+      ]
     },
     "commands": [
       {
@@ -75,6 +111,16 @@
         "command": "policyStudioTools.searchCircuits",
         "title": "Search Circuits",
         "category": "Policy Studio"
+      },
+      {
+        "command": "policyStudioTools.focusCircuitSearch",
+        "title": "Focus Circuit Search",
+        "category": "Policy Studio"
+      },
+      {
+        "command": "policyStudioTools.setActiveProject",
+        "title": "Set Active Project",
+        "category": "Policy Studio"
       }
     ],
     "menus": {
@@ -86,6 +132,13 @@
         {
           "command": "policyStudioTools.searchCircuits",
           "when": "policyStudio.projectDetected"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "policyStudioTools.refreshProjects",
+          "when": "view == policyStudio.tools",
+          "group": "navigation"
         }
       ]
     }

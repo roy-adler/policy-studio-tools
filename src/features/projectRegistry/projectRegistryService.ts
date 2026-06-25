@@ -78,6 +78,10 @@ export class ProjectRegistryService {
     );
   }
 
+  activateProject(projectId: string): void {
+    this.persistScope({ mode: 'activeProject', activeProjectId: projectId });
+  }
+
   private scheduleRefresh(): void {
     if (this.refreshTimer) {
       clearTimeout(this.refreshTimer);
