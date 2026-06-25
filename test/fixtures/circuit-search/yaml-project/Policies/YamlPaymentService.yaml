@@ -1,0 +1,14 @@
+circuit:
+  name: YamlPaymentService
+  filters:
+    - name: YamlSetTransaction
+      type: SetAttribute
+      attributes:
+        - yamlTransactionId
+    - name: YamlScriptStep
+      type: JavaScriptFilter
+      script: |
+        function yamlProcess() { return yamlValidate(); }
+    - name: YamlCallAuth
+      type: CircuitCall
+      circuitName: YamlAuthCircuit

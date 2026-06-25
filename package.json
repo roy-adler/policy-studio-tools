@@ -46,6 +46,12 @@
           "type": "boolean",
           "default": true,
           "description": "Enable background discovery of nested Policy Studio projects."
+        },
+        "policyStudio.circuitSearch.maxResults": {
+          "type": "number",
+          "default": 100,
+          "minimum": 1,
+          "description": "Maximum number of circuit search results returned per query."
         }
       }
     },
@@ -64,12 +70,21 @@
         "command": "policyStudioTools.refreshProjects",
         "title": "Refresh Policy Studio Projects",
         "category": "Policy Studio"
+      },
+      {
+        "command": "policyStudioTools.searchCircuits",
+        "title": "Search Circuits",
+        "category": "Policy Studio"
       }
     ],
     "menus": {
       "commandPalette": [
         {
           "command": "policyStudioTools.placeholder",
+          "when": "policyStudio.projectDetected"
+        },
+        {
+          "command": "policyStudioTools.searchCircuits",
           "when": "policyStudio.projectDetected"
         }
       ]

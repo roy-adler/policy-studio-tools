@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Circuit name="BrokenCircuit">
+  <Filter name="BrokenFilter" type="SetAttribute">
+    <configuration>
+      <attribute attributeName="broken"
+    </configuration>
+  </Filter>
+</Circuit>
