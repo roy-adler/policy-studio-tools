@@ -35,8 +35,12 @@ jobs:
         id: version
         run: |
           BASE_VERSION=$(node -p "require('./package.json').version")
-          # VS Marketplace requires 1–4 numeric segments only (e.g. 0.0.1.42).
-          RELEASE_VERSION="${BASE_VERSION}.${GITHUB_RUN_NUMBER}"
+          MAJOR=$(echo "$BASE_VERSION" | cut -d. -f1)
+          MINOR=$(echo "$BASE_VERSION" | cut -d. -f2)
+          PATCH=$(echo "$BASE_VERSION" | cut -d. -f3)
+          PATCH=${PATCH:-0}
+          # VS Marketplace: 1–3 numeric segments (e.g. 0.0.2), same style as 0.1.11
+          RELEASE_VERSION="${MAJOR}.${MINOR}.$((PATCH + GITHUB_RUN_NUMBER))"
           echo "base=${BASE_VERSION}" >> "$GITHUB_OUTPUT"
           echo "release=${RELEASE_VERSION}" >> "$GITHUB_OUTPUT"
 
