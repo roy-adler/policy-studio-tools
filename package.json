@@ -1,0 +1,46 @@
+{
+  "name": "policy-studio-tools",
+  "displayName": "Policy Studio Tools",
+  "description": "Tools for Axway Policy Studio projects",
+  "version": "0.0.1",
+  "publisher": "policy-studio",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "policyStudioTools.placeholder",
+        "title": "Policy Studio Tools",
+        "category": "Policy Studio"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "policyStudioTools.placeholder",
+          "when": "policyStudio.projectDetected"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.7.2",
+    "vitest": "^3.0.0"
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "version": "2.0.0",
+  "configurations": [
+    {
+      "name": "Run Extension",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/out/**/*.js"
+      ],
+      "preLaunchTask": "npm: compile",
+      "stopOnEntry": false,
+      "timeout": 60000,
+      "debugWebWorkerExtensions": false
+    },
+    {
+      "name": "Run Extension (sample project)",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}",
+        "${workspaceFolder}/test/fixtures/sample-policy-project"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/out/**/*.js"
+      ],
+      "preLaunchTask": "npm: compile",
+      "stopOnEntry": false,
+      "timeout": 60000,
+      "debugWebWorkerExtensions": false
+    }
+  ]
+}

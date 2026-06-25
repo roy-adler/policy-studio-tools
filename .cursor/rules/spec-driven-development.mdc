@@ -1,0 +1,13 @@
+---
+description: Spec-driven development workflow — specs in /specs are the source of truth
+alwaysApply: true
+---
+
+Always follow specs in /specs.
+
+Before implementing:
+1. Read the related spec.
+2. Create or update tests first.
+3. Do not add behavior that is not described.
+4. If the spec is unclear, update the spec before coding.
+5. Keep features separated under `src/features/<featureName>`.
