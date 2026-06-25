@@ -15,10 +15,54 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "configuration": {
+      "title": "Policy Studio",
+      "properties": {
+        "policyStudio.projects.scanDepth": {
+          "type": "number",
+          "default": 10,
+          "minimum": 0,
+          "description": "Maximum directory depth below each workspace folder to search for nested Policy Studio projects. 0 = workspace roots only."
+        },
+        "policyStudio.projects.includePaths": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["**"],
+          "description": "Glob allowlist limiting which paths are scanned for Policy Studio projects."
+        },
+        "policyStudio.projects.excludePaths": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [
+            "**/node_modules/**",
+            "**/.git/**",
+            "**/out/**",
+            "**/dist/**",
+            "**/build/**"
+          ],
+          "description": "Glob denylist of paths to skip during project discovery."
+        },
+        "policyStudio.projects.autoDiscover": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable background discovery of nested Policy Studio projects."
+        }
+      }
+    },
     "commands": [
       {
         "command": "policyStudioTools.placeholder",
         "title": "Policy Studio Tools",
+        "category": "Policy Studio"
+      },
+      {
+        "command": "policyStudioTools.selectProjectScope",
+        "title": "Select Project Scope",
+        "category": "Policy Studio"
+      },
+      {
+        "command": "policyStudioTools.refreshProjects",
+        "title": "Refresh Policy Studio Projects",
         "category": "Policy Studio"
       }
     ],

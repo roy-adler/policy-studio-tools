@@ -1,9 +1,9 @@
 import * as vscode from 'vscode';
-import { ProjectDetection } from './features/projectDetection/projectDetection';
+import { ProjectRegistryService } from './features/projectRegistry/projectRegistryService';
 
 export function activate(context: vscode.ExtensionContext): void {
-  const projectDetection = new ProjectDetection(context);
-  projectDetection.activate();
+  const projectRegistry = new ProjectRegistryService(context);
+  projectRegistry.activate();
 
   context.subscriptions.push(
     vscode.commands.registerCommand('policyStudioTools.placeholder', () => {
