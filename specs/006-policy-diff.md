@@ -10,7 +10,7 @@ As a Policy Studio developer, I want to see what actually changed between two pr
 
 ## Inputs
 
-- A detected Policy Studio workspace (see `001-project-detection.md`).
+- Optional anchor project from current scope (`000-multi-project-monorepo.md`) when comparing paths relative to a monorepo layout.
 - **Left and right comparison sources** (generic v1 interface; Git integration deferred):
   - Two directories on disk (e.g. exported project folders)
   - Two arbitrary sets of policy files selected via file picker
@@ -48,7 +48,7 @@ As a Policy Studio developer, I want to see what actually changed between two pr
   - Ignore pure formatting differences in XML serialization
 - For modified scripts and bodies, show textual diff with context lines (not entire file diff unless needed).
 - Unparseable files on either side: list in “could not compare” section; do not fail entire diff.
-- Command: `policyStudioTools.comparePolicies` prompts for left and right sources (folder pickers in v1).
+- Command: `policyStudioTools.comparePolicies` prompts for left and right sources (folder pickers in v1); picker may offer discovered project roots from the registry as shortcuts.
 - Design **source adapter interface** so Git integration plugs in later without rewriting the semantic diff engine:
   - `loadPolicySnapshot(source: DiffSource): PolicySnapshot`
   - `DiffSource = { kind: 'directory', path } | { kind: 'fileSet', files } | { kind: 'git', ... }` (git kind specified but not implemented in v1)

@@ -10,8 +10,8 @@ As a Policy Studio developer, I want to see a graph of circuits and how they cal
 
 ## Inputs
 
-- A detected Policy Studio workspace (see `001-project-detection.md`).
-- Project circuit index: circuit names, definition locations, and outbound circuit references (shared with `002-circuit-search.md` / `003-jump-to-circuit.md`).
+- Project(s) from current scope via `getProjectsInScope()` (see `000-multi-project-monorepo.md`).
+- Per-project circuit index: circuit names, definition locations, and outbound circuit references (shared with `002-circuit-search.md` / `003-jump-to-circuit.md`).
 - User interactions:
   - Open graph command: `policyStudioTools.showCircuitGraph`
   - Search/filter box for circuit names
@@ -33,7 +33,8 @@ As a Policy Studio developer, I want to see a graph of circuits and how they cal
 
 ## Behaviour
 
-- Build directed graph `G = (V, E)`:
+- Default: one graph per **active** project. When scope is `allProjects` or `selectedProjects`, offer merged graph with nodes grouped or coloured by `projectDisplayName`.
+- Build directed graph `G = (V, E)` for the selected project set:
   - `V` = all circuits found in project index
   - `E` = `(caller, callee)` for each circuit reference extracted from policy configuration
 - Compute analysis sets:

@@ -10,8 +10,8 @@ As a team lead or developer, I want to export documentation describing circuits,
 
 ## Inputs
 
-- A detected Policy Studio workspace (see `001-project-detection.md`).
-- Project root and all in-scope policy files (XML and YAML layouts).
+- Project(s) from current scope via `getProjectsInScope()` (see `000-multi-project-monorepo.md`).
+- Per-project root and all in-scope policy files (XML and YAML layouts).
 - User options at export time (defaults acceptable for v1):
   - Output directory or single output file path
   - Include or exclude sections: circuits, filters, routing, backends, attributes, scripts, references
@@ -47,10 +47,10 @@ As a team lead or developer, I want to export documentation describing circuits,
 
 - Activate only when a Policy Studio project is detected.
 - On command:
-  1. Parse project into semantic model (reuse parsers from search/diff where possible).
-  2. Build `DocumentationModel`.
+  1. For each project in scope, parse into a semantic model (reuse parsers from search/diff where possible).
+  2. Build one `DocumentationModel` per project, or a combined model with a top-level section per project when scope is `allProjects`.
   3. Render Markdown via `MarkdownRenderer`.
-  4. Write to disk; offer to open generated file in editor.
+  4. Write to disk (one file per project by default); offer to open generated file in editor.
 - Cross-references between circuits use Markdown links with anchor ids (e.g. `[AuthCircuit](#authcircuit)`).
 - Scripts:
   - Fence with appropriate language tag (`javascript`, `groovy`, etc. when detectable).

@@ -10,7 +10,7 @@ As a Policy Studio developer, I want path templates in my routing policies valid
 
 ## Inputs
 
-- A detected Policy Studio workspace (see `001-project-detection.md`).
+- Discovered Policy Studio project(s) in current scope (see `000-multi-project-monorepo.md`).
 - Path template strings extracted from routing-related policy configuration, including but not limited to:
   - HTTP path patterns on API / resource filters
   - URI template fields in route, proxy, and dispatch filters
@@ -40,7 +40,7 @@ As a Policy Studio developer, I want path templates in my routing policies valid
 - Register a diagnostic collection `policyStudio.pathTemplate`.
 - When a policy document is opened or changed, extract path template literals and validate each against the rule set below.
 - Debounce validation on typing (e.g. 300–500 ms) to avoid excessive work.
-- Workspace validation command scans all policy files in the project using the same rules.
+- Workspace validation command scans all policy files in `getProjectsInScope()` using the same rules; diagnostics include `projectDisplayName` in the message when multiple projects are in scope.
 
 ### Validation rules (v1)
 

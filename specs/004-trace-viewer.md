@@ -10,7 +10,7 @@ As an API Gateway developer, I want to open trace files and explore execution st
 
 ## Inputs
 
-- A `.trc` trace file opened from the workspace explorer, editor tab, or command `policyStudioTools.openTrace`.
+- Optional **nearest Policy Studio project** resolved via `getProjectForFile()` for status bar context only (see `000-multi-project-monorepo.md`); trace content is not scoped to a project.
 - File path and raw trace file bytes (read-only).
 - Optional user actions:
   - Expand/collapse tree nodes

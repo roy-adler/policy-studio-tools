@@ -10,8 +10,8 @@ As a Policy Studio developer, I want to search all circuits in my project by nam
 
 ## Inputs
 
-- A detected Policy Studio workspace (see `001-project-detection.md`).
-- Project root path for the active workspace folder.
+- One or more discovered Policy Studio projects and the current **project scope** (see `000-multi-project-monorepo.md`).
+- Project root path(s) from `getProjectsInScope()` — not assumed to equal the workspace folder root.
 - Policy Studio project layout:
   - **XML project:** policy entities under directories referenced by `PrimaryStore.xml` and related entity store files.
   - **YAML project:** policy definitions under `Policies/`, `APIs/`, and related directories alongside `values.yaml`.
@@ -28,6 +28,7 @@ As a Policy Studio developer, I want to search all circuits in my project by nam
 ## Outputs
 
 - A searchable results view (VS Code tree view, webview panel, or quick pick with detail rows — implementation choice) containing zero or more **search result items**, each with:
+  - **Project** — `projectDisplayName` (required when scope includes multiple projects).
   - **File path** — workspace-relative path to the policy file containing the match.
   - **Circuit name** — resolved circuit identifier or display name.
   - **Filter name** — present when the match is within or attributable to a specific filter; omitted or marked as N/A when match is at circuit level only.
@@ -43,7 +44,8 @@ As a Policy Studio developer, I want to search all circuits in my project by nam
 
 - Activate only when `policyStudio.projectDetected` is true.
 - On command invocation, prompt the user for a search query (or focus an input in a dedicated search view if one exists).
-- Build or refresh an in-memory **project circuit index** that maps:
+- Resolve target projects via `getProjectsInScope()`; search each project index and merge results.
+- Build or refresh a **per-project circuit index** that maps:
   - Circuit name → definition location(s)
   - File path → parsed circuit/filter structure (best effort)
   - Extracted filter names, attribute references, script bodies, and circuit reference targets
@@ -75,7 +77,7 @@ As a Policy Studio developer, I want to search all circuits in my project by nam
 - **Circuit defined across multiple files or inherited definitions:** Return all known definition locations; label ambiguous names clearly.
 - **Very large single policy file:** Stream or chunk reads; avoid loading entire multi-megabyte files into memory at once.
 - **Binary or non-policy files in project tree:** Ignore by extension and known Policy Studio directory conventions.
-- **Workspace with multiple Policy Studio roots:** Search only the folder that triggered the command, or the first detected root — document chosen behaviour; prefer per-folder search when multiple roots exist.
+- **Multiple projects in monorepo:** Scope follows `000-multi-project-monorepo.md`; default `activeProject` when editor is inside a project, otherwise user-selected scope; every result row includes project name when more than one project is in scope.
 - **File changed on disk during search:** Use snapshot at search start; optionally note that results may be stale.
 - **YAML-based projects:** Apply equivalent extraction rules for YAML policy representations where circuits/filters are not XML.
 - **No circuits found in project:** Return empty results with a clear message, not an error.
@@ -118,5 +120,5 @@ As a Policy Studio developer, I want to search all circuits in my project by nam
 - Scope checkboxes (search only scripts, only circuit names, etc.).
 - Search history and pinned queries.
 - Export search results to CSV or Markdown.
-- Cross-workspace search for multi-root setups.
+- Scope persisted per workspace with quick-pick to switch between active / all / selected projects (`000-multi-project-monorepo.md`).
 - Integration with `006-policy-diff.md` to jump to changed circuits matching a query.

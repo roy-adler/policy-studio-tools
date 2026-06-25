@@ -10,14 +10,14 @@ As a Policy Studio developer, I want to jump from a circuit reference to the cir
 
 ## Inputs
 
-- A detected Policy Studio workspace (see `001-project-detection.md`).
+- A discovered Policy Studio project (see `000-multi-project-monorepo.md`) — explicit `projectId` or inferred from source file via `getProjectForFile()`.
 - **Circuit reference** — a circuit name or identifier string, obtained from:
   - Circuit search results (`002-circuit-search.md`)
   - Future editor code lens, document link, or hover action on a reference in policy XML/YAML
   - Visual circuit graph node edges (`008-visual-circuit-graph.md`)
   - Programmatic call from other extension features via the shared navigation service API
 - Optional **source context** — file URI, position, and referring filter name (for logging and disambiguation hints).
-- Project circuit index (shared with search; maps circuit name → zero or more definition locations).
+- Per-project circuit index (shared with search; maps circuit name → zero or more definition locations within that project).
 
 ## Outputs
 
@@ -25,8 +25,8 @@ As a Policy Studio developer, I want to jump from a circuit reference to the cir
 - **Multiple matches:** Quick pick listing each candidate with file path, circuit name, and optional folder hint; user selection opens the chosen definition.
 - **No match:** Non-blocking warning notification (e.g. “Circuit ‘X’ not found in this project”) with optional action to run circuit search pre-filled with the name.
 - **Navigation service API** (internal module, not necessarily public extension API):
-  - `resolveCircuitDefinitions(projectRoot, circuitName): CircuitDefinition[]`
-  - `jumpToCircuit(circuitName, options?): Promise<JumpResult>`
+  - `resolveCircuitDefinitions(projectId, circuitName): CircuitDefinition[]`
+  - `jumpToCircuit(circuitName, options?: { projectId?, searchAllProjects? }): Promise<JumpResult>`
   - `JumpResult` discriminated union: `opened`, `picked`, `notFound`, `cancelled`, `error`
 
 ## Behaviour
@@ -34,10 +34,11 @@ As a Policy Studio developer, I want to jump from a circuit reference to the cir
 - Implement as `src/features/circuitNavigation/` (or equivalent) separate from UI commands so other features depend on the service, not on VS Code command handlers directly.
 - On `jumpToCircuit`:
   1. Ensure project index is available (build lazily or reuse cache from `002-circuit-search.md`).
-  2. Resolve `circuitName` to definition locations using normalized name matching (trim whitespace; case-insensitive compare unless Policy Studio semantics require exact match — document chosen rule in implementation).
-  3. If exactly one definition: open file at circuit definition range.
-  4. If multiple definitions: show quick pick; on selection, open that definition.
-  5. If zero definitions: show warning; do not open arbitrary files.
+  2. Resolve owning `projectId` from options or source file; search that project’s index first.
+  3. Resolve `circuitName` to definition locations using normalized name matching (trim whitespace; case-insensitive compare unless Policy Studio semantics require exact match — document chosen rule in implementation).
+  4. If exactly one definition: open file at circuit definition range.
+  5. If multiple definitions: show quick pick (include `projectDisplayName` when matches span projects); on selection, open that definition.
+  6. If zero definitions in project and `searchAllProjects` is allowed: search remaining workspace projects; otherwise show warning with action to search all projects.
 - Expose a VS Code command `policyStudioTools.jumpToCircuit` accepting an optional circuit name argument (for palette and keybinding); when invoked without arguments, use word at cursor or selection in the active editor if it looks like a circuit reference.
 - From search results: primary click or explicit “Go to definition” action calls `jumpToCircuit` with the referenced circuit name.
 - Preserve navigation history where possible (use `vscode.window.showTextDocument` with standard editor behaviour so Go Back works).
@@ -70,7 +71,7 @@ As a Policy Studio developer, I want to jump from a circuit reference to the cir
 
 - Renaming circuits or updating references (refactor/rename).
 - Jumping to filter definitions by filter name only (unless filter name uniquely identifies a circuit entry point — out of scope unless specified elsewhere).
-- Cross-workspace navigation to dependent projects.
+- Cross-repo navigation to dependent projects outside the workspace.
 
 ### Test fixture requirements
 
