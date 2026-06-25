@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<entityStoreData xmlns="http://www.vordel.com/2005/06/24/entityStore">
+  <entity xmlns="http://www.vordel.com/2005/06/24/entityStore" type="FilterCircuit">
+    <key type="FilterCircuit">
+      <id field="name" value="Health Check"/>
+    </key>
+    <fval name="start"><value>Set Message</value></fval>
+    <entity type="ChangeMessageFilter">
+      <key type="ChangeMessageFilter">
+        <id field="name" value="Set Message"/>
+      </key>
+      <fval name="body"><value>&lt;status&gt;ok&lt;/status&gt;</value></fval>
+      <fval name="attributeName"><value>response.body</value></fval>
+    </entity>
+    <entity type="Reflector">
+      <key type="Reflector">
+        <id field="name" value="Reflect"/>
+      </key>
+    </entity>
+    <entity type="CircuitReferralFilter">
+      <key type="CircuitReferralFilter">
+        <id field="name" value="Call Auth"/>
+      </key>
+      <fval name="circuit"><value>Policies/Auth/Validate Token</value></fval>
+    </entity>
+    <entity type="JavaScriptFilter">
+      <key type="JavaScriptFilter">
+        <id field="name" value="Run Script"/>
+      </key>
+      <fval name="script"><value>function run() { return checkHealth(); }</value></fval>
+    </entity>
+  </entity>
+</entityStoreData>

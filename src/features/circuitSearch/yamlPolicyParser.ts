@@ -29,112 +29,246 @@ function readScalarBlock(lines: string[], startIndex: number): { value: string; 
   return { value: parts.join('\n').trim(), endIndex: i - 1 };
 }
 
-export function parsePolicyYaml(content: string): { circuits: ParsedCircuit[]; error?: string } {
-  try {
-    const circuits: ParsedCircuit[] = [];
-    const lines = content.split('\n');
+function offsetAtLine(lines: string[], lineIndex: number): number {
+  return lines.slice(0, lineIndex).join('\n').length + (lineIndex > 0 ? 1 : 0);
+}
 
-    let circuitName: string | undefined;
-    let circuitStart = 0;
-    let inFilters = false;
-    let currentFilter: Partial<ParsedFilter> | undefined;
-    const filters: ParsedFilter[] = [];
+function parseYamlEsPolicy(content: string): ParsedCircuit[] {
+  const lines = content.split('\n');
+  let circuitName: string | undefined;
+  let circuitStart = 0;
+  let inChildren = false;
+  let currentChild: Partial<ParsedFilter> | undefined;
+  const filters: ParsedFilter[] = [];
+  let childIndent = 0;
 
-    const flushFilter = (endLine: number) => {
-      if (!currentFilter?.name) {
-        currentFilter = undefined;
-        return;
-      }
-      const startOffset = lines.slice(0, currentFilter.startOffset ?? 0).join('\n').length;
-      const endOffset = lines.slice(0, endLine + 1).join('\n').length;
-      filters.push({
-        name: currentFilter.name,
-        type: currentFilter.type,
-        startOffset,
-        endOffset,
-        attributes: currentFilter.attributes ?? [],
-        referencedCircuits: currentFilter.referencedCircuits ?? [],
-        script: currentFilter.script,
-        content: lines.slice(currentFilter.startOffset ?? 0, endLine + 1).join('\n'),
-      });
-      currentFilter = undefined;
-    };
+  const flushChild = (endLine: number) => {
+    if (!currentChild?.name) {
+      currentChild = undefined;
+      return;
+    }
+    const startOffset = currentChild.startOffset ?? 0;
+    const endOffset = offsetAtLine(lines, endLine + 1);
+    filters.push({
+      name: currentChild.name,
+      type: currentChild.type,
+      startOffset,
+      endOffset,
+      attributes: currentChild.attributes ?? [],
+      referencedCircuits: currentChild.referencedCircuits ?? [],
+      script: currentChild.script,
+      content: lines.slice(
+        lines.findIndex((_, idx) => offsetAtLine(lines, idx) >= startOffset),
+        endLine + 1,
+      ).join('\n'),
+    });
+    currentChild = undefined;
+  };
 
-    for (let i = 0; i < lines.length; i += 1) {
-      const line = lines[i];
-      const trimmed = line.trim();
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    const indent = line.match(/^\s*/)?.[0]?.length ?? 0;
 
-      if (trimmed.startsWith('name:') && !inFilters) {
-        circuitName = trimmed.slice('name:'.length).trim();
-        circuitStart = lines.slice(0, i).join('\n').length;
-      }
+    if (trimmed === 'type: FilterCircuit' || trimmed === 'type: "FilterCircuit"') {
+      circuitStart = offsetAtLine(lines, i);
+    }
 
-      if (trimmed === 'filters:') {
-        inFilters = true;
-        continue;
-      }
-
-      if (!inFilters) {
-        continue;
-      }
-
-      if (trimmed.startsWith('- name:')) {
-        flushFilter(i - 1);
-        currentFilter = {
-          name: trimmed.slice('- name:'.length).trim(),
-          startOffset: i,
-          attributes: [],
-          referencedCircuits: [],
-        };
-        continue;
-      }
-
-      if (!currentFilter) {
-        continue;
-      }
-
-      if (trimmed.startsWith('type:')) {
-        currentFilter.type = trimmed.slice('type:'.length).trim();
-      } else if (trimmed.startsWith('circuitName:')) {
-        currentFilter.referencedCircuits = [
-          ...(currentFilter.referencedCircuits ?? []),
-          trimmed.slice('circuitName:'.length).trim(),
-        ];
-      } else if (trimmed.startsWith('script:')) {
-        const { value, endIndex } = readScalarBlock(lines, i);
-        currentFilter.script = value;
-        i = endIndex;
-      } else if (trimmed === 'attributes:') {
-        const attrs: string[] = [];
-        let j = i + 1;
-        while (j < lines.length) {
-          const attrLine = lines[j]?.trim() ?? '';
-          if (!attrLine.startsWith('- ')) {
-            break;
-          }
-          attrs.push(attrLine.slice(2).trim());
-          j += 1;
-        }
-        currentFilter.attributes = attrs;
-        i = j - 1;
+    if (!inChildren && /^name:\s*.+/.test(trimmed) && indent <= 2) {
+      circuitName = trimmed.replace(/^name:\s*/, '').replace(/^["']|["']$/g, '');
+      if (circuitStart === 0) {
+        circuitStart = offsetAtLine(lines, i);
       }
     }
 
-    flushFilter(lines.length - 1);
-
-    if (!circuitName) {
-      return { circuits: [] };
+    if (!inChildren && trimmed.startsWith('fields:')) {
+      continue;
     }
 
-    const circuitEnd = content.length;
-    circuits.push({
+    if (!inChildren && trimmed.startsWith('name:') && indent >= 2) {
+      circuitName = trimmed.slice('name:'.length).trim().replace(/^["']|["']$/g, '');
+    }
+
+    if (trimmed === 'children:') {
+      inChildren = true;
+      childIndent = indent + 2;
+      continue;
+    }
+
+    if (!inChildren) {
+      continue;
+    }
+
+    if (inChildren && indent === childIndent && trimmed.endsWith(':') && !trimmed.startsWith('-')) {
+      flushChild(i - 1);
+      const childName = trimmed.slice(0, -1).trim();
+      currentChild = {
+        name: childName,
+        startOffset: offsetAtLine(lines, i),
+        attributes: [],
+        referencedCircuits: [],
+      };
+      continue;
+    }
+
+    if (!currentChild) {
+      continue;
+    }
+
+    if (trimmed.startsWith('type:')) {
+      currentChild.type = trimmed.slice('type:'.length).trim().replace(/^["']|["']$/g, '');
+    } else if (trimmed.startsWith('name:')) {
+      currentChild.name = trimmed.slice('name:'.length).trim().replace(/^["']|["']$/g, '');
+    } else if (trimmed.startsWith('circuit:')) {
+      const value = trimmed.slice('circuit:'.length).trim().replace(/^["']|["']$/g, '');
+      currentChild.referencedCircuits = [
+        ...(currentChild.referencedCircuits ?? []),
+        value.includes('/') ? (value.split('/').pop() ?? value) : value,
+      ];
+    } else if (trimmed.startsWith('attributeName:')) {
+      currentChild.attributes = [
+        ...(currentChild.attributes ?? []),
+        trimmed.slice('attributeName:'.length).trim().replace(/^["']|["']$/g, ''),
+      ];
+    } else if (trimmed.startsWith('script:') || trimmed === 'body:') {
+      const { value, endIndex } = readScalarBlock(lines, i);
+      currentChild.script = value;
+      i = endIndex;
+    }
+  }
+
+  flushChild(lines.length - 1);
+
+  if (!circuitName) {
+    return [];
+  }
+
+  return [
+    {
       name: circuitName,
       startOffset: circuitStart,
-      endOffset: circuitEnd,
+      endOffset: content.length,
       filters,
-    });
+    },
+  ];
+}
 
-    return { circuits };
+function parseLegacyYamlPolicy(content: string): ParsedCircuit[] {
+  const circuits: ParsedCircuit[] = [];
+  const lines = content.split('\n');
+
+  let circuitName: string | undefined;
+  let circuitStart = 0;
+  let inFilters = false;
+  let currentFilter: Partial<ParsedFilter> | undefined;
+  const filters: ParsedFilter[] = [];
+
+  const flushFilter = (endLine: number) => {
+    if (!currentFilter?.name) {
+      currentFilter = undefined;
+      return;
+    }
+    const startOffset = currentFilter.startOffset ?? 0;
+    const endOffset = offsetAtLine(lines, endLine + 1);
+    filters.push({
+      name: currentFilter.name,
+      type: currentFilter.type,
+      startOffset,
+      endOffset,
+      attributes: currentFilter.attributes ?? [],
+      referencedCircuits: currentFilter.referencedCircuits ?? [],
+      script: currentFilter.script,
+      content: lines.slice(
+        lines.findIndex((_, idx) => offsetAtLine(lines, idx) >= startOffset),
+        endLine + 1,
+      ).join('\n'),
+    });
+    currentFilter = undefined;
+  };
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith('name:') && !inFilters) {
+      circuitName = trimmed.slice('name:'.length).trim();
+      circuitStart = offsetAtLine(lines, i);
+    }
+
+    if (trimmed === 'filters:') {
+      inFilters = true;
+      continue;
+    }
+
+    if (!inFilters) {
+      continue;
+    }
+
+    if (trimmed.startsWith('- name:')) {
+      flushFilter(i - 1);
+      currentFilter = {
+        name: trimmed.slice('- name:'.length).trim(),
+        startOffset: offsetAtLine(lines, i),
+        attributes: [],
+        referencedCircuits: [],
+      };
+      continue;
+    }
+
+    if (!currentFilter) {
+      continue;
+    }
+
+    if (trimmed.startsWith('type:')) {
+      currentFilter.type = trimmed.slice('type:'.length).trim();
+    } else if (trimmed.startsWith('circuitName:')) {
+      currentFilter.referencedCircuits = [
+        ...(currentFilter.referencedCircuits ?? []),
+        trimmed.slice('circuitName:'.length).trim(),
+      ];
+    } else if (trimmed.startsWith('script:')) {
+      const { value, endIndex } = readScalarBlock(lines, i);
+      currentFilter.script = value;
+      i = endIndex;
+    } else if (trimmed === 'attributes:') {
+      const attrs: string[] = [];
+      let j = i + 1;
+      while (j < lines.length) {
+        const attrLine = lines[j]?.trim() ?? '';
+        if (!attrLine.startsWith('- ')) {
+          break;
+        }
+        attrs.push(attrLine.slice(2).trim());
+        j += 1;
+      }
+      currentFilter.attributes = attrs;
+      i = j - 1;
+    }
+  }
+
+  flushFilter(lines.length - 1);
+
+  if (!circuitName) {
+    return [];
+  }
+
+  circuits.push({
+    name: circuitName,
+    startOffset: circuitStart,
+    endOffset: content.length,
+    filters,
+  });
+
+  return circuits;
+}
+
+export function parsePolicyYaml(content: string): { circuits: ParsedCircuit[]; error?: string } {
+  try {
+    const yamlEs = parseYamlEsPolicy(content);
+    if (yamlEs.length > 0) {
+      return { circuits: yamlEs };
+    }
+    return { circuits: parseLegacyYamlPolicy(content) };
   } catch (error) {
     return {
       circuits: [],

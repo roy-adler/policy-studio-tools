@@ -1,0 +1,26 @@
+---
+meta:
+  type: FilterCircuit
+  _version: "4"
+fields:
+  name: Health Check
+  start: Set Message
+children:
+  Set Message:
+    meta:
+      type: ChangeMessageFilter
+    fields:
+      name: Set Message
+      body: "<status>ok</status>"
+      attributeName: response.body
+  Reflect:
+    meta:
+      type: Reflector
+    fields:
+      name: Reflect
+  Call Auth:
+    meta:
+      type: CircuitReferralFilter
+    fields:
+      name: Call Auth
+      circuit: Policies/Auth/Validate Token

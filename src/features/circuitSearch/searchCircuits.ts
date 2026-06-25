@@ -199,18 +199,38 @@ function searchPlainTextFallback(
     return;
   }
 
-  const matchIndex = findMatchIndex(file.content, query);
-  const endOffset = Math.min(file.content.length, matchIndex + query.length);
+  let matchIndex = findMatchIndex(file.content, query);
+  let circuitName = 'N/A';
+  let filterName: string | undefined;
+  let rangeStart = matchIndex;
+  let rangeEnd = Math.min(file.content.length, matchIndex + query.length);
+
+  for (const circuit of file.circuits) {
+    if (matchIndex >= circuit.startOffset && matchIndex < circuit.endOffset) {
+      circuitName = circuit.name;
+      for (const filter of circuit.filters) {
+        if (matchIndex >= filter.startOffset && matchIndex < filter.endOffset) {
+          filterName = filter.name;
+          rangeStart = filter.startOffset;
+          rangeEnd = filter.endOffset;
+          break;
+        }
+      }
+      break;
+    }
+  }
+
   addResult(results, seen, {
     projectId: project.id,
     projectDisplayName: includeProjectName ? project.displayName : '',
     filePath: file.relativePath,
-    circuitName: 'N/A',
+    circuitName,
+    filterName,
     matchPreview: buildPreview(file.content, matchIndex, query.length, previewLength),
     matchKind: 'xmlContent',
     jumpTarget: {
       filePath: file.relativePath,
-      range: offsetToRange(file.content, matchIndex, endOffset),
+      range: offsetToRange(file.content, rangeStart, rangeEnd),
     },
     rank: 4,
   });
@@ -258,18 +278,7 @@ export async function searchCircuits(
     filesSkipped += index.invalidFiles.length;
 
     for (const file of index.files) {
-      if (file.parseError) {
-        searchPlainTextFallback(
-          project,
-          file,
-          normalized,
-          previewLength,
-          includeProjectName,
-          results,
-          seen,
-        );
-        continue;
-      }
+      const resultsBeforeFile = results.length;
 
       searchIndexedFile(
         project,
@@ -280,6 +289,18 @@ export async function searchCircuits(
         results,
         seen,
       );
+
+      if (results.length === resultsBeforeFile || file.parseError) {
+        searchPlainTextFallback(
+          project,
+          file,
+          normalized,
+          previewLength,
+          includeProjectName,
+          results,
+          seen,
+        );
+      }
     }
   }
 
