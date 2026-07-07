@@ -183,7 +183,7 @@ describe('extractPathTemplates', () => {
 
   it('does not extract path-like strings from non-routing fields', async () => {
     const yamlContent = await readFixture('non-routing/Policies/NonRouting.yaml');
-    const xmlContent = await readFixture('non-routing/policies/NonRouting.xml');
+    const xmlContent = await readFixture('non-routing/Policies/NonRouting.xml');
 
     expect(extractPathTemplates(yamlContent)).toEqual([]);
     expect(extractPathTemplates(xmlContent)).toEqual([]);
