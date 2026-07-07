@@ -1,0 +1,17 @@
+---
+meta:
+  type: FilterCircuit
+  _version: "4"
+fields:
+  name: Order API
+  start: Route Request
+children:
+  Route Request:
+    meta:
+      type: HTTPRouting
+    fields:
+      name: Route Request
+      method: GET
+      path: /orders/{orderId}
+
+      url: https://api.example.com/orders

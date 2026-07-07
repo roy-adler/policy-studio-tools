@@ -1,0 +1,17 @@
+<trace timestamp="2024-01-01T12:00:00Z" service="OrderAPI">
+  <entry name="Receive" type="HTTP" status="success" duration="1">
+    <requestHeader name="Content-Type">application/json</requestHeader>
+    <requestHeader name="Authorization">Bearer token</requestHeader>
+    <requestBody>{"orderId": 42}</requestBody>
+  </entry>
+  <entry name="Validate" type="OAuth" status="success" duration="5">
+    <requestHeader name="Content-Type">application/json</requestHeader>
+    <requestBody>{"orderId": 42}</requestBody>
+    <responseBody>{"valid": true}</responseBody>
+    <attribute name="user.id">123</attribute>
+  </entry>
+  <entry name="Route" type="SetAttribute" status="success" duration="2">
+    <responseHeader name="Content-Type">application/json</responseHeader>
+    <responseBody>{"status": "routed"}</responseBody>
+  </entry>
+</trace>

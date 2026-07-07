@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Circuit name="PaymentAPI">
+  <Filter name="ChargeCard" type="JavaScriptFilter">
+    <script>return charge(amount);</script>
+  </Filter>
+</Circuit>

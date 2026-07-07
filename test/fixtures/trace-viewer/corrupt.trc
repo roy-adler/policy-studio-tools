@@ -1,0 +1,6 @@
+<trace timestamp="2024-01-05T16:45:00Z" service="BrokenTrace">
+  <entry name="GoodFilter" type="SetHeader" status="success" duration="2">
+    <requestHeader name="Host">api.example.com</requestHeader>
+  </entry>
+  <entry name="BrokenFilter" type="Check" status="success">
+    <requestBody>{"partial": true

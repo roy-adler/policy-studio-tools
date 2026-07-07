@@ -1,0 +1,17 @@
+<trace timestamp="2024-01-03T14:15:00Z" service="Gateway">
+  <entry name="MainCircuit" type="FilterCircuit" status="success" duration="20">
+    <entry name="AuthCircuit" type="FilterCircuit" status="success" duration="8">
+      <entry name="ValidateToken" type="OAuth" status="success" duration="5">
+        <requestBody>{"token": "xyz"}</requestBody>
+        <responseBody>{"valid": true}</responseBody>
+      </entry>
+      <entry name="SetPrincipal" type="SetAttribute" status="success" duration="1">
+        <attribute name="principal.name">alice</attribute>
+      </entry>
+    </entry>
+    <entry name="BusinessLogic" type="Script" status="success" duration="10">
+      <requestBody>{"payload": "data"}</requestBody>
+      <responseBody>{"result": "ok"}</responseBody>
+    </entry>
+  </entry>
+</trace>

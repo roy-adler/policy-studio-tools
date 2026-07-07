@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Circuit name="EntryB">
+  <Filter name="CallServiceB" type="CircuitCall">
+    <circuitName>ServiceB</circuitName>
+  </Filter>
+</Circuit>

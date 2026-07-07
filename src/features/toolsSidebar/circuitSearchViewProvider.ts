@@ -6,6 +6,7 @@ import { DEFAULT_MAX_RESULTS } from '../circuitSearch/types';
 import { getSharedProjectRegistryStore } from '../projectRegistry/projectRegistryService';
 import type { ProjectScope } from '../projectRegistry/types';
 import type { CircuitSearchViewHost } from './types';
+import { SIDEBAR_FOCUSED_CONTEXT } from './toolsSidebarService';
 
 const DEBOUNCE_MS = 300;
 const VIEW_TYPE = 'policyStudio.circuitSearch';
@@ -73,9 +74,11 @@ export class CircuitSearchViewProvider implements vscode.WebviewViewProvider, Ci
     });
 
     webviewView.onDidChangeVisibility(() => {
-      if (webviewView.visible) {
-        void vscode.commands.executeCommand('setContext', 'policyStudio.sidebar.focused', true);
-      }
+      void vscode.commands.executeCommand(
+        'setContext',
+        SIDEBAR_FOCUSED_CONTEXT,
+        webviewView.visible,
+      );
     });
   }
 

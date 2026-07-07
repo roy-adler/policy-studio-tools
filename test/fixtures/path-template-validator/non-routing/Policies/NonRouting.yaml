@@ -1,0 +1,24 @@
+---
+meta:
+  type: FilterCircuit
+  _version: "4"
+fields:
+  name: Non Routing Paths
+  start: Script
+children:
+  Script:
+    meta:
+      type: JavaScriptFilter
+    fields:
+      name: Script
+      script: |
+        const endpoint = "/api/v1/{ignored}";
+        return endpoint;
+      description: Looks like /api/v1/pets but is not routing
+      basePath: /api/v1/legacy
+  Set Message:
+    meta:
+      type: ChangeMessageFilter
+    fields:
+      name: Set Message
+      body: "/api/v1/not-a-route"

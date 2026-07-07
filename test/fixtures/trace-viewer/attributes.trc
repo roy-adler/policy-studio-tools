@@ -1,0 +1,14 @@
+<trace timestamp="2024-01-04T08:00:00Z" service="Messaging">
+  <entry name="EnrichMessage" type="SetAttribute" status="success" duration="2">
+    <attribute name="http.request.path">/api/v1/orders</attribute>
+    <attribute name="http.request.method">POST</attribute>
+    <attribute name="message.id">msg-001</attribute>
+    <attribute name="correlation.id">corr-abc-123</attribute>
+    <attribute name="client.ip">10.0.0.42</attribute>
+    <attribute name="user.roles">admin,operator</attribute>
+  </entry>
+  <entry name="Forward" type="Route" status="success" duration="1">
+    <attribute name="route.target">backend-orders</attribute>
+    <responseHeader name="X-Correlation-Id">corr-abc-123</responseHeader>
+  </entry>
+</trace>

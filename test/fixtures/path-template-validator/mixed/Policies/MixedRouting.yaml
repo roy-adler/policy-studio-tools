@@ -1,0 +1,22 @@
+---
+meta:
+  type: FilterCircuit
+  _version: "4"
+fields:
+  name: Mixed Routing
+  start: Route
+children:
+  Route:
+    meta:
+      type: URIValidationFilter
+    fields:
+      name: Route
+      path: /api/v1/pets/{petId}
+      uriTemplate: api/bad/{id}/{id}
+      pathTemplate: /api//orders/
+  Other:
+    meta:
+      type: ChangeMessageFilter
+    fields:
+      name: Other
+      body: static

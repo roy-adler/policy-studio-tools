@@ -136,6 +136,43 @@
         "command": "policyStudioTools.showPolicyFlow",
         "title": "Show Policy Flow",
         "category": "Policy Studio"
+      },
+      {
+        "command": "policyStudioTools.openTraceFile",
+        "title": "Open Trace File",
+        "category": "Policy Studio"
+      },
+      {
+        "command": "policyStudioTools.validatePathTemplates",
+        "title": "Validate Path Templates",
+        "category": "Policy Studio"
+      },
+      {
+        "command": "policyStudioTools.comparePolicies",
+        "title": "Compare Policies",
+        "category": "Policy Studio"
+      },
+      {
+        "command": "policyStudioTools.exportDocumentation",
+        "title": "Export Documentation",
+        "category": "Policy Studio"
+      },
+      {
+        "command": "policyStudioTools.showCircuitGraph",
+        "title": "Show Circuit Graph",
+        "category": "Policy Studio"
+      }
+    ],
+    "customEditors": [
+      {
+        "viewType": "policyStudio.traceViewer",
+        "displayName": "Trace Viewer",
+        "selector": [
+          {
+            "filenamePattern": "*.trc"
+          }
+        ],
+        "priority": "default"
       }
     ],
     "menus": {
@@ -155,6 +192,25 @@
         {
           "command": "policyStudioTools.showPolicyFlow",
           "when": "policyStudio.projectDetected"
+        },
+        {
+          "command": "policyStudioTools.validatePathTemplates",
+          "when": "policyStudio.projectDetected"
+        },
+        {
+          "command": "policyStudioTools.comparePolicies",
+          "when": "policyStudio.projectDetected"
+        },
+        {
+          "command": "policyStudioTools.exportDocumentation",
+          "when": "policyStudio.projectDetected"
+        },
+        {
+          "command": "policyStudioTools.showCircuitGraph",
+          "when": "policyStudio.projectDetected"
+        },
+        {
+          "command": "policyStudioTools.openTraceFile"
         }
       ],
       "view/title": [

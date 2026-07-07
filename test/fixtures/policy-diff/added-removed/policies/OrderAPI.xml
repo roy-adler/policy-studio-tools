@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Circuit name="OrderAPI">
+  <Filter name="RouteToBackend" type="HTTPRouting">
+    <configuration>
+      <method>GET</method>
+      <path>/orders/{orderId}</path>
+      <url>https://api.example.com/orders</url>
+    </configuration>
+  </Filter>
+</Circuit>

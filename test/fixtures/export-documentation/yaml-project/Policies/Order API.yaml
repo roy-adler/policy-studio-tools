@@ -1,0 +1,17 @@
+---
+# YAML order API circuit for export documentation tests.
+meta:
+  type: FilterCircuit
+  _version: "4"
+fields:
+  name: Order API
+  start: Route Request
+children:
+  Route Request:
+    meta:
+      type: HTTPRouting
+    fields:
+      name: Route Request
+      method: POST
+      path: /api/v1/orders/{id}
+      url: https://backend.example.com/api/orders

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Circuit name="NonRouting">
+  <Filter name="Script" type="JavaScriptFilter">
+    <script>var url = "/api/v1/{fake}";</script>
+    <configuration>
+      <attribute attributeName="basePath" value="/api/v1/legacy"/>
+      <attribute attributeName="description" value="/api/v1/pets"/>
+    </configuration>
+  </Filter>
+</Circuit>

@@ -1,0 +1,16 @@
+<trace timestamp="2024-01-02T09:30:00Z" service="AuthAPI">
+  <entry name="Receive" type="HTTP" status="success" duration="1">
+    <requestHeader name="Content-Type">application/json</requestHeader>
+    <requestBody>{"username": "alice"}</requestBody>
+  </entry>
+  <entry name="ValidateToken" type="OAuth" status="success" duration="4">
+    <responseBody>{"token": "abc"}</responseBody>
+  </entry>
+  <entry name="CheckPolicy" type="Check" status="failure" duration="3">
+    <requestBody>{"action": "delete"}</requestBody>
+    <error message="Validation failed: insufficient permissions"/>
+  </entry>
+  <entry name="Respond" type="HTTP" status="skipped" duration="0">
+    <responseBody>{"error": "forbidden"}</responseBody>
+  </entry>
+</trace>

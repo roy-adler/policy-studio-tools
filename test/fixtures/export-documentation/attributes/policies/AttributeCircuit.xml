@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Circuit name="AttributeCircuit">
+  <Filter name="GetCustomerId" type="GetAttribute">
+    <configuration>
+      <attribute attributeName="customerId"/>
+    </configuration>
+  </Filter>
+  <Filter name="SetCustomerId" type="SetAttribute">
+    <configuration>
+      <attribute attributeName="customerId" value="${customerId}"/>
+    </configuration>
+  </Filter>
+  <Filter name="SetRequestId" type="SetAttribute">
+    <configuration>
+      <attribute attributeName="requestId" value=""/>
+    </configuration>
+  </Filter>
+</Circuit>
