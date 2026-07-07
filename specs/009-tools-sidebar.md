@@ -58,7 +58,7 @@ Shows discovery and scope at a glance.
 |------|---------|--------|
 | Scope summary (root) | e.g. `Active: gateway-a`, `All projects (3)`, `Selected: 2 projects` | Click → `selectProjectScope` |
 | Refresh | `$(refresh) Refresh projects` | → `refreshProjects` |
-| Per-project children | `displayName`, type badge (`xml` / `yaml`), `relativePath` | Click → set `activeProject` scope to that project |
+| Per-project children | `displayName`, type badge (`yaml` / `xml` — YAML is the primary format, XML legacy), `relativePath` | Click → set `activeProject` scope to that project |
 | Warnings | Discovery warnings from registry (truncated scan, unreadable paths) | Informational |
 
 Empty state (no projects): message *“No Policy Studio projects found”* with link to run **Refresh** and hint to check workspace folder / markers (`001`).

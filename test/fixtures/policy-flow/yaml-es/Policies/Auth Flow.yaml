@@ -1,0 +1,13 @@
+---
+meta:
+  type: FilterCircuit
+  _version: "4"
+fields:
+  name: Auth Flow
+  start: Check Token
+children:
+  Check Token:
+    meta:
+      type: OAuth
+    fields:
+      name: Check Token

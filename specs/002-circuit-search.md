@@ -2,7 +2,7 @@
 
 ## Goal
 
-Enable developers to find Policy Studio circuits and related content across an entire project quickly, without manually opening and reading every policy file. Search must remain responsive on large projects and degrade gracefully when policy XML is malformed.
+Enable developers to find Policy Studio circuits and related content across an entire project quickly, without manually opening and reading every policy file. Search must remain responsive on large projects and degrade gracefully when policy files (YAML or XML) are malformed. YAML is the primary Policy Studio format; XML is supported as legacy (see `AGENTS.md`).
 
 ## User Story
 
@@ -13,14 +13,14 @@ As a Policy Studio developer, I want to search all circuits in my project by nam
 - One or more discovered Policy Studio projects and the current **project scope** (see `000-multi-project-monorepo.md`).
 - Project root path(s) from `getProjectsInScope()` — not assumed to equal the workspace folder root.
 - Policy Studio project layout:
-  - **XML project:** policy entities under directories referenced by `PrimaryStore.xml` and related entity store files.
-  - **YAML project:** policy definitions under `Policies/`, `APIs/`, and related directories alongside `values.yaml`.
+  - **YAML project (primary):** policy definitions under `Policies/`, `APIs/`, and related directories alongside `values.yaml`.
+  - **XML project (legacy):** policy entities under directories referenced by `PrimaryStore.xml` and related entity store files.
 - User search query string (free text).
 - Optional search scope filters (future-friendly; initial implementation may expose all scopes by default):
   - Circuit name
   - Filter name
   - Attribute name
-  - Policy XML content
+  - Policy content (YAML or XML)
   - Script content
   - Referenced circuit name
 - VS Code command: `policyStudioTools.searchCircuits` (exact command id may be adjusted during implementation; spec assumes a dedicated command and command-palette entry).
@@ -79,7 +79,7 @@ As a Policy Studio developer, I want to search all circuits in my project by nam
 - **Binary or non-policy files in project tree:** Ignore by extension and known Policy Studio directory conventions.
 - **Multiple projects in monorepo:** Scope follows `000-multi-project-monorepo.md`; default `activeProject` when editor is inside a project, otherwise user-selected scope; every result row includes project name when more than one project is in scope.
 - **File changed on disk during search:** Use snapshot at search start; optionally note that results may be stale.
-- **YAML-based projects:** Apply equivalent extraction rules for YAML policy representations where circuits/filters are not XML.
+- **XML-based projects (legacy):** Apply equivalent extraction rules for XML policy representations; results are identical to YAML projects with the same semantics.
 - **No circuits found in project:** Return empty results with a clear message, not an error.
 
 ## Acceptance Criteria
@@ -112,7 +112,7 @@ As a Policy Studio developer, I want to search all circuits in my project by nam
 - `test/fixtures/circuit-search/ambiguous-names/` — two circuits with the same name in different files.
 - `test/fixtures/circuit-search/invalid-xml/` — mix of valid policy files and files with malformed XML; valid files must still be searchable.
 - `test/fixtures/circuit-search/large/` — generated or copied fixture with many policy files (500+) for performance smoke tests (may be generated at test time to avoid bloating the repo).
-- `test/fixtures/circuit-search/yaml-project/` — YAML-based project with equivalent searchable content (if YAML policy layout is supported in v1).
+- `test/fixtures/circuit-search/yaml-project/` — YAML-based project with equivalent searchable content (YAML is the primary format; this fixture is required, not optional).
 
 ## Future Ideas
 

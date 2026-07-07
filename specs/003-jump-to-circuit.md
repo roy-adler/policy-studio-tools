@@ -51,7 +51,7 @@ As a Policy Studio developer, I want to jump from a circuit reference to the cir
 - **Reference to external or library circuit not in workspace:** Report not found; do not navigate outside workspace unless explicitly configured (non-goal for v1).
 - **Duplicate definitions:** Never silently pick the first match; always show picker when count > 1.
 - **Definition in unsaved buffer:** Prefer on-disk index; optionally merge open editor buffers in a later iteration.
-- **YAML vs XML projects:** Resolve definitions in both layouts using the same service interface.
+- **YAML vs XML projects:** Resolve definitions in both layouts using the same service interface (YAML is the primary format, XML legacy — see `AGENTS.md`).
 - **User cancels quick pick:** Return `cancelled`; no editor change.
 - **Target file deleted after index build:** Show error with file path; suggest re-index or refresh.
 - **Jump from non-policy file:** Still attempt resolution if circuit name is valid.

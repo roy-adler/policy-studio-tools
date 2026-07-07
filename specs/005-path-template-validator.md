@@ -14,7 +14,7 @@ As a Policy Studio developer, I want path templates in my routing policies valid
 - Path template strings extracted from routing-related policy configuration, including but not limited to:
   - HTTP path patterns on API / resource filters
   - URI template fields in route, proxy, and dispatch filters
-  - Path segments in YAML policy definitions equivalent to XML routing config
+  - Path fields in YAML policy definitions (primary format) and the equivalent legacy XML routing config
 - Active document context when the user edits a policy file (for live diagnostics).
 - Optional workspace-wide validation command: `policyStudioTools.validatePathTemplates`.
 
@@ -58,7 +58,7 @@ As a Policy Studio developer, I want path templates in my routing policies valid
 | `trailingSlash` | Info | Trailing `/` may change matching behaviour — informational only |
 
 - Rules must be backed by unit tests with accepted/rejected examples aligned to Axway API Gateway path template behaviour (refine against official documentation during implementation).
-- Diagnostics must map to the exact template string range in the source file (XML attribute, element text, or YAML value).
+- Diagnostics must map to the exact template string range in the source file (YAML value, XML attribute, or element text).
 - Design `QuickFixDescriptor` structure so future code actions can apply fixes without changing the rule engine API.
 
 ### Examples to document (non-exhaustive)
@@ -74,8 +74,8 @@ As a Policy Studio developer, I want path templates in my routing policies valid
 - **Escaped braces in static segments:** Do not treat as placeholders when correctly escaped per format rules.
 - **Multiple templates in one file:** Each validated independently.
 - **Non-routing path-like strings:** Reduce false positives by only validating known routing elements/attributes (allowlist); do not validate arbitrary strings that resemble paths.
-- **YAML vs XML:** Same rules on extracted template strings regardless of serialization.
-- **Invalid XML file:** Skip structured extraction; optionally no diagnostics until file is parseable.
+- **YAML vs XML:** Same rules on extracted template strings regardless of serialization (YAML primary, XML legacy).
+- **Invalid YAML/XML file:** Skip structured extraction; optionally no diagnostics until file is parseable.
 - **Generated or third-party policies:** User can ignore warnings via standard VS Code diagnostic suppression (if configured) — no custom silencing required in v1.
 
 ## Acceptance Criteria

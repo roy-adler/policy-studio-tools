@@ -1,0 +1,20 @@
+---
+meta:
+  type: FilterCircuit
+  _version: "4"
+fields:
+  name: Dangling Flow
+  start: Validate
+children:
+  Validate:
+    meta:
+      type: Check
+    fields:
+      name: Validate
+      successNode: Ghost
+      failureNode: Handle Error
+  Handle Error:
+    meta:
+      type: AlertFilter
+    fields:
+      name: Handle Error

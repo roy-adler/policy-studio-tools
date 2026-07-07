@@ -1,7 +1,21 @@
 # Policy Flow fixtures
 
 Fixtures for `specs/010-policy-flow-view.md`. Each folder is a minimal Policy Studio
-project (marker `PrimaryStore.xml` or `values.yaml`) containing one scenario:
+project (marker `values.yaml` for YAML — the primary format — or `PrimaryStore.xml`
+for legacy XML) containing one or more scenarios.
+
+**Primary (YAML entity store, `yaml-es/`):** covers all scenarios in Axway's
+current format —
+
+| Policy file | Scenario |
+|-------------|----------|
+| `Order Flow.yaml` | Branching: distinct success and failure targets |
+| `Unreachable Flow.yaml` | Filter `Orphan` defined but not linked from the start path |
+| `Dangling Flow.yaml` | Success link to non-existent filter `Ghost` |
+| `No Start Flow.yaml` | Circuit without a `start` declaration |
+| `Delegate Flow.yaml` + `Auth Flow.yaml` | `Call Auth` references circuit `Auth Flow` (delegation) |
+
+**Legacy (XML):**
 
 | Folder | Scenario |
 |--------|----------|
@@ -12,14 +26,13 @@ project (marker `PrimaryStore.xml` or `values.yaml`) containing one scenario:
 | `circuit-ref/` | `CallAuth` references circuit `AuthPolicy` (delegation) |
 | `no-start/` | Circuit without a `start` declaration |
 | `axway-es/` | Axway entity-store XML dialect with `fval` start/success/failure |
-| `yaml-es/` | YAML entity-store dialect |
 
 A `large/` fixture (100+ filters) is intentionally not committed; generate one
 locally if a performance smoke test is needed.
 
 ## Manual verification in VS Code (Extension Development Host)
 
-1. Open one of the fixture folders (e.g. `branching/`) as the workspace.
+1. Open one of the fixture folders (prefer `yaml-es/`, the primary format) as the workspace.
 2. Run **Policy Studio: Show Policy Flow** from the command palette and pick the circuit,
    or click **Policy flow** in the Policy Studio sidebar under *Analyze*.
 3. Verify:

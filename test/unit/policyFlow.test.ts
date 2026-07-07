@@ -77,6 +77,53 @@ describe('flow link extraction — YAML entity store', () => {
     expect(validate?.successNode).toBe('Store Order');
     expect(validate?.failureNode).toBe('Reject Order');
   });
+
+  it('captures circuit references with filter names containing spaces', async () => {
+    const { circuits } = await loadYamlCircuit('yaml-es', 'Policies/Delegate Flow.yaml');
+    const call = circuits[0].filters.find((f) => f.name === 'Call Auth');
+
+    expect(call?.circuitRef).toBe('Auth Flow');
+    expect(call?.successNode).toBe('Respond');
+  });
+});
+
+describe('buildFlowGraph — YAML scenarios', () => {
+  it('flags unreachable filters in a YAML circuit', async () => {
+    const { content, circuits } = await loadYamlCircuit(
+      'yaml-es',
+      'Policies/Unreachable Flow.yaml',
+    );
+    const graph = buildFlowGraph(circuits[0], content);
+
+    expect(graph.nodes.find((n) => n.name === 'Orphan')?.reachable).toBe(false);
+    expect(graph.nodes.find((n) => n.name === 'Respond')?.reachable).toBe(true);
+  });
+
+  it('renders dangling YAML links as missing nodes', async () => {
+    const { content, circuits } = await loadYamlCircuit('yaml-es', 'Policies/Dangling Flow.yaml');
+    const graph = buildFlowGraph(circuits[0], content);
+
+    const ghost = graph.nodes.find((n) => n.name === 'Ghost');
+    expect(ghost?.missing).toBe(true);
+    expect(edge(graph, 'Validate', ghost!.id)?.dangling).toBe(true);
+    expect(edge(graph, 'Validate', 'Handle Error')?.kind).toBe('failure');
+  });
+
+  it('warns when a YAML circuit has no start filter', async () => {
+    const { content, circuits } = await loadYamlCircuit('yaml-es', 'Policies/No Start Flow.yaml');
+    const graph = buildFlowGraph(circuits[0], content);
+
+    expect(graph.warnings.some((w) => w.toLowerCase().includes('start'))).toBe(true);
+    expect(graph.nodes.every((n) => n.reachable)).toBe(true);
+  });
+
+  it('exposes circuit references on YAML nodes for delegation navigation', async () => {
+    const { content, circuits } = await loadYamlCircuit('yaml-es', 'Policies/Delegate Flow.yaml');
+    const graph = buildFlowGraph(circuits[0], content);
+
+    expect(graph.nodes.find((n) => n.name === 'Call Auth')?.circuitRef).toBe('Auth Flow');
+    expect(graph.nodes.find((n) => n.name === 'Call Auth')?.isStart).toBe(true);
+  });
 });
 
 describe('buildFlowGraph', () => {

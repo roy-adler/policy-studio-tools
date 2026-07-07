@@ -60,7 +60,7 @@ As a Policy Studio developer, I want to see a graph of circuits and how they cal
 - **Reference to external/library circuit:** Treated as missing unless external catalogue added later.
 - **Disconnected subgraphs:** All components visible; entry points per component highlighted.
 - **Very dense graph:** Performance degrades gracefully; suggest user apply search filter.
-- **YAML vs XML:** Same graph model regardless of serialization.
+- **YAML vs XML:** Same graph model regardless of serialization (YAML is the primary format, XML legacy — see `AGENTS.md`).
 
 ## Acceptance Criteria
 

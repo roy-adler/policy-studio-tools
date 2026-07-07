@@ -20,7 +20,7 @@ As a Policy Studio developer, I want to see a policy's filters and their success
   - Command `policyStudioTools.showPolicyFlow` (from palette: quick pick of circuits in scope; with the cursor inside a circuit definition in the active editor: that circuit)
   - Circuit search results (`002-circuit-search.md`) — "Show flow" action
   - Node action in the visual circuit graph (`008-visual-circuit-graph.md`)
-- **Per-circuit filter model** extracted from policy configuration (XML or YAML):
+- **Per-circuit filter model** extracted from policy configuration (YAML — the primary Policy Studio format — or legacy XML; see `AGENTS.md`):
   - Filters: identifier, display name, filter type
   - **Start filter** of the circuit
   - **Success path** links (filter → next filter on success)
@@ -61,7 +61,7 @@ As a Policy Studio developer, I want to see a policy's filters and their success
 - **Refresh:** re-parse and re-render when the underlying policy file changes on disk (debounced); preserve zoom/pan when node set is unchanged.
 - **Multiple panels:** each opened circuit gets its own panel (or the panel is reused per circuit — implementation choice, but two different circuits must never share stale state).
 - **Colour accessibility:** success/failure must be distinguishable by more than colour alone (e.g. solid vs. distinct arrowhead/label or line style), so the view works for red–green colour-blind users. Green/red remain the primary encoding to match Policy Studio conventions.
-- XML and YAML project layouts produce the same flow graph model.
+- YAML (primary) and XML (legacy) project layouts produce the same flow graph model; every flow scenario must be covered by fixtures in both formats.
 
 ## Edge Cases
 
@@ -73,7 +73,7 @@ As a Policy Studio developer, I want to see a policy's filters and their success
 - **Loops within the policy** (filter links forming a cycle): Render normally; layout must not hang; no cycle warning required in v1.
 - **Duplicate circuit names:** Disambiguate via quick pick before opening (same rule as jump-to-circuit — never silently pick one).
 - **Unknown filter type:** Render as generic node with the raw type string in the tooltip; never fail parsing because a type is unrecognized.
-- **Malformed circuit definition (invalid XML/YAML):** Show parse error state in the panel with file path; do not crash the extension host.
+- **Malformed circuit definition (invalid YAML/XML):** Show parse error state in the panel with file path; do not crash the extension host.
 - **File deleted while panel open:** Show stale-state banner with option to close or retry.
 
 ## Acceptance Criteria
@@ -100,12 +100,17 @@ As a Policy Studio developer, I want to see a policy's filters and their success
 
 ### Test fixture requirements
 
-- `test/fixtures/policy-flow/simple/` — linear policy: start → filter A → filter B (success path only).
-- `test/fixtures/policy-flow/branching/` — filter with distinct success and failure targets.
-- `test/fixtures/policy-flow/unreachable/` — a filter defined but not linked from the start path.
-- `test/fixtures/policy-flow/dangling/` — success link pointing to a non-existent filter id.
-- `test/fixtures/policy-flow/circuit-ref/` — policy containing a filter referencing another circuit.
-- `test/fixtures/policy-flow/no-start/` — circuit without a resolvable start filter.
+YAML is the primary format: every scenario must be covered by a YAML entity-store
+fixture; XML fixtures cover the same scenarios for legacy support.
+
+- `test/fixtures/policy-flow/yaml-es/` — YAML entity-store project covering all scenarios: branching (success + failure), unreachable filter, dangling link, no start filter, and circuit delegation (`circuit:` reference).
+- `test/fixtures/policy-flow/simple/` — linear policy: start → filter A → filter B (success path only, legacy XML).
+- `test/fixtures/policy-flow/branching/` — filter with distinct success and failure targets (legacy XML).
+- `test/fixtures/policy-flow/unreachable/` — a filter defined but not linked from the start path (legacy XML).
+- `test/fixtures/policy-flow/dangling/` — success link pointing to a non-existent filter id (legacy XML).
+- `test/fixtures/policy-flow/circuit-ref/` — policy containing a filter referencing another circuit (legacy XML).
+- `test/fixtures/policy-flow/no-start/` — circuit without a resolvable start filter (legacy XML).
+- `test/fixtures/policy-flow/axway-es/` — Axway XML entity-store dialect (`fval` start/success/failure fields).
 - `test/fixtures/policy-flow/large/` — generated policy with 100+ filters for performance smoke test (may be gitignored and generated in CI).
 
 ## Future Ideas

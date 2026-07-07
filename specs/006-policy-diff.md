@@ -2,11 +2,11 @@
 
 ## Goal
 
-Compare two versions of a Policy Studio project semantically — circuits, filters, scripts, routing paths, backends, and references — rather than as raw XML text. Reduce noise from formatting-only changes and give developers a meaningful change summary for reviews and troubleshooting.
+Compare two versions of a Policy Studio project semantically — circuits, filters, scripts, routing paths, backends, and references — rather than as raw YAML/XML text. Reduce noise from formatting-only changes and give developers a meaningful change summary for reviews and troubleshooting.
 
 ## User Story
 
-As a Policy Studio developer, I want to see what actually changed between two project snapshots (files, folders, or Git revisions), so that I can review policy changes without wading through irrelevant XML formatting diffs.
+As a Policy Studio developer, I want to see what actually changed between two project snapshots (files, folders, or Git revisions), so that I can review policy changes without wading through irrelevant formatting diffs.
 
 ## Inputs
 
@@ -15,7 +15,7 @@ As a Policy Studio developer, I want to see what actually changed between two pr
   - Two directories on disk (e.g. exported project folders)
   - Two arbitrary sets of policy files selected via file picker
   - Later: Git tree-ish pairs (`HEAD` vs working tree, commit vs commit) — same semantic engine, different source adapters
-- Policy files from XML and YAML project layouts.
+- Policy files from YAML (primary) and XML (legacy) project layouts.
 - Optional scope filters (future-friendly): circuits only, routing only, scripts only.
 
 ## Outputs
@@ -37,7 +37,7 @@ As a Policy Studio developer, I want to see what actually changed between two pr
 ## Behaviour
 
 - Parse policies on both sides into a **canonical semantic model**:
-  - Normalize insignificant XML whitespace, attribute order, and indentation before comparison.
+  - Normalize insignificant whitespace, key/attribute order, and indentation (YAML and XML) before comparison.
   - Extract comparable fields: circuit identity, filter sequence and configuration, embedded scripts, routing paths, backend URLs, referenced circuit names, relevant message attributes.
 - Match entities across sides:
   - Primary key: circuit name + file relative path (configurable strategy when files move)
@@ -59,7 +59,7 @@ As a Policy Studio developer, I want to see what actually changed between two pr
 - **Left or right empty:** All entities reported as added or removed.
 - **File moved but content unchanged:** Prefer rename/move detection when relative path changes but circuit fingerprint matches; otherwise show as remove + add.
 - **Duplicate circuit names on one side:** Disambiguate by file path in report; flag ambiguity in summary.
-- **YAML vs XML comparison:** Compare semantic model only; format difference between sides does not appear as content change if semantics match.
+- **YAML vs XML comparison:** Compare semantic model only; format difference between sides does not appear as content change if semantics match (important for reviewing an XML → YAML project migration).
 - **Large projects:** Stream or batch parse; show progress; avoid building full text diff for unchanged files.
 - **Scripts differing only by line endings:** Normalize CRLF/LF before script compare.
 - **Binary or non-policy files:** Ignored unless explicitly included by source adapter.
@@ -73,7 +73,7 @@ As a Policy Studio developer, I want to see what actually changed between two pr
 - [ ] Changing a script body produces a “changed script” entry with identifiable before/after content.
 - [ ] Changing a routing path produces an entry with old and new path template values.
 - [ ] Changing a backend URL produces an entry with old and new URL values.
-- [ ] Reformatting XML without semantic change produces zero circuit/filter change entries (formatting-only fixture).
+- [ ] Reformatting a policy file (YAML or XML) without semantic change produces zero circuit/filter change entries (formatting-only fixture).
 - [ ] Unparseable policy file on one side is listed in warnings; other files still compared.
 - [ ] Summary counts match the detailed change list.
 - [ ] Unit tests cover added/removed/modified circuits, script diff, path change, URL change, and formatting-only XML.
@@ -92,7 +92,7 @@ As a Policy Studio developer, I want to see what actually changed between two pr
 - `test/fixtures/policy-diff/changed-circuit/` — same layout with one modified filter script.
 - `test/fixtures/policy-diff/added-removed/` — one circuit added, one removed vs baseline.
 - `test/fixtures/policy-diff/routing-url/` — path template and backend URL changes only.
-- `test/fixtures/policy-diff/formatting-only/` — semantically identical XML with different indentation/line breaks.
+- `test/fixtures/policy-diff/formatting-only/` — semantically identical YAML (and XML) with different indentation/line breaks.
 - `test/fixtures/policy-diff/invalid/` — includes one malformed file alongside valid changes.
 
 ## Future Ideas

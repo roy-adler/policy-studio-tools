@@ -14,8 +14,12 @@ As a developer working in a monorepo with several Policy Studio projects, I want
 
 - VS Code workspace folder(s) (single- or multi-root).
 - Policy Studio project markers (see `001-project-detection.md`):
-  - **XML project:** `PrimaryStore.xml` at a directory root
-  - **YAML project:** `values.yaml` plus `Policies/`, `APIs/`, or `META-INF/`
+  - **YAML project (primary):** `values.yaml` plus `Policies/`, `APIs/`, or `META-INF/`
+  - **XML project (legacy):** `PrimaryStore.xml` at a directory root
+
+> **Format support:** Axway moved Policy Studio to a YAML entity store; YAML is
+> the primary format for all features. XML remains fully supported as the
+> legacy format and must not be removed. See `AGENTS.md`.
 - Workspace/user settings (proposed keys):
   - `policyStudio.projects.scanDepth` — max directory depth below each workspace folder to search for nested projects (default: `10`; `0` = workspace roots only)
   - `policyStudio.projects.includePaths` — glob allowlist limiting scan roots (default: `["**"]`)
@@ -171,7 +175,7 @@ When scope is `allProjects` or `selectedProjects`:
 
 ### Test fixture requirements
 
-- `test/fixtures/monorepo/two-projects/` — workspace root is generic repo root; `apps/gateway-a/` and `apps/gateway-b/` each contain a valid XML or YAML Policy Studio project.
+- `test/fixtures/monorepo/two-projects/` — workspace root is generic repo root; `apps/gateway-a/` and `apps/gateway-b/` each contain a valid YAML or XML Policy Studio project.
 - `test/fixtures/monorepo/nested-depth/` — project at `packages/team/service/policy/` (depth > 1).
 - `test/fixtures/monorepo/with-node-modules/` — `node_modules` contains decoy `PrimaryStore.xml`; must be excluded.
 - `test/fixtures/monorepo/multi-root/` — two workspace folders each with one project (for multi-root integration tests if harness supports).

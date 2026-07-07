@@ -11,7 +11,7 @@ As a team lead or developer, I want to export documentation describing circuits,
 ## Inputs
 
 - Project(s) from current scope via `getProjectsInScope()` (see `000-multi-project-monorepo.md`).
-- Per-project root and all in-scope policy files (XML and YAML layouts).
+- Per-project root and all in-scope policy files (YAML primary, XML legacy layouts).
 - User options at export time (defaults acceptable for v1):
   - Output directory or single output file path
   - Include or exclude sections: circuits, filters, routing, backends, attributes, scripts, references
@@ -102,7 +102,7 @@ As a team lead or developer, I want to export documentation describing circuits,
 - `test/fixtures/export-documentation/scripts/` — circuits with short and long embedded scripts.
 - `test/fixtures/export-documentation/attributes/` — filters referencing named message attributes.
 - `test/fixtures/export-documentation/invalid/` — one bad file plus valid circuits for warning behaviour.
-- `test/fixtures/export-documentation/yaml-project/` — YAML layout equivalent (if supported in v1).
+- `test/fixtures/export-documentation/yaml-project/` — YAML layout (primary format; required fixture).
 
 ## Future Ideas
 

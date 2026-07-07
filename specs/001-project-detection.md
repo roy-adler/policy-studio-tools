@@ -12,8 +12,8 @@ As a developer, I want the extension to recognize Policy Studio projects automat
 
 - Workspace folder(s)
 - Policy Studio project markers at a **candidate directory** (not only the workspace root):
-  - **XML project:** `PrimaryStore.xml`
-  - **YAML project:** `values.yaml` together with a `Policies`, `APIs`, or `META-INF` directory
+  - **YAML project (primary format since Axway's move to the YAML entity store):** `values.yaml` together with a `Policies`, `APIs`, or `META-INF` directory
+  - **XML project (legacy, still fully supported):** `PrimaryStore.xml`
 - Discovery settings from `000-multi-project-monorepo.md` (`scanDepth`, `includePaths`, `excludePaths`)
 
 ## Outputs

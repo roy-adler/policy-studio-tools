@@ -1,0 +1,20 @@
+---
+meta:
+  type: FilterCircuit
+  _version: "4"
+fields:
+  name: Delegate Flow
+  start: Call Auth
+children:
+  Call Auth:
+    meta:
+      type: CircuitReferralFilter
+    fields:
+      name: Call Auth
+      circuit: Policies/Auth Flow
+      successNode: Respond
+  Respond:
+    meta:
+      type: Reflector
+    fields:
+      name: Respond
