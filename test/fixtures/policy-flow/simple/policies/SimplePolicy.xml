@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Circuit name="SimplePolicy" start="Validate">
+  <Filter name="Validate" type="Check" successNode="Transform">
+    <configuration/>
+  </Filter>
+  <Filter name="Transform" type="ChangeMessage" successNode="Respond">
+    <configuration/>
+  </Filter>
+  <Filter name="Respond" type="Reflector">
+    <configuration/>
+  </Filter>
+</Circuit>

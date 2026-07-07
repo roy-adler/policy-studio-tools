@@ -23,6 +23,18 @@ const SCRIPT_PATTERNS = [
   /<script>([\s\S]*?)<\/script>/gi,
 ];
 
+function readFval(content: string, fieldName: string): string | undefined {
+  const pattern = new RegExp(
+    `<fval\\s+name\\s*=\\s*["']${fieldName}["'][^>]*>\\s*<value>([^<]*)</value>`,
+    'i',
+  );
+  return pattern.exec(content)?.[1]?.trim() || undefined;
+}
+
+function lastPathSegment(value: string): string {
+  return value.includes('/') ? (value.split('/').pop() ?? value) : value;
+}
+
 export function isWellFormedXml(content: string): boolean {
   const withoutCdata = content.replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, '');
   const tagPattern = /<(\/?)([A-Za-z_][\w.-]*)([^>]*)>/g;
@@ -196,12 +208,10 @@ function extractFiltersFromEntityBody(
 
     const attributes = collectPatternMatches(localBody, ATTRIBUTE_PATTERNS, filterStart).map((m) => m.value);
     const referencedCircuits = collectPatternMatches(localBody, CIRCUIT_REF_PATTERNS, filterStart).map(
-      (m) => {
-        const value = m.value.trim();
-        return value.includes('/') ? (value.split('/').pop() ?? value) : value;
-      },
+      (m) => lastPathSegment(m.value.trim()),
     );
     const scripts = collectPatternMatches(localBody, SCRIPT_PATTERNS, filterStart);
+    const circuitRefValue = readFval(localBody, 'circuit');
 
     filters.push({
       name: filterName,
@@ -212,6 +222,9 @@ function extractFiltersFromEntityBody(
       referencedCircuits,
       script: scripts[0]?.value,
       content: localBody,
+      successNode: readFval(localBody, 'successNode'),
+      failureNode: readFval(localBody, 'failureNode'),
+      circuitRef: circuitRefValue ? lastPathSegment(circuitRefValue) : undefined,
     });
   }
 
@@ -250,6 +263,8 @@ function parseSimplifiedPolicyXml(content: string): ParsedCircuit[] {
         (m) => m.value,
       );
       const scripts = collectPatternMatches(filterBody, SCRIPT_PATTERNS, filterStart);
+      const circuitRefValue =
+        readElementText(filterBody, 'circuitName') ?? readFval(filterBody, 'circuit');
 
       filters.push({
         name: filterName,
@@ -260,6 +275,9 @@ function parseSimplifiedPolicyXml(content: string): ParsedCircuit[] {
         referencedCircuits,
         script: scripts[0]?.value ?? readElementText(filterBody, 'script'),
         content: filterBody,
+        successNode: readAttribute(`<Filter ${filterTag}>`, 'successNode'),
+        failureNode: readAttribute(`<Filter ${filterTag}>`, 'failureNode'),
+        circuitRef: circuitRefValue ? lastPathSegment(circuitRefValue) : undefined,
       });
     }
 
@@ -268,6 +286,7 @@ function parseSimplifiedPolicyXml(content: string): ParsedCircuit[] {
       startOffset: circuitStart,
       endOffset: circuitEnd,
       filters,
+      startFilter: readAttribute(`<Circuit ${circuitTag}>`, 'start'),
     });
   }
 
@@ -291,11 +310,23 @@ function parseAxwayEntityStoreXml(content: string): ParsedCircuit[] {
 
     const bodyStart = entity.start + entity.openTag.length;
     const filters = extractFiltersFromEntityBody(entity.body, bodyStart, circuitName);
+
+    // Read circuit-level fields from the body with child entities removed so a
+    // child filter's fields are not mistaken for the circuit's.
+    let circuitOwnBody = entity.body;
+    for (const child of findAllEntityBlocks(entity.body)) {
+      circuitOwnBody =
+        circuitOwnBody.slice(0, child.start) +
+        ' '.repeat(child.end - child.start) +
+        circuitOwnBody.slice(child.end);
+    }
+
     circuits.push({
       name: circuitName,
       startOffset: entity.start,
       endOffset: entity.end,
       filters,
+      startFilter: readFval(circuitOwnBody, 'start'),
     });
   }
 

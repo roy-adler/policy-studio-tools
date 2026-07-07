@@ -2,6 +2,8 @@ import * as vscode from 'vscode';
 import { buildCircuitIndex } from '../circuitSearch/circuitIndex';
 import { getProjectForFile } from '../projectRegistry/discoverProjects';
 import { getSharedProjectRegistryStore } from '../projectRegistry/projectRegistryService';
+import { getSharedToolsHubService } from '../toolsSidebar/toolsHubService';
+import { JUMP_TO_CIRCUIT_TOOL } from './toolDescriptor';
 import {
   jumpToCircuit as jumpToCircuitCore,
   looksLikeCircuitReference,
@@ -145,6 +147,8 @@ export class CircuitNavigationService {
   constructor(private readonly context: vscode.ExtensionContext) {}
 
   activate(): void {
+    getSharedToolsHubService().registerTool(JUMP_TO_CIRCUIT_TOOL);
+
     this.context.subscriptions.push(
       vscode.commands.registerCommand(
         'policyStudioTools.jumpToCircuit',

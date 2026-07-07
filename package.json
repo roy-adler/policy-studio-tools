@@ -131,6 +131,11 @@
         "command": "policyStudioTools.jumpToCircuit",
         "title": "Jump to Circuit",
         "category": "Policy Studio"
+      },
+      {
+        "command": "policyStudioTools.showPolicyFlow",
+        "title": "Show Policy Flow",
+        "category": "Policy Studio"
       }
     ],
     "menus": {
@@ -145,6 +150,10 @@
         },
         {
           "command": "policyStudioTools.jumpToCircuit",
+          "when": "policyStudio.projectDetected"
+        },
+        {
+          "command": "policyStudioTools.showPolicyFlow",
           "when": "policyStudio.projectDetected"
         }
       ],

@@ -1,0 +1,25 @@
+---
+meta:
+  type: FilterCircuit
+  _version: "4"
+fields:
+  name: Order Flow
+  start: Validate Order
+children:
+  Validate Order:
+    meta:
+      type: Check
+    fields:
+      name: Validate Order
+      successNode: Store Order
+      failureNode: Reject Order
+  Store Order:
+    meta:
+      type: ChangeMessageFilter
+    fields:
+      name: Store Order
+  Reject Order:
+    meta:
+      type: AlertFilter
+    fields:
+      name: Reject Order

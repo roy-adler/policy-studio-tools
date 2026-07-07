@@ -36,6 +36,7 @@ function offsetAtLine(lines: string[], lineIndex: number): number {
 function parseYamlEsPolicy(content: string): ParsedCircuit[] {
   const lines = content.split('\n');
   let circuitName: string | undefined;
+  let circuitStartFilter: string | undefined;
   let circuitStart = 0;
   let inChildren = false;
   let currentChild: Partial<ParsedFilter> | undefined;
@@ -61,9 +62,14 @@ function parseYamlEsPolicy(content: string): ParsedCircuit[] {
         lines.findIndex((_, idx) => offsetAtLine(lines, idx) >= startOffset),
         endLine + 1,
       ).join('\n'),
+      successNode: currentChild.successNode,
+      failureNode: currentChild.failureNode,
+      circuitRef: currentChild.circuitRef,
     });
     currentChild = undefined;
   };
+
+  const unquote = (value: string): string => value.trim().replace(/^["']|["']$/g, '');
 
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
@@ -87,6 +93,10 @@ function parseYamlEsPolicy(content: string): ParsedCircuit[] {
 
     if (!inChildren && trimmed.startsWith('name:') && indent >= 2) {
       circuitName = trimmed.slice('name:'.length).trim().replace(/^["']|["']$/g, '');
+    }
+
+    if (!inChildren && trimmed.startsWith('start:')) {
+      circuitStartFilter = unquote(trimmed.slice('start:'.length));
     }
 
     if (trimmed === 'children:') {
@@ -121,10 +131,16 @@ function parseYamlEsPolicy(content: string): ParsedCircuit[] {
       currentChild.name = trimmed.slice('name:'.length).trim().replace(/^["']|["']$/g, '');
     } else if (trimmed.startsWith('circuit:')) {
       const value = trimmed.slice('circuit:'.length).trim().replace(/^["']|["']$/g, '');
+      const shortName = value.includes('/') ? (value.split('/').pop() ?? value) : value;
       currentChild.referencedCircuits = [
         ...(currentChild.referencedCircuits ?? []),
-        value.includes('/') ? (value.split('/').pop() ?? value) : value,
+        shortName,
       ];
+      currentChild.circuitRef = shortName;
+    } else if (trimmed.startsWith('successNode:')) {
+      currentChild.successNode = unquote(trimmed.slice('successNode:'.length));
+    } else if (trimmed.startsWith('failureNode:')) {
+      currentChild.failureNode = unquote(trimmed.slice('failureNode:'.length));
     } else if (trimmed.startsWith('attributeName:')) {
       currentChild.attributes = [
         ...(currentChild.attributes ?? []),
@@ -149,6 +165,7 @@ function parseYamlEsPolicy(content: string): ParsedCircuit[] {
       startOffset: circuitStart,
       endOffset: content.length,
       filters,
+      startFilter: circuitStartFilter,
     },
   ];
 }

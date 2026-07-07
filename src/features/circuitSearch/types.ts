@@ -54,6 +54,12 @@ export interface ParsedFilter {
   referencedCircuits: string[];
   script?: string;
   content: string;
+  /** Filter name the success path links to. */
+  successNode?: string;
+  /** Filter name the failure path links to. */
+  failureNode?: string;
+  /** Circuit name referenced by delegation filters (e.g. Policy Shortcut). */
+  circuitRef?: string;
 }
 
 export interface ParsedCircuit {
@@ -61,6 +67,8 @@ export interface ParsedCircuit {
   startOffset: number;
   endOffset: number;
   filters: ParsedFilter[];
+  /** Name of the filter the circuit starts with, when declared. */
+  startFilter?: string;
 }
 
 export interface IndexedPolicyFile {
