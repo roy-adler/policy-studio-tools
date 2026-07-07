@@ -17,9 +17,14 @@ Supports both Policy Studio project formats: the **YAML entity store** (Axway's 
 - Open and inspect `.trc` trace files in a structured viewer
 - Policy Studio sidebar with project scope and tools
 
+
+
 ## Requirements
 
 - VS Code 1.85 or newer
+- No installation
+
+
 
 ## Development
 
@@ -28,3 +33,4 @@ npm ci
 npm test
 npm run compile
 ```
+
