@@ -126,6 +126,11 @@
         "command": "policyStudioTools.setActiveProject",
         "title": "Set Active Project",
         "category": "Policy Studio"
+      },
+      {
+        "command": "policyStudioTools.jumpToCircuit",
+        "title": "Jump to Circuit",
+        "category": "Policy Studio"
       }
     ],
     "menus": {
@@ -136,6 +141,10 @@
         },
         {
           "command": "policyStudioTools.searchCircuits",
+          "when": "policyStudio.projectDetected"
+        },
+        {
+          "command": "policyStudioTools.jumpToCircuit",
           "when": "policyStudio.projectDetected"
         }
       ],

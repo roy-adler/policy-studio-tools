@@ -29,6 +29,7 @@ export class CircuitSearchViewProvider implements vscode.WebviewViewProvider, Ci
   private lastScopeSnapshot = '';
   private lastResults: CircuitSearchResult[] = [];
   private focusPending = false;
+  private pendingPrefillQuery: string | undefined;
 
   resolveWebviewView(
     webviewView: vscode.WebviewView,
@@ -47,8 +48,9 @@ export class CircuitSearchViewProvider implements vscode.WebviewViewProvider, Ci
         case 'ready':
           this.postState({ projectDetected: this.isProjectDetected() });
           if (this.focusPending) {
-            this.postMessage({ type: 'focusInput' });
+            this.postMessage({ type: 'focusInput', query: this.pendingPrefillQuery });
             this.focusPending = false;
+            this.pendingPrefillQuery = undefined;
           }
           break;
         case 'search':
@@ -77,12 +79,13 @@ export class CircuitSearchViewProvider implements vscode.WebviewViewProvider, Ci
     });
   }
 
-  focus(): void {
+  focus(prefillQuery?: string): void {
     if (this.view) {
       this.view.show?.(true);
-      this.postMessage({ type: 'focusInput' });
+      this.postMessage({ type: 'focusInput', query: prefillQuery });
     } else {
       this.focusPending = true;
+      this.pendingPrefillQuery = prefillQuery;
     }
     void vscode.commands.executeCommand(`workbench.view.extension.policy-studio.${VIEW_TYPE}`);
   }
@@ -282,6 +285,10 @@ export class CircuitSearchViewProvider implements vscode.WebviewViewProvider, Ci
     window.addEventListener('message', (event) => {
       const message = event.data;
       if (message.type === 'focusInput') {
+        if (typeof message.query === 'string' && message.query) {
+          queryInput.value = message.query;
+          vscode.postMessage({ type: 'search', query: message.query });
+        }
         queryInput.focus();
         queryInput.select();
       }

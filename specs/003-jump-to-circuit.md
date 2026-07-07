@@ -58,14 +58,14 @@ As a Policy Studio developer, I want to jump from a circuit reference to the cir
 
 ## Acceptance Criteria
 
-- [ ] Shared navigation module exports `resolveCircuitDefinitions` and `jumpToCircuit` usable by other features without duplicating lookup logic.
-- [ ] Command `policyStudioTools.jumpToCircuit` is registered and active only when a Policy Studio project is detected.
-- [ ] Jumping to a uniquely named circuit opens the correct file and reveals the circuit definition.
-- [ ] When multiple circuits share the same name, a quick pick is shown with distinguishable entries (at minimum file path per entry).
-- [ ] When no circuit is found, a clear warning is displayed and no editor tab is opened spuriously.
-- [ ] Circuit search integration: invoking jump from a reference-type search result navigates to the target circuit definition.
-- [ ] Unit tests cover single match, multiple matches, not found, empty name, and name normalization.
-- [ ] Integration test (or documented manual test) verifies quick pick flow and editor reveal range.
+- [x] Shared navigation module exports `resolveCircuitDefinitions` and `jumpToCircuit` usable by other features without duplicating lookup logic.
+- [x] Command `policyStudioTools.jumpToCircuit` is registered and active only when a Policy Studio project is detected.
+- [x] Jumping to a uniquely named circuit opens the correct file and reveals the circuit definition.
+- [x] When multiple circuits share the same name, a quick pick is shown with distinguishable entries (at minimum file path per entry).
+- [x] When no circuit is found, a clear warning is displayed and no editor tab is opened spuriously.
+- [x] Circuit search integration: invoking jump from a reference-type search result navigates to the target circuit definition.
+- [x] Unit tests cover single match, multiple matches, not found, empty name, and name normalization.
+- [x] Integration test (or documented manual test) verifies quick pick flow and editor reveal range.
 
 ### Non-goals (v1)
 

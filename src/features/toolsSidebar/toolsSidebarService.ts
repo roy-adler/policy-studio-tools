@@ -45,8 +45,8 @@ export class ToolsSidebarService {
       registerSetActiveProjectCommand((projectId) => {
         this.projectRegistry.activateProject(projectId);
       }),
-      vscode.commands.registerCommand('policyStudioTools.focusCircuitSearch', () => {
-        void this.focusCircuitSearch();
+      vscode.commands.registerCommand('policyStudioTools.focusCircuitSearch', (query?: string) => {
+        void this.focusCircuitSearch(query);
       }),
       store.onProjectsChanged(() => this.onRegistryChanged(true)),
       store.onScopeChanged(() => this.onScopeChanged()),
@@ -56,9 +56,9 @@ export class ToolsSidebarService {
     this.onRegistryChanged(false);
   }
 
-  async focusCircuitSearch(): Promise<void> {
+  async focusCircuitSearch(prefillQuery?: string): Promise<void> {
     await vscode.commands.executeCommand(SIDEBAR_VIEW_CONTAINER);
-    getSharedToolsHubService().focusCircuitSearch();
+    getSharedToolsHubService().focusCircuitSearch(prefillQuery);
   }
 
   private onScopeChanged(): void {

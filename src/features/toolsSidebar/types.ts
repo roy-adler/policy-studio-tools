@@ -28,6 +28,6 @@ export const TOOLS_HUB_GROUP_LABELS: Record<ToolsHubGroup, string> = {
 };
 
 export interface CircuitSearchViewHost {
-  focus(): void;
+  focus(prefillQuery?: string): void;
   notifyScopeChanged(): void;
 }

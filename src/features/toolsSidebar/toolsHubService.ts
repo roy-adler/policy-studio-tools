@@ -34,8 +34,8 @@ export class ToolsHubService {
     this.searchProvider = provider;
   }
 
-  focusCircuitSearch(): void {
-    this.searchProvider?.focus();
+  focusCircuitSearch(prefillQuery?: string): void {
+    this.searchProvider?.focus(prefillQuery);
   }
 
   notifyScopeChanged(): void {
