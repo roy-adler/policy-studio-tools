@@ -44,6 +44,21 @@ export function normalizeQuery(query: string): string {
   return query.trim();
 }
 
+/**
+ * Policy Studio flow links (start, successNode, failureNode) often use a "./Filter Name"
+ * prefix in YAML and XML entity store exports.
+ */
+export function normalizeFilterNodeRef(value: string | undefined): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return trimmed;
+  }
+  return trimmed.replace(/^\.\//, '');
+}
+
 export function matchesLiteral(haystack: string, needle: string): boolean {
   return haystack.toLowerCase().includes(needle.toLowerCase());
 }

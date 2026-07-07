@@ -25,6 +25,82 @@ function edge(graph: PolicyFlowGraph, from: string, to: string) {
   return graph.edges.find((e) => e.from === from && e.to === to);
 }
 
+describe('flow link extraction — Policy Studio ./ prefix', () => {
+  it('strips ./ from YAML start, success, and failure node references', () => {
+    const content = `---
+meta:
+  type: FilterCircuit
+fields:
+  name: Dotted Flow
+  start: ./Validate Order
+children:
+  Validate Order:
+    meta:
+      type: Check
+    fields:
+      name: Validate Order
+      successNode: ./Store Order
+      failureNode: ./Reject Order
+  Store Order:
+    meta:
+      type: Reflector
+    fields:
+      name: Store Order
+  Reject Order:
+    meta:
+      type: AlertFilter
+    fields:
+      name: Reject Order
+`;
+    const { circuits } = parsePolicyYaml(content);
+    expect(circuits[0].startFilter).toBe('Validate Order');
+
+    const validate = circuits[0].filters.find((f) => f.name === 'Validate Order');
+    expect(validate?.successNode).toBe('Store Order');
+    expect(validate?.failureNode).toBe('Reject Order');
+  });
+
+  it('builds a connected flow graph when links use ./ prefixes', () => {
+    const content = `---
+meta:
+  type: FilterCircuit
+fields:
+  name: Dotted Flow
+  start: ./Start Filter
+children:
+  Start Filter:
+    fields:
+      name: Start Filter
+      successNode: ./Next Filter
+  Next Filter:
+    fields:
+      name: Next Filter
+`;
+    const { circuits } = parsePolicyYaml(content);
+    const graph = buildFlowGraph(circuits[0], content);
+
+    expect(graph.nodes.find((n) => n.name === 'Start Filter')?.isStart).toBe(true);
+    expect(graph.nodes.find((n) => n.name === 'Start Filter')?.reachable).toBe(true);
+    expect(edge(graph, 'Start Filter', 'Next Filter')?.kind).toBe('success');
+    expect(graph.warnings).toEqual([]);
+  });
+
+  it('strips ./ from Axway XML fval start and success/failure nodes', async () => {
+    const { content } = await loadXmlCircuit('axway-es', 'PrimaryStore.xml');
+    const dotted = content
+      .replace('<fval name="start"><value>Set Message</value></fval>', '<fval name="start"><value>./Set Message</value></fval>')
+      .replace('<fval name="successNode"><value>Reflect</value></fval>', '<fval name="successNode"><value>./Reflect</value></fval>')
+      .replace('<fval name="failureNode"><value>Alert</value></fval>', '<fval name="failureNode"><value>./Alert</value></fval>');
+    const { circuits } = parsePolicyXml(dotted);
+    const circuit = circuits.find((c) => c.name === 'Health Check');
+    expect(circuit?.startFilter).toBe('Set Message');
+
+    const setMessage = circuit?.filters.find((f) => f.name === 'Set Message');
+    expect(setMessage?.successNode).toBe('Reflect');
+    expect(setMessage?.failureNode).toBe('Alert');
+  });
+});
+
 describe('flow link extraction — simplified XML', () => {
   it('captures start filter and success links', async () => {
     const { circuits } = await loadXmlCircuit('simple', 'policies/SimplePolicy.xml');

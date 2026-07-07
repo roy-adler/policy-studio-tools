@@ -1,4 +1,5 @@
 import type { ParsedCircuit, ParsedFilter } from './types';
+import { normalizeFilterNodeRef } from './textUtils';
 
 function readScalarBlock(lines: string[], startIndex: number): { value: string; endIndex: number } {
   const firstLine = lines[startIndex]?.trim() ?? '';
@@ -96,7 +97,7 @@ function parseYamlEsPolicy(content: string): ParsedCircuit[] {
     }
 
     if (!inChildren && trimmed.startsWith('start:')) {
-      circuitStartFilter = unquote(trimmed.slice('start:'.length));
+      circuitStartFilter = normalizeFilterNodeRef(unquote(trimmed.slice('start:'.length)));
     }
 
     if (trimmed === 'children:') {
@@ -138,9 +139,9 @@ function parseYamlEsPolicy(content: string): ParsedCircuit[] {
       ];
       currentChild.circuitRef = shortName;
     } else if (trimmed.startsWith('successNode:')) {
-      currentChild.successNode = unquote(trimmed.slice('successNode:'.length));
+      currentChild.successNode = normalizeFilterNodeRef(unquote(trimmed.slice('successNode:'.length)));
     } else if (trimmed.startsWith('failureNode:')) {
-      currentChild.failureNode = unquote(trimmed.slice('failureNode:'.length));
+      currentChild.failureNode = normalizeFilterNodeRef(unquote(trimmed.slice('failureNode:'.length)));
     } else if (trimmed.startsWith('attributeName:')) {
       currentChild.attributes = [
         ...(currentChild.attributes ?? []),

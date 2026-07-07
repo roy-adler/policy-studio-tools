@@ -1,4 +1,5 @@
 import type { ParsedCircuit, ParsedFilter } from './types';
+import { normalizeFilterNodeRef } from './textUtils';
 
 const NAME_ID_PATTERN =
   /<id\s+[^>]*field\s*=\s*["']name["'][^>]*value\s*=\s*["']([^"']+)["'][^>]*\/?>/gi;
@@ -29,6 +30,10 @@ function readFval(content: string, fieldName: string): string | undefined {
     'i',
   );
   return pattern.exec(content)?.[1]?.trim() || undefined;
+}
+
+function readFlowNodeFval(content: string, fieldName: string): string | undefined {
+  return normalizeFilterNodeRef(readFval(content, fieldName));
 }
 
 function lastPathSegment(value: string): string {
@@ -222,8 +227,8 @@ function extractFiltersFromEntityBody(
       referencedCircuits,
       script: scripts[0]?.value,
       content: localBody,
-      successNode: readFval(localBody, 'successNode'),
-      failureNode: readFval(localBody, 'failureNode'),
+      successNode: readFlowNodeFval(localBody, 'successNode'),
+      failureNode: readFlowNodeFval(localBody, 'failureNode'),
       circuitRef: circuitRefValue ? lastPathSegment(circuitRefValue) : undefined,
     });
   }
@@ -275,8 +280,8 @@ function parseSimplifiedPolicyXml(content: string): ParsedCircuit[] {
         referencedCircuits,
         script: scripts[0]?.value ?? readElementText(filterBody, 'script'),
         content: filterBody,
-        successNode: readAttribute(`<Filter ${filterTag}>`, 'successNode'),
-        failureNode: readAttribute(`<Filter ${filterTag}>`, 'failureNode'),
+        successNode: normalizeFilterNodeRef(readAttribute(`<Filter ${filterTag}>`, 'successNode')),
+        failureNode: normalizeFilterNodeRef(readAttribute(`<Filter ${filterTag}>`, 'failureNode')),
         circuitRef: circuitRefValue ? lastPathSegment(circuitRefValue) : undefined,
       });
     }
@@ -286,7 +291,7 @@ function parseSimplifiedPolicyXml(content: string): ParsedCircuit[] {
       startOffset: circuitStart,
       endOffset: circuitEnd,
       filters,
-      startFilter: readAttribute(`<Circuit ${circuitTag}>`, 'start'),
+      startFilter: normalizeFilterNodeRef(readAttribute(`<Circuit ${circuitTag}>`, 'start')),
     });
   }
 
@@ -326,7 +331,7 @@ function parseAxwayEntityStoreXml(content: string): ParsedCircuit[] {
       startOffset: entity.start,
       endOffset: entity.end,
       filters,
-      startFilter: readFval(circuitOwnBody, 'start'),
+      startFilter: readFlowNodeFval(circuitOwnBody, 'start'),
     });
   }
 
