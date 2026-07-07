@@ -60,6 +60,66 @@ children:
     expect(validate?.failureNode).toBe('Reject Order');
   });
 
+  it('resolves fully qualified Policy Studio routing paths to filter names', () => {
+    const content = `---
+meta:
+  type: FilterCircuit
+fields:
+  name: Health Check
+  start: Policies/Policy Library/Health Check/Set Message
+children:
+  Set Message:
+    meta:
+      type: ChangeMessageFilter
+    fields:
+      name: Set Message
+    routing:
+      successNode: Policies/Policy Library/Health Check/Reflect
+      failureNode: Policies/Policy Library/Health Check/Alert Handler
+  Reflect:
+    fields:
+      name: Reflect
+  Alert Handler:
+    fields:
+      name: Alert Handler
+`;
+    const { circuits } = parsePolicyYaml(content);
+    expect(circuits[0].startFilter).toBe('Set Message');
+
+    const setMessage = circuits[0].filters.find((f) => f.name === 'Set Message');
+    expect(setMessage?.successNode).toBe('Reflect');
+    expect(setMessage?.failureNode).toBe('Alert Handler');
+  });
+
+  it('builds green and red edges when routing uses fully qualified paths', () => {
+    const content = `---
+meta:
+  type: FilterCircuit
+fields:
+  name: Health Check
+  start: ./Set Message
+children:
+  Set Message:
+    fields:
+      name: Set Message
+    routing:
+      successNode: Policies/Policy Library/Health Check/Reflect
+      failureNode: ./Alert Handler
+  Reflect:
+    fields:
+      name: Reflect
+  Alert Handler:
+    fields:
+      name: Alert Handler
+`;
+    const { circuits } = parsePolicyYaml(content);
+    const graph = buildFlowGraph(circuits[0], content);
+
+    expect(edge(graph, 'Set Message', 'Reflect')?.kind).toBe('success');
+    expect(edge(graph, 'Set Message', 'Alert Handler')?.kind).toBe('failure');
+    expect(graph.edges.filter((e) => e.dangling)).toHaveLength(0);
+  });
+
   it('builds a connected flow graph when links use ./ prefixes', () => {
     const content = `---
 meta:

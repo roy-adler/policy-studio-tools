@@ -46,17 +46,24 @@ export function normalizeQuery(query: string): string {
 
 /**
  * Policy Studio flow links (start, successNode, failureNode) often use a "./Filter Name"
- * prefix in YAML and XML entity store exports.
+ * prefix or a fully qualified project path such as "Policies/Policy Library/Circuit/Filter".
  */
 export function normalizeFilterNodeRef(value: string | undefined): string | undefined {
   if (value === undefined) {
     return undefined;
   }
-  const trimmed = value.trim();
+  let trimmed = value.trim().replace(/^["']|["']$/g, '');
   if (!trimmed) {
     return trimmed;
   }
-  return trimmed.replace(/^\.\//, '');
+  trimmed = trimmed.replace(/^\.\//, '');
+  if (trimmed.includes('/')) {
+    const segment = trimmed.split('/').pop()?.trim();
+    if (segment) {
+      trimmed = segment;
+    }
+  }
+  return trimmed;
 }
 
 export function matchesLiteral(haystack: string, needle: string): boolean {
