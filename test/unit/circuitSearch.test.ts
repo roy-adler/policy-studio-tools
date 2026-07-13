@@ -6,17 +6,6 @@ import type { PolicyStudioProject } from '../../src/features/projectRegistry/typ
 
 const fixturesDir = path.join(__dirname, '..', 'fixtures', 'circuit-search');
 
-function xmlProject(name: string, rootPath: string): PolicyStudioProject {
-  return {
-    id: `test-${name}`,
-    rootPath,
-    workspaceFolder: rootPath,
-    relativePath: '',
-    displayName: name,
-    projectType: 'xml',
-  };
-}
-
 function yamlProject(name: string, rootPath: string): PolicyStudioProject {
   return {
     id: `test-${name}`,
@@ -196,27 +185,37 @@ describe('searchCircuits performance', () => {
 
   beforeAll(async () => {
     const fs = await import('fs/promises');
-    await fs.mkdir(path.join(largeDir, 'policies'), { recursive: true });
-    await fs.writeFile(
-      path.join(largeDir, 'PrimaryStore.xml'),
-      '<?xml version="1.0"?><EntityStore></EntityStore>',
-    );
+    await fs.mkdir(path.join(largeDir, 'Policies'), { recursive: true });
+    await fs.writeFile(path.join(largeDir, 'values.yaml'), 'Policies: {}\n');
+
+    const yamlStub = (i: number) => `---
+meta:
+  type: FilterCircuit
+  _version: "4"
+fields:
+  name: PerfCircuit${i}
+  start: Filter${i}
+children:
+  Filter${i}:
+    meta:
+      type: SetAttribute
+    fields:
+      name: Filter${i}
+      attributeName: attr${i}
+`;
 
     for (let i = 0; i < 500; i++) {
-      const filePath = path.join(largeDir, 'policies', `Circuit${i}.xml`);
+      const filePath = path.join(largeDir, 'Policies', `Circuit${i}.yaml`);
       try {
         await fs.access(filePath);
       } catch {
-        await fs.writeFile(
-          filePath,
-          `<?xml version="1.0"?><Circuit name="PerfCircuit${i}"><Filter name="Filter${i}" type="SetAttribute"><attribute attributeName="attr${i}"/></Filter></Circuit>`,
-        );
+        await fs.writeFile(filePath, yamlStub(i));
       }
     }
   });
 
   it('completes re-search on large fixture within 5 seconds', async () => {
-    const project = xmlProject('large', largeDir);
+    const project = yamlProject('large', largeDir);
     const index = await buildCircuitIndex(project);
 
     const start = Date.now();
