@@ -108,11 +108,11 @@ As a Policy Studio developer, I want to search all circuits in my project by nam
 
 ### Test fixture requirements
 
-- `test/fixtures/circuit-search/minimal/` — small XML project with 2–3 circuits, known filter names, one script filter, one circuit reference.
-- `test/fixtures/circuit-search/ambiguous-names/` — two circuits with the same name in different files.
-- `test/fixtures/circuit-search/invalid-xml/` — mix of valid policy files and files with malformed XML; valid files must still be searchable.
-- `test/fixtures/circuit-search/large/` — generated or copied fixture with many policy files (500+) for performance smoke tests (may be generated at test time to avoid bloating the repo).
-- `test/fixtures/circuit-search/yaml-project/` — YAML-based project with equivalent searchable content (YAML is the primary format; this fixture is required, not optional).
+- `test/fixtures/circuit-search/minimal/` — small YAML project with 2–3 circuits, known filter names, one script filter, one circuit reference.
+- `test/fixtures/circuit-search/ambiguous-names/` — two circuits with the same name in different files (including nested `team-a/` and `team-b/` YAML paths).
+- `test/fixtures/circuit-search/invalid-yaml/` — mix of valid policy files and files with malformed YAML; valid files must still be searchable.
+- `test/fixtures/circuit-search/large/` — generated or copied fixture with many policy files (500+) for performance smoke tests (may be generated at test time to avoid bloating the repo; generated `policies/` may be gitignored).
+- `test/fixtures/circuit-search/yaml-project/` — YAML-based project with equivalent searchable content (primary format).
 
 ## Future Ideas
 

@@ -32,7 +32,7 @@ As a Policy Studio developer, I want to see what actually changed between two pr
   - Tree view or webview listing changes grouped by category and circuit name
   - Clicking an item opens a diff view (VS Code diff editor) at the relevant file, or an inline before/after panel for extracted fields
 - **Summary header:** counts per change type; files only in left or right; unparseable files listed separately.
-- **Equivalence note:** Explicitly states that formatting-only XML changes produce no semantic change entries.
+- **Equivalence note:** Explicitly states that formatting-only YAML/XML serialization changes produce no semantic change entries.
 
 ## Behaviour
 
@@ -76,7 +76,7 @@ As a Policy Studio developer, I want to see what actually changed between two pr
 - [ ] Reformatting a policy file (YAML or XML) without semantic change produces zero circuit/filter change entries (formatting-only fixture).
 - [ ] Unparseable policy file on one side is listed in warnings; other files still compared.
 - [ ] Summary counts match the detailed change list.
-- [ ] Unit tests cover added/removed/modified circuits, script diff, path change, URL change, and formatting-only XML.
+- [ ] Unit tests cover added/removed/modified circuits, script diff, path change, URL change, and formatting-only YAML.
 - [ ] Source adapter interface is defined and directory-based adapter is implemented.
 
 ### Non-goals (v1)
@@ -92,7 +92,7 @@ As a Policy Studio developer, I want to see what actually changed between two pr
 - `test/fixtures/policy-diff/changed-circuit/` — same layout with one modified filter script.
 - `test/fixtures/policy-diff/added-removed/` — one circuit added, one removed vs baseline.
 - `test/fixtures/policy-diff/routing-url/` — path template and backend URL changes only.
-- `test/fixtures/policy-diff/formatting-only/` — semantically identical YAML (and XML) with different indentation/line breaks.
+- `test/fixtures/policy-diff/formatting-only/` — semantically identical YAML with different indentation/line breaks.
 - `test/fixtures/policy-diff/invalid/` — includes one malformed file alongside valid changes.
 
 ## Future Ideas

@@ -4,3 +4,7 @@ out/
 .DS_Store
 
 .worktrees/
+
+# Generated large circuit-search performance fixtures (lowercase policies/ dir)
+test/fixtures/circuit-search/large/policies/
+test/fixtures/circuit-search/large/Policies/
