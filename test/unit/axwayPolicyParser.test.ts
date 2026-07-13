@@ -70,6 +70,87 @@ describe('parsePolicyYaml (YamlES)', () => {
   });
 });
 
+describe('parsePolicyYaml (malformed YAML detection)', () => {
+  it('flags unclosed quoted scalars as Malformed YAML while still returning partial circuits', () => {
+    const content = `---
+meta:
+  type: FilterCircuit
+fields:
+  name: BrokenPolicy
+children:
+  Unclosed:
+    meta:
+      type: Check
+    fields:
+      name: "Unclosed`;
+
+    const parsed = parsePolicyYaml(content);
+
+    expect(parsed.error).toBe('Malformed YAML');
+    expect(parsed.circuits).toHaveLength(1);
+    expect(parsed.circuits[0].name).toBe('BrokenPolicy');
+  });
+
+  it('allows valid closed double-quoted scalars', () => {
+    const content = `---
+meta:
+  type: FilterCircuit
+  _version: "4"
+fields:
+  name: "closed"
+children:
+  Filter:
+    meta:
+      type: Check
+    fields:
+      name: Filter`;
+
+    const parsed = parsePolicyYaml(content);
+
+    expect(parsed.error).toBeUndefined();
+    expect(parsed.circuits).toHaveLength(1);
+  });
+
+  it('allows simple script lines without quotes', () => {
+    const content = `---
+meta:
+  type: FilterCircuit
+fields:
+  name: AuthCircuit
+  start: ValidateToken
+children:
+  ValidateToken:
+    meta:
+      type: JavaScriptFilter
+    fields:
+      name: ValidateToken
+      script: return token != null;`;
+
+    const parsed = parsePolicyYaml(content);
+
+    expect(parsed.error).toBeUndefined();
+    expect(parsed.circuits[0].filters[0].script).toBe('return token != null;');
+  });
+
+  it('still flags unclosed quotes when blank and comment lines are present', () => {
+    const content = `# header comment
+
+---
+meta:
+  type: FilterCircuit
+fields:
+  name: BrokenPolicy
+children:
+  Unclosed:
+    fields:
+      name: "Unclosed`;
+
+    const parsed = parsePolicyYaml(content);
+
+    expect(parsed.error).toBe('Malformed YAML');
+  });
+});
+
 describe('searchCircuits (Axway fixtures)', () => {
   const yamlProject: PolicyStudioProject = {
     id: 'axway-yaml',

@@ -280,6 +280,7 @@ function parseLegacyYamlPolicy(content: string): ParsedCircuit[] {
   return circuits;
 }
 
+// Mirrors XML isWellFormedXml: narrow check for unclosed quoted scalars only.
 function isMalformedYaml(content: string): boolean {
   for (const line of content.split('\n')) {
     const trimmed = line.trim();

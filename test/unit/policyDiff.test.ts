@@ -106,6 +106,8 @@ describe('policy diff', () => {
     const report = await diffFixtures('baseline', 'invalid');
 
     expect(report.unparseableRight).toContain('Policies/BrokenPolicy.yaml');
+    expect(report.summary.unparseableRight).toBe(1);
+    expect(report.addedCircuits.some((entry) => entry.circuitName === 'BrokenPolicy')).toBe(true);
     expect(report.summary.removedCircuits).toBe(1);
     expect(report.modifiedCircuits.length + report.addedCircuits.length).toBeGreaterThanOrEqual(0);
   });
