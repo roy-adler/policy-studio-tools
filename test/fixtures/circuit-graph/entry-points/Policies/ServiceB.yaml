@@ -1,0 +1,13 @@
+---
+meta:
+  type: FilterCircuit
+  _version: "4"
+fields:
+  name: ServiceB
+  start: DoneB
+children:
+  DoneB:
+    meta:
+      type: Reflector
+    fields:
+      name: DoneB

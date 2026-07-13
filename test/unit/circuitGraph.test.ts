@@ -8,19 +8,19 @@ import type { PolicyStudioProject } from '../../src/features/projectRegistry/typ
 
 const fixturesDir = path.join(__dirname, '..', 'fixtures', 'circuit-graph');
 
-function xmlProject(name: string, rootPath: string): PolicyStudioProject {
+function yamlProject(name: string, rootPath: string): PolicyStudioProject {
   return {
     id: `test-${name}`,
     rootPath,
     workspaceFolder: rootPath,
     relativePath: '',
     displayName: name,
-    projectType: 'xml',
+    projectType: 'yaml',
   };
 }
 
 async function graphForFixture(name: string) {
-  const project = xmlProject(name, path.join(fixturesDir, name));
+  const project = yamlProject(name, path.join(fixturesDir, name));
   const index = await buildCircuitIndex(project);
   return buildCircuitReferenceGraph(index);
 }
@@ -74,7 +74,7 @@ describe('buildCircuitReferenceGraph', () => {
     const graph = await graphForFixture('linear');
     const circuitA = graph.nodes.find((node) => node.name === 'CircuitA');
     expect(circuitA?.definitionPaths.length).toBeGreaterThanOrEqual(1);
-    expect(circuitA?.definitionPaths[0]?.filePath).toContain('CircuitA.xml');
+    expect(circuitA?.definitionPaths[0]?.filePath).toContain('CircuitA.yaml');
   });
 });
 

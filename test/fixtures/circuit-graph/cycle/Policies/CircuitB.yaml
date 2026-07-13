@@ -1,0 +1,14 @@
+---
+meta:
+  type: FilterCircuit
+  _version: "4"
+fields:
+  name: CircuitB
+  start: CallA
+children:
+  CallA:
+    meta:
+      type: CircuitReferralFilter
+    fields:
+      name: CallA
+      circuit: CircuitA

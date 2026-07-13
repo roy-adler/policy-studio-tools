@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<Circuit name="CallerCircuit">
-  <Filter name="CallMissing" type="CircuitCall">
-    <circuitName>GhostCircuit</circuitName>
-  </Filter>
-</Circuit>

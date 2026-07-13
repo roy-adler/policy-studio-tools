@@ -1,0 +1,14 @@
+---
+meta:
+  type: FilterCircuit
+  _version: "4"
+fields:
+  name: EntryB
+  start: CallServiceB
+children:
+  CallServiceB:
+    meta:
+      type: CircuitReferralFilter
+    fields:
+      name: CallServiceB
+      circuit: ServiceB

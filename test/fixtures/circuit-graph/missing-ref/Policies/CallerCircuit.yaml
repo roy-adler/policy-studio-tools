@@ -1,0 +1,14 @@
+---
+meta:
+  type: FilterCircuit
+  _version: "4"
+fields:
+  name: CallerCircuit
+  start: CallMissing
+children:
+  CallMissing:
+    meta:
+      type: CircuitReferralFilter
+    fields:
+      name: CallMissing
+      circuit: GhostCircuit
