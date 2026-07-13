@@ -30,7 +30,7 @@ function yamlProject(name: string, rootPath: string): PolicyStudioProject {
 
 describe('buildCircuitIndex', () => {
   it('indexes circuits from minimal fixture', async () => {
-    const project = xmlProject(
+    const project = yamlProject(
       'minimal',
       path.join(fixturesDir, 'minimal'),
     );
@@ -42,10 +42,10 @@ describe('buildCircuitIndex', () => {
     expect(index.circuitByName.has('OrderAPI')).toBe(true);
   });
 
-  it('records invalid XML files without aborting', async () => {
-    const project = xmlProject(
-      'invalid-xml',
-      path.join(fixturesDir, 'invalid-xml'),
+  it('records invalid YAML files without aborting', async () => {
+    const project = yamlProject(
+      'invalid-yaml',
+      path.join(fixturesDir, 'invalid-yaml'),
     );
     const index = await buildCircuitIndex(project);
 
@@ -55,7 +55,7 @@ describe('buildCircuitIndex', () => {
 });
 
 describe('searchCircuits', () => {
-  const minimalProject = xmlProject('minimal', path.join(fixturesDir, 'minimal'));
+  const minimalProject = yamlProject('minimal', path.join(fixturesDir, 'minimal'));
 
   it('finds exact circuit name match', async () => {
     const result = await searchCircuits([minimalProject], 'PaymentService');
@@ -64,7 +64,7 @@ describe('searchCircuits', () => {
     const hit = result.results.find((r) => r.matchKind === 'circuitName');
     expect(hit).toBeDefined();
     expect(hit?.circuitName).toBe('PaymentService');
-    expect(hit?.filePath).toContain('PaymentService.xml');
+    expect(hit?.filePath).toContain('PaymentService.yaml');
   });
 
   it('finds filter name match', async () => {
@@ -84,7 +84,7 @@ describe('searchCircuits', () => {
     expect(hit?.filterName).toBe('SetTransactionId');
   });
 
-  it('finds substring in policy XML content', async () => {
+  it('finds substring in policy YAML content', async () => {
     const result = await searchCircuits([minimalProject], 'validateCard');
 
     const hit = result.results.find((r) => r.matchKind === 'xmlContent' || r.matchKind === 'script');
@@ -123,7 +123,7 @@ describe('searchCircuits', () => {
   });
 
   it('returns duplicate circuit names as separate rows', async () => {
-    const project = xmlProject(
+    const project = yamlProject(
       'ambiguous',
       path.join(fixturesDir, 'ambiguous-names'),
     );
@@ -134,10 +134,10 @@ describe('searchCircuits', () => {
     expect(new Set(circuitHits.map((r) => r.filePath)).size).toBe(2);
   });
 
-  it('reports invalid XML files in summary', async () => {
-    const project = xmlProject(
-      'invalid-xml',
-      path.join(fixturesDir, 'invalid-xml'),
+  it('reports invalid YAML files in summary', async () => {
+    const project = yamlProject(
+      'invalid-yaml',
+      path.join(fixturesDir, 'invalid-yaml'),
     );
     const result = await searchCircuits([project], 'requestId');
 
@@ -145,15 +145,15 @@ describe('searchCircuits', () => {
     expect(result.results.some((r) => r.circuitName === 'ValidCircuit')).toBe(true);
   });
 
-  it('falls back to plain-text search in invalid XML files', async () => {
-    const project = xmlProject(
-      'invalid-xml',
-      path.join(fixturesDir, 'invalid-xml'),
+  it('falls back to plain-text search in invalid YAML files', async () => {
+    const project = yamlProject(
+      'invalid-yaml',
+      path.join(fixturesDir, 'invalid-yaml'),
     );
     const result = await searchCircuits([project], 'BrokenFilter');
 
     const textHit = result.results.find(
-      (r) => r.filePath.includes('BadPolicy.xml') && r.matchPreview.includes('BrokenFilter'),
+      (r) => r.filePath.includes('BadPolicy.yaml') && r.matchPreview.includes('BrokenFilter'),
     );
     expect(textHit).toBeDefined();
   });
@@ -177,9 +177,9 @@ describe('searchCircuits', () => {
   });
 
   it('includes projectDisplayName when multiple projects in scope', async () => {
-    const projectA = xmlProject('minimal', path.join(fixturesDir, 'minimal'));
+    const projectA = yamlProject('minimal', path.join(fixturesDir, 'minimal'));
     const projectB = yamlProject('yaml', path.join(fixturesDir, 'yaml-project'));
-    projectA.displayName = 'XML Minimal';
+    projectA.displayName = 'YAML Minimal';
     projectB.displayName = 'YAML Project';
 
     const result = await searchCircuits([projectA, projectB], 'Auth');
@@ -232,5 +232,5 @@ describe('searchCircuits performance', () => {
  * Integration test (VS Code host): manual test plan
  * 1. Open test/fixtures/circuit-search/minimal in VS Code
  * 2. Run "Policy Studio: Search Circuits"
- * 3. Enter "PaymentService" and confirm result opens PaymentService.xml with highlight
+ * 3. Enter "PaymentService" and confirm result opens PaymentService.yaml with highlight
  */

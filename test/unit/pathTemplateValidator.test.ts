@@ -146,7 +146,7 @@ describe('validatePathTemplate rules', () => {
 });
 
 describe('extractPathTemplates', () => {
-  it('extracts allowlisted YAML routing fields with offsets', async () => {
+  it('extracts allowlisted YamlES routing fields with offsets', async () => {
     const content = await readFixture('valid/Policies/ValidRouting.yaml');
     const extracted = extractPathTemplates(content);
 
@@ -157,16 +157,6 @@ describe('extractPathTemplates', () => {
     expect(content.slice(extracted[0].startOffset, extracted[0].endOffset)).toBe(
       '/api/v1/pets/{petId}',
     );
-  });
-
-  it('extracts allowlisted XML fval routing fields', async () => {
-    const content = await readFixture('valid/PrimaryStore.xml');
-    const extracted = extractPathTemplates(content);
-
-    expect(extracted.map((entry) => entry.template)).toEqual([
-      '/api/v1/pets/{petId}',
-      '/files/{path:.*}',
-    ]);
   });
 
   it('extracts multiple templates from mixed fixture content', async () => {
@@ -182,23 +172,17 @@ describe('extractPathTemplates', () => {
   });
 
   it('does not extract path-like strings from non-routing fields', async () => {
-    const yamlContent = await readFixture('non-routing/Policies/NonRouting.yaml');
-    const xmlContent = await readFixture('non-routing/Policies/NonRouting.xml');
+    const content = await readFixture('non-routing/Policies/NonRouting.yaml');
 
-    expect(extractPathTemplates(yamlContent)).toEqual([]);
-    expect(extractPathTemplates(xmlContent)).toEqual([]);
+    expect(extractPathTemplates(content)).toEqual([]);
   });
 });
 
 describe('fixture-backed validation', () => {
   it('produces zero errors for valid templates', async () => {
-    const yamlContent = await readFixture('valid/Policies/ValidRouting.yaml');
-    const xmlContent = await readFixture('valid/PrimaryStore.xml');
+    const content = await readFixture('valid/Policies/ValidRouting.yaml');
 
-    for (const result of analyzePathTemplatesInContent(yamlContent, 'ValidRouting.yaml')) {
-      expect(result.issues.filter((issue) => issue.severity === 'error')).toEqual([]);
-    }
-    for (const result of analyzePathTemplatesInContent(xmlContent, 'PrimaryStore.xml')) {
+    for (const result of analyzePathTemplatesInContent(content, 'ValidRouting.yaml')) {
       expect(result.issues.filter((issue) => issue.severity === 'error')).toEqual([]);
     }
   });

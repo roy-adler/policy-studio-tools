@@ -1,0 +1,14 @@
+---
+meta:
+  type: FilterCircuit
+  _version: "4"
+fields:
+  name: BrokenCircuit
+  start: BrokenFilter
+children:
+  BrokenFilter:
+    meta:
+      type: SetAttribute
+    fields:
+      name: BrokenFilter
+      attributeName: "broken

@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<Circuit name="SharedAuth">
-  <Filter name="LegacyCheck" type="SetAttribute">
-    <configuration>
-      <attribute attributeName="legacyToken"/>
-    </configuration>
-  </Filter>
-</Circuit>
