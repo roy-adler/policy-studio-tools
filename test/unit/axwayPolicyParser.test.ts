@@ -9,10 +9,40 @@ import type { PolicyStudioProject } from '../../src/features/projectRegistry/typ
 const fixturesDir = path.join(__dirname, '..', 'fixtures', 'circuit-search');
 
 describe('parsePolicyXml (Axway entity store)', () => {
-  it('extracts FilterCircuit and nested filter names from PrimaryStore.xml', () => {
-    const fixture = path.join(fixturesDir, 'axway-entity-store', 'PrimaryStore.xml');
-    const fs = require('fs');
-    const content = fs.readFileSync(fixture, 'utf8');
+  it('extracts FilterCircuit and nested filter names from entity-store XML', () => {
+    const content = `<?xml version="1.0" encoding="UTF-8"?>
+<entityStoreData xmlns="http://www.vordel.com/2005/06/24/entityStore">
+  <entity type="FilterCircuit">
+    <key type="FilterCircuit">
+      <id field="name" value="Health Check"/>
+    </key>
+    <fval name="start"><value>Set Message</value></fval>
+    <entity type="ChangeMessageFilter">
+      <key type="ChangeMessageFilter">
+        <id field="name" value="Set Message"/>
+      </key>
+      <fval name="body"><value>&lt;status&gt;ok&lt;/status&gt;</value></fval>
+      <fval name="attributeName"><value>response.body</value></fval>
+    </entity>
+    <entity type="Reflector">
+      <key type="Reflector">
+        <id field="name" value="Reflect"/>
+      </key>
+    </entity>
+    <entity type="CircuitReferralFilter">
+      <key type="CircuitReferralFilter">
+        <id field="name" value="Call Auth"/>
+      </key>
+      <fval name="circuit"><value>Policies/Auth/Validate Token</value></fval>
+    </entity>
+    <entity type="JavaScriptFilter">
+      <key type="JavaScriptFilter">
+        <id field="name" value="Run Script"/>
+      </key>
+      <fval name="script"><value>function run() { return checkHealth(); }</value></fval>
+    </entity>
+  </entity>
+</entityStoreData>`;
     const parsed = parsePolicyXml(content);
 
     expect(parsed.circuits).toHaveLength(1);
@@ -34,21 +64,13 @@ describe('parsePolicyYaml (YamlES)', () => {
     expect(parsed.circuits[0].filters.map((f) => f.name).sort()).toEqual([
       'Call Auth',
       'Reflect',
+      'Run Script',
       'Set Message',
     ]);
   });
 });
 
 describe('searchCircuits (Axway fixtures)', () => {
-  const xmlProject: PolicyStudioProject = {
-    id: 'axway-xml',
-    rootPath: path.join(fixturesDir, 'axway-entity-store'),
-    workspaceFolder: path.join(fixturesDir, 'axway-entity-store'),
-    relativePath: '',
-    displayName: 'axway-xml',
-    projectType: 'xml',
-  };
-
   const yamlProject: PolicyStudioProject = {
     id: 'axway-yaml',
     rootPath: path.join(fixturesDir, 'axway-yaml-es'),
@@ -59,17 +81,17 @@ describe('searchCircuits (Axway fixtures)', () => {
   };
 
   it('finds Axway filter names by search query', async () => {
-    const result = await searchCircuits([xmlProject], 'Set Message');
+    const result = await searchCircuits([yamlProject], 'Set Message');
     expect(result.results.some((r) => r.filterName === 'Set Message')).toBe(true);
   });
 
   it('finds referenced circuit from CircuitReferralFilter', async () => {
-    const result = await searchCircuits([xmlProject], 'Validate Token');
+    const result = await searchCircuits([yamlProject], 'Validate Token');
     expect(result.results.some((r) => r.matchKind === 'referencedCircuit')).toBe(true);
   });
 
   it('finds script content in JavaScriptFilter', async () => {
-    const result = await searchCircuits([xmlProject], 'checkHealth');
+    const result = await searchCircuits([yamlProject], 'checkHealth');
     expect(result.results.some((r) => r.matchKind === 'script')).toBe(true);
   });
 

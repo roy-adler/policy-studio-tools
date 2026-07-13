@@ -24,3 +24,9 @@ children:
     fields:
       name: Call Auth
       circuit: Policies/Auth/Validate Token
+  Run Script:
+    meta:
+      type: JavaScriptFilter
+    fields:
+      name: Run Script
+      script: function run() { return checkHealth(); }
