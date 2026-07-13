@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<Circuit name="CallerCircuit" start="CallAuth">
-  <Filter name="CallAuth" type="CircuitCall" successNode="Respond">
-    <circuitName>AuthCircuit</circuitName>
-  </Filter>
-  <Filter name="Respond" type="Reflector">
-    <configuration/>
-  </Filter>
-</Circuit>

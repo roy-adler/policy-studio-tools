@@ -1,0 +1,26 @@
+---
+meta:
+  type: FilterCircuit
+  _version: "4"
+fields:
+  name: AttributeCircuit
+  start: GetCustomerId
+children:
+  GetCustomerId:
+    meta:
+      type: GetAttribute
+    fields:
+      name: GetCustomerId
+      attributeName: customerId
+  SetCustomerId:
+    meta:
+      type: SetAttribute
+    fields:
+      name: SetCustomerId
+      attributeName: customerId
+  SetRequestId:
+    meta:
+      type: SetAttribute
+    fields:
+      name: SetRequestId
+      attributeName: requestId

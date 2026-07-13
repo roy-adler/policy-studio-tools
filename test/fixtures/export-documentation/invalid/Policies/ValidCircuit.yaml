@@ -1,0 +1,13 @@
+---
+meta:
+  type: FilterCircuit
+  _version: "4"
+fields:
+  name: ValidCircuit
+  start: WorkingFilter
+children:
+  WorkingFilter:
+    meta:
+      type: Reflector
+    fields:
+      name: WorkingFilter

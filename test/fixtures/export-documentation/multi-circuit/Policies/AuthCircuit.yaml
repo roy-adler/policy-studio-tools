@@ -1,0 +1,14 @@
+---
+meta:
+  type: FilterCircuit
+  _version: "4"
+fields:
+  name: AuthCircuit
+  start: ValidateToken
+children:
+  ValidateToken:
+    meta:
+      type: OAuth
+    fields:
+      name: ValidateToken
+      attributeName: accessToken

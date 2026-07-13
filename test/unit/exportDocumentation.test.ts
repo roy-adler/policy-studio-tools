@@ -33,7 +33,7 @@ function yamlProject(name: string, rootPath: string): PolicyStudioProject {
   };
 }
 
-async function buildModel(fixture: string, projectType: 'xml' | 'yaml' = 'xml') {
+async function buildModel(fixture: string, projectType: 'xml' | 'yaml' = 'yaml') {
   const rootPath = path.join(fixturesDir, fixture);
   const project =
     projectType === 'yaml' ? yamlProject(fixture, rootPath) : xmlProject(fixture, rootPath);
@@ -50,7 +50,7 @@ describe('buildDocumentationModel', () => {
 
     expect(model.metadata.circuitCount).toBe(1);
     expect(model.circuits[0].name).toBe('OrderAPI');
-    expect(model.circuits[0].sourceFilePath).toContain('OrderAPI.xml');
+    expect(model.circuits[0].sourceFilePath).toContain('OrderAPI.yaml');
     expect(model.circuits[0].description).toContain('Minimal order API');
 
     const filter = model.circuits[0].filters[0];
@@ -109,7 +109,7 @@ describe('buildDocumentationModel', () => {
   it('records warnings for invalid files without aborting', async () => {
     const model = await buildModel('invalid');
 
-    expect(model.warnings.some((warning) => warning.includes('BrokenPolicy.xml'))).toBe(true);
+    expect(model.warnings.some((warning) => warning.includes('BrokenPolicy.yaml'))).toBe(true);
     expect(model.circuits.some((circuit) => circuit.name === 'ValidCircuit')).toBe(true);
   });
 
@@ -126,7 +126,7 @@ describe('buildDocumentationModel', () => {
 
   it('filters circuits by name when requested', async () => {
     const rootPath = path.join(fixturesDir, 'multi-circuit');
-    const project = xmlProject('multi-circuit', rootPath);
+    const project = yamlProject('multi-circuit', rootPath);
     const index = await buildCircuitIndex(project);
     const model = buildDocumentationModel(index, { circuitNameFilter: ['AuthCircuit'] });
 
@@ -145,7 +145,7 @@ describe('renderDocumentationMarkdown', () => {
     expect(markdown).toContain('[CallerCircuit](#');
     expect(markdown).toContain('## CallerCircuit');
     expect(markdown).toContain('### Filter pipeline');
-    expect(markdown).toContain('`policies/CallerCircuit.xml`');
+    expect(markdown).toContain('`Policies/CallerCircuit.yaml`');
     expect(markdown).toContain('### Circuit references');
     expect(markdown).toContain('[AuthCircuit](#authcircuit)');
   });
@@ -169,7 +169,7 @@ describe('renderDocumentationMarkdown', () => {
 
     const invalid = renderDocumentationMarkdown(await buildModel('invalid'));
     expect(invalid).toContain('## Documentation warnings');
-    expect(invalid).toContain('BrokenPolicy.xml');
+    expect(invalid).toContain('BrokenPolicy.yaml');
   });
 
   it('produces stable heading anchors', () => {
