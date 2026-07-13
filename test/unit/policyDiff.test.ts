@@ -24,7 +24,7 @@ describe('policy diff', () => {
     expect(POLICY_DIFF_TOOL.available).toBe(true);
   });
 
-  it('reports no semantic changes for formatting-only XML', async () => {
+  it('reports no semantic changes for formatting-only YAML projects', async () => {
     const report = await diffFixtures('baseline', 'formatting-only');
 
     expect(report.identical).toBe(true);
@@ -105,7 +105,7 @@ describe('policy diff', () => {
   it('lists unparseable files without failing the comparison', async () => {
     const report = await diffFixtures('baseline', 'invalid');
 
-    expect(report.unparseableRight).toContain('policies/BrokenPolicy.xml');
+    expect(report.unparseableRight).toContain('Policies/BrokenPolicy.yaml');
     expect(report.summary.removedCircuits).toBe(1);
     expect(report.modifiedCircuits.length + report.addedCircuits.length).toBeGreaterThanOrEqual(0);
   });

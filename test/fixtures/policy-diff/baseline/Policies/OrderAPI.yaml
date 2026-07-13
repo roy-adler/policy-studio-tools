@@ -1,0 +1,16 @@
+---
+meta:
+  type: FilterCircuit
+  _version: "4"
+fields:
+  name: OrderAPI
+  start: RouteToBackend
+children:
+  RouteToBackend:
+    meta:
+      type: HTTPRouting
+    fields:
+      name: RouteToBackend
+      method: GET
+      path: /orders/{orderId}
+      url: https://api.example.com/orders

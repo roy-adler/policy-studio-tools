@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<Circuit name="AuthCircuit">
-  <Filter name="ValidateToken" type="JavaScriptFilter">
-    <script>
-      return token != null;
-    </script>
-  </Filter>
-</Circuit>

@@ -280,13 +280,34 @@ function parseLegacyYamlPolicy(content: string): ParsedCircuit[] {
   return circuits;
 }
 
+function isMalformedYaml(content: string): boolean {
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) {
+      continue;
+    }
+    if (/:\s*"([^"\\]|\\.)*$/.test(trimmed) || /:\s*'([^'\\]|\\.)*$/.test(trimmed)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function parsePolicyYaml(content: string): { circuits: ParsedCircuit[]; error?: string } {
   try {
+    const malformed = isMalformedYaml(content);
     const yamlEs = parseYamlEsPolicy(content);
     if (yamlEs.length > 0) {
-      return { circuits: yamlEs };
+      return { circuits: yamlEs, error: malformed ? 'Malformed YAML' : undefined };
     }
-    return { circuits: parseLegacyYamlPolicy(content) };
+    const legacy = parseLegacyYamlPolicy(content);
+    if (legacy.length > 0) {
+      return { circuits: legacy, error: malformed ? 'Malformed YAML' : undefined };
+    }
+    if (malformed) {
+      return { circuits: [], error: 'Malformed YAML' };
+    }
+    return { circuits: legacy };
   } catch (error) {
     return {
       circuits: [],

@@ -1,0 +1,11 @@
+---
+meta:
+  type: FilterCircuit
+fields:
+  name: BrokenPolicy
+children:
+  Unclosed:
+    meta:
+      type: Check
+    fields:
+      name: "Unclosed
