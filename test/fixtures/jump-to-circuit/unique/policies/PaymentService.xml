@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<Circuit name="PaymentService">
-  <Filter name="SetTransactionId" type="SetAttribute">
-    <configuration>
-      <attribute attributeName="transactionId" value=""/>
-    </configuration>
-  </Filter>
-</Circuit>

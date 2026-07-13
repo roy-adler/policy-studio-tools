@@ -59,6 +59,24 @@ export async function discoverPolicyFiles(project: PolicyStudioProject): Promise
         // directory may not exist
       }
     }
+
+    let rootEntries;
+    try {
+      rootEntries = await fs.readdir(project.rootPath, { withFileTypes: true });
+    } catch {
+      return files;
+    }
+
+    for (const entry of rootEntries) {
+      if (
+        entry.isDirectory() &&
+        !EXCLUDED_DIRS.has(entry.name) &&
+        !['Policies', 'APIs', 'META-INF'].includes(entry.name)
+      ) {
+        await walk(path.join(project.rootPath, entry.name));
+      }
+    }
+
     return files;
   }
 

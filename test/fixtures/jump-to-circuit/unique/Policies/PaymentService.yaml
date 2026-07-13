@@ -1,0 +1,14 @@
+---
+meta:
+  type: FilterCircuit
+  _version: "4"
+fields:
+  name: PaymentService
+  start: SetTransactionId
+children:
+  SetTransactionId:
+    meta:
+      type: SetAttribute
+    fields:
+      name: SetTransactionId
+      attributeName: transactionId

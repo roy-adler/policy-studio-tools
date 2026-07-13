@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<Circuit name="CircuitC">
-  <Filter name="FinishChain" type="SetAttribute">
-    <configuration>
-      <attribute attributeName="chainDone"/>
-    </configuration>
-  </Filter>
-</Circuit>

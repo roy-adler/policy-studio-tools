@@ -18,23 +18,12 @@ import type { PolicyStudioProject } from '../../src/features/projectRegistry/typ
 const fixturesDir = path.join(__dirname, '..', 'fixtures', 'jump-to-circuit');
 const searchFixturesDir = path.join(__dirname, '..', 'fixtures', 'circuit-search');
 
-function xmlProject(name: string, rootPath?: string): PolicyStudioProject {
+function yamlProject(name: string, rootPath?: string): PolicyStudioProject {
   const root = rootPath ?? path.join(fixturesDir, name);
   return {
     id: `jump-${name}`,
     rootPath: root,
     workspaceFolder: root,
-    relativePath: '',
-    displayName: name,
-    projectType: 'xml',
-  };
-}
-
-function yamlProject(name: string, rootPath: string): PolicyStudioProject {
-  return {
-    id: `jump-${name}`,
-    rootPath,
-    workspaceFolder: rootPath,
     relativePath: '',
     displayName: name,
     projectType: 'yaml',
@@ -130,19 +119,19 @@ describe('looksLikeCircuitReference', () => {
 
 describe('resolveCircuitDefinitions', () => {
   it('resolves a uniquely named circuit to one definition', async () => {
-    const project = xmlProject('unique');
+    const project = yamlProject('unique');
     const { host } = createHost();
     const deps = createDeps([project], host);
 
     const definitions = await resolveCircuitDefinitions(deps, project.id, 'PaymentService');
 
     expect(definitions).toHaveLength(1);
-    expect(definitions[0].filePath).toContain('PaymentService.xml');
+    expect(definitions[0].filePath).toContain('PaymentService.yaml');
     expect(definitions[0].circuitName).toBe('PaymentService');
   });
 
   it('matches names case-insensitively with whitespace trimmed', async () => {
-    const project = xmlProject('unique');
+    const project = yamlProject('unique');
     const { host } = createHost();
     const deps = createDeps([project], host);
 
@@ -153,7 +142,7 @@ describe('resolveCircuitDefinitions', () => {
   });
 
   it('returns all definitions for duplicate circuit names', async () => {
-    const project = xmlProject('duplicates');
+    const project = yamlProject('duplicates');
     const { host } = createHost();
     const deps = createDeps([project], host);
 
@@ -164,7 +153,7 @@ describe('resolveCircuitDefinitions', () => {
   });
 
   it('returns empty array when the circuit does not exist', async () => {
-    const project = xmlProject('missing');
+    const project = yamlProject('missing');
     const { host } = createHost();
     const deps = createDeps([project], host);
 
@@ -174,7 +163,7 @@ describe('resolveCircuitDefinitions', () => {
   });
 
   it('returns empty array for unknown project id', async () => {
-    const project = xmlProject('unique');
+    const project = yamlProject('unique');
     const { host } = createHost();
     const deps = createDeps([project], host);
 
@@ -184,7 +173,7 @@ describe('resolveCircuitDefinitions', () => {
   });
 
   it('returns empty array for empty circuit name', async () => {
-    const project = xmlProject('unique');
+    const project = yamlProject('unique');
     const { host } = createHost();
     const deps = createDeps([project], host);
 
@@ -207,7 +196,7 @@ describe('resolveCircuitDefinitions', () => {
 
 describe('jumpToCircuit', () => {
   it('opens the definition directly for a unique match', async () => {
-    const project = xmlProject('unique');
+    const project = yamlProject('unique');
     const { host, calls } = createHost();
     const deps = createDeps([project], host);
 
@@ -215,12 +204,12 @@ describe('jumpToCircuit', () => {
 
     expect(result.kind).toBe('opened');
     expect(calls.opened).toHaveLength(1);
-    expect(calls.opened[0].filePath).toContain('PaymentService.xml');
+    expect(calls.opened[0].filePath).toContain('PaymentService.yaml');
     expect(calls.pickedFrom).toHaveLength(0);
   });
 
   it('shows a picker for duplicate definitions and opens the selection', async () => {
-    const project = xmlProject('duplicates');
+    const project = yamlProject('duplicates');
     const { host, calls } = createHost({ pick: (candidates) => candidates[1] });
     const deps = createDeps([project], host);
 
@@ -234,7 +223,7 @@ describe('jumpToCircuit', () => {
   });
 
   it('returns cancelled when the user dismisses the picker', async () => {
-    const project = xmlProject('duplicates');
+    const project = yamlProject('duplicates');
     const { host, calls } = createHost({ pick: () => undefined });
     const deps = createDeps([project], host);
 
@@ -245,7 +234,7 @@ describe('jumpToCircuit', () => {
   });
 
   it('returns notFound and warns when the circuit does not exist', async () => {
-    const project = xmlProject('missing');
+    const project = yamlProject('missing');
     const { host, calls } = createHost();
     const deps = createDeps([project], host);
 
@@ -258,7 +247,7 @@ describe('jumpToCircuit', () => {
   });
 
   it('returns error for empty circuit name without navigating', async () => {
-    const project = xmlProject('unique');
+    const project = yamlProject('unique');
     const { host, calls } = createHost();
     const deps = createDeps([project], host);
 
@@ -271,8 +260,8 @@ describe('jumpToCircuit', () => {
   });
 
   it('searches remaining projects when searchAllProjects option is set', async () => {
-    const missing = xmlProject('missing');
-    const unique = xmlProject('unique');
+    const missing = yamlProject('missing');
+    const unique = yamlProject('unique');
     const { host, calls } = createHost();
     const deps = createDeps([missing, unique], host);
 
@@ -287,8 +276,8 @@ describe('jumpToCircuit', () => {
   });
 
   it('offers to search all projects on miss and honours acceptance', async () => {
-    const missing = xmlProject('missing');
-    const unique = xmlProject('unique');
+    const missing = yamlProject('missing');
+    const unique = yamlProject('unique');
     const { host, calls } = createHost({ notFoundAction: 'searchAllProjects' });
     const deps = createDeps([missing, unique], host);
 
@@ -303,8 +292,8 @@ describe('jumpToCircuit', () => {
   });
 
   it('returns notFound when user declines searching all projects', async () => {
-    const missing = xmlProject('missing');
-    const unique = xmlProject('unique');
+    const missing = yamlProject('missing');
+    const unique = yamlProject('unique');
     const { host, calls } = createHost();
     const deps = createDeps([missing, unique], host);
 
@@ -315,13 +304,13 @@ describe('jumpToCircuit', () => {
   });
 
   it('infers the owning project from the source file path', async () => {
-    const unique = xmlProject('unique');
-    const duplicates = xmlProject('duplicates');
+    const unique = yamlProject('unique');
+    const duplicates = yamlProject('duplicates');
     const { host, calls } = createHost();
     const deps = createDeps([duplicates, unique], host);
 
     const result = await jumpToCircuit(deps, 'PaymentService', {
-      sourceFilePath: path.join(unique.rootPath, 'policies', 'PaymentService.xml'),
+      sourceFilePath: path.join(unique.rootPath, 'Policies', 'PaymentService.yaml'),
     });
 
     expect(result.kind).toBe('opened');
@@ -329,8 +318,8 @@ describe('jumpToCircuit', () => {
   });
 
   it('searches all projects when no owning project can be resolved', async () => {
-    const missing = xmlProject('missing');
-    const unique = xmlProject('unique');
+    const missing = yamlProject('missing');
+    const unique = yamlProject('unique');
     const { host, calls } = createHost();
     const deps = createDeps([missing, unique], host);
 
@@ -341,7 +330,7 @@ describe('jumpToCircuit', () => {
   });
 
   it('includes project metadata on candidates from multiple projects', async () => {
-    const teamA = xmlProject('duplicates');
+    const teamA = yamlProject('duplicates');
     const { host, calls } = createHost({ pick: (candidates) => candidates[0] });
     const deps = createDeps([teamA], host);
 
@@ -354,7 +343,7 @@ describe('jumpToCircuit', () => {
   });
 
   it('returns error when the target file cannot be opened', async () => {
-    const project = xmlProject('unique');
+    const project = yamlProject('unique');
     const { host, calls } = createHost({ openError: new Error('file deleted') });
     const deps = createDeps([project], host);
 
@@ -362,7 +351,7 @@ describe('jumpToCircuit', () => {
 
     expect(result.kind).toBe('error');
     expect(calls.errors).toHaveLength(1);
-    expect(calls.errors[0]).toContain('PaymentService.xml');
+    expect(calls.errors[0]).toContain('PaymentService.yaml');
   });
 
   it('returns notFound when there are no projects', async () => {
@@ -380,12 +369,12 @@ describe('jumpToCircuit', () => {
  * Integration test (VS Code host): manual test plan
  * 1. Open test/fixtures/jump-to-circuit/duplicates in VS Code.
  * 2. Run "Policy Studio: Jump to Circuit" and enter/select "SharedAuth" (e.g. place the
- *    cursor on the word SharedAuth in team-a/SharedAuth.xml first).
- * 3. Confirm a quick pick lists both team-a/SharedAuth.xml and team-b/SharedAuth.xml.
+ *    cursor on the word SharedAuth in team-a/SharedAuth.yaml first).
+ * 3. Confirm a quick pick lists both team-a/SharedAuth.yaml and team-b/SharedAuth.yaml.
  * 4. Select an entry and confirm the file opens with the circuit element revealed
  *    and selected (editor scrolls the range into view).
  * 5. Open test/fixtures/jump-to-circuit/missing, place the cursor on
- *    "NonExistentCircuit" in policies/Caller.xml, run the command, and confirm a
+ *    "NonExistentCircuit" in Policies/Caller.yaml, run the command, and confirm a
  *    warning notification appears with a "Search Circuits" action and no editor opens.
  * 6. Open test/fixtures/jump-to-circuit/references and follow the CircuitA → CircuitB
  *    → CircuitC chain via circuit search "Go to circuit" actions.
