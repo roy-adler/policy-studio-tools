@@ -1,0 +1,25 @@
+---
+meta:
+  type: FilterCircuit
+  _version: "4"
+fields:
+  name: SimplePolicy
+  start: Validate
+children:
+  Validate:
+    meta:
+      type: Check
+    fields:
+      name: Validate
+      successNode: Transform
+  Transform:
+    meta:
+      type: ChangeMessage
+    fields:
+      name: Transform
+      successNode: Respond
+  Respond:
+    meta:
+      type: Reflector
+    fields:
+      name: Respond

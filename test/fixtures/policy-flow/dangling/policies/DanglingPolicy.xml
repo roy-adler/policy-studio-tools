@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<Circuit name="DanglingPolicy" start="Validate">
-  <Filter name="Validate" type="Check" successNode="Ghost" failureNode="HandleError">
-    <configuration/>
-  </Filter>
-  <Filter name="HandleError" type="AlertFilter">
-    <configuration/>
-  </Filter>
-</Circuit>

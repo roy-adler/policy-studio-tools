@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<Circuit name="NoStartPolicy">
-  <Filter name="Validate" type="Check" successNode="Respond">
-    <configuration/>
-  </Filter>
-  <Filter name="Respond" type="Reflector">
-    <configuration/>
-  </Filter>
-</Circuit>

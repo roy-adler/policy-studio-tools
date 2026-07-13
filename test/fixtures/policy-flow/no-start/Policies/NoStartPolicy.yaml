@@ -1,0 +1,18 @@
+---
+meta:
+  type: FilterCircuit
+  _version: "4"
+fields:
+  name: NoStartPolicy
+children:
+  Validate:
+    meta:
+      type: Check
+    fields:
+      name: Validate
+      successNode: Respond
+  Respond:
+    meta:
+      type: Reflector
+    fields:
+      name: Respond

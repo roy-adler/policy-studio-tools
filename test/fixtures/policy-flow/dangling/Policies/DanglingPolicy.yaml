@@ -1,0 +1,20 @@
+---
+meta:
+  type: FilterCircuit
+  _version: "4"
+fields:
+  name: DanglingPolicy
+  start: Validate
+children:
+  Validate:
+    meta:
+      type: Check
+    fields:
+      name: Validate
+      successNode: Ghost
+      failureNode: HandleError
+  HandleError:
+    meta:
+      type: AlertFilter
+    fields:
+      name: HandleError

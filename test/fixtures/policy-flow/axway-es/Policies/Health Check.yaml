@@ -1,0 +1,25 @@
+---
+meta:
+  type: FilterCircuit
+  _version: "4"
+fields:
+  name: Health Check
+  start: Set Message
+children:
+  Set Message:
+    meta:
+      type: ChangeMessageFilter
+    fields:
+      name: Set Message
+      successNode: Reflect
+      failureNode: Alert
+  Reflect:
+    meta:
+      type: Reflector
+    fields:
+      name: Reflect
+  Alert:
+    meta:
+      type: AlertFilter
+    fields:
+      name: Alert

@@ -1,11 +1,11 @@
 # Policy Flow fixtures
 
 Fixtures for `specs/010-policy-flow-view.md`. Each folder is a minimal Policy Studio
-project (marker `values.yaml` for YAML — the primary format — or `PrimaryStore.xml`
-for legacy XML) containing one or more scenarios.
+YAML entity store project (marker `values.yaml` plus a `Policies/` directory)
+containing one or more scenarios.
 
-**Primary (YAML entity store, `yaml-es/`):** covers all scenarios in Axway's
-current format —
+**Primary (`yaml-es/`):** canonical multi-scenario project with filter names containing
+spaces —
 
 | Policy file | Scenario |
 |-------------|----------|
@@ -15,17 +15,17 @@ current format —
 | `No Start Flow.yaml` | Circuit without a `start` declaration |
 | `Delegate Flow.yaml` + `Auth Flow.yaml` | `Call Auth` references circuit `Auth Flow` (delegation) |
 
-**Legacy (XML):**
+**Per-scenario folders (YamlES):**
 
-| Folder | Scenario |
-|--------|----------|
-| `simple/` | Linear success chain: Validate → Transform → Respond |
-| `branching/` | Distinct success (Respond) and failure (HandleError) targets |
-| `unreachable/` | Filter `Orphan` defined but not linked from the start path |
-| `dangling/` | Success link to non-existent filter `Ghost` |
-| `circuit-ref/` | `CallAuth` references circuit `AuthPolicy` (delegation) |
-| `no-start/` | Circuit without a `start` declaration |
-| `axway-es/` | Axway entity-store XML dialect with `fval` start/success/failure |
+| Folder | Policy file | Scenario |
+|--------|-------------|----------|
+| `simple/` | `SimplePolicy.yaml` | Linear success chain: Validate → Transform → Respond |
+| `branching/` | `BranchingPolicy.yaml` | Distinct success (Respond) and failure (HandleError) targets |
+| `unreachable/` | `UnreachablePolicy.yaml` | Filter `Orphan` defined but not linked from the start path |
+| `dangling/` | `DanglingPolicy.yaml` | Success link to non-existent filter `Ghost` |
+| `circuit-ref/` | `CallerPolicy.yaml` + `AuthPolicy.yaml` | `CallAuth` references circuit `AuthPolicy` (delegation) |
+| `no-start/` | `NoStartPolicy.yaml` | Circuit without a `start` declaration |
+| `axway-es/` | `Health Check.yaml` | Axway entity-store YAML with start/success/failure fields |
 
 A `large/` fixture (100+ filters) is intentionally not committed; generate one
 locally if a performance smoke test is needed.

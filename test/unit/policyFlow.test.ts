@@ -1,19 +1,12 @@
 import * as fs from 'fs/promises';
 import path from 'path';
 import { describe, expect, it } from 'vitest';
-import { parsePolicyXml } from '../../src/features/circuitSearch/xmlPolicyParser';
 import { parsePolicyYaml } from '../../src/features/circuitSearch/yamlPolicyParser';
 import { buildFlowGraph } from '../../src/features/policyFlowView/flowGraph';
 import { layoutFlowGraph } from '../../src/features/policyFlowView/flowLayout';
 import type { PolicyFlowGraph } from '../../src/features/policyFlowView/types';
 
 const fixturesDir = path.join(__dirname, '..', 'fixtures', 'policy-flow');
-
-async function loadXmlCircuit(fixture: string, file: string) {
-  const content = await fs.readFile(path.join(fixturesDir, fixture, file), 'utf8');
-  const { circuits } = parsePolicyXml(content);
-  return { content, circuits };
-}
 
 async function loadYamlCircuit(fixture: string, file: string) {
   const content = await fs.readFile(path.join(fixturesDir, fixture, file), 'utf8');
@@ -145,13 +138,13 @@ children:
     expect(graph.warnings).toEqual([]);
   });
 
-  it('strips ./ from Axway XML fval start and success/failure nodes', async () => {
-    const { content } = await loadXmlCircuit('axway-es', 'PrimaryStore.xml');
+  it('strips ./ from YAML start and success/failure node references in fixtures', async () => {
+    const { content } = await loadYamlCircuit('axway-es', 'Policies/Health Check.yaml');
     const dotted = content
-      .replace('<fval name="start"><value>Set Message</value></fval>', '<fval name="start"><value>./Set Message</value></fval>')
-      .replace('<fval name="successNode"><value>Reflect</value></fval>', '<fval name="successNode"><value>./Reflect</value></fval>')
-      .replace('<fval name="failureNode"><value>Alert</value></fval>', '<fval name="failureNode"><value>./Alert</value></fval>');
-    const { circuits } = parsePolicyXml(dotted);
+      .replace('start: Set Message', 'start: ./Set Message')
+      .replace('successNode: Reflect', 'successNode: ./Reflect')
+      .replace('failureNode: Alert', 'failureNode: ./Alert');
+    const { circuits } = parsePolicyYaml(dotted);
     const circuit = circuits.find((c) => c.name === 'Health Check');
     expect(circuit?.startFilter).toBe('Set Message');
 
@@ -161,9 +154,9 @@ children:
   });
 });
 
-describe('flow link extraction — simplified XML', () => {
+describe('flow link extraction — YamlES fixtures', () => {
   it('captures start filter and success links', async () => {
-    const { circuits } = await loadXmlCircuit('simple', 'policies/SimplePolicy.xml');
+    const { circuits } = await loadYamlCircuit('simple', 'Policies/SimplePolicy.yaml');
     expect(circuits).toHaveLength(1);
     const circuit = circuits[0];
 
@@ -174,23 +167,21 @@ describe('flow link extraction — simplified XML', () => {
   });
 
   it('captures failure links', async () => {
-    const { circuits } = await loadXmlCircuit('branching', 'policies/BranchingPolicy.xml');
+    const { circuits } = await loadYamlCircuit('branching', 'Policies/BranchingPolicy.yaml');
     const validate = circuits[0].filters.find((f) => f.name === 'Validate');
     expect(validate?.successNode).toBe('Respond');
     expect(validate?.failureNode).toBe('HandleError');
   });
 
   it('captures circuit references separately from flow links', async () => {
-    const { circuits } = await loadXmlCircuit('circuit-ref', 'policies/CallerPolicy.xml');
+    const { circuits } = await loadYamlCircuit('circuit-ref', 'Policies/CallerPolicy.yaml');
     const call = circuits[0].filters.find((f) => f.name === 'CallAuth');
     expect(call?.circuitRef).toBe('AuthPolicy');
     expect(call?.successNode).toBe('Respond');
   });
-});
 
-describe('flow link extraction — Axway entity store XML', () => {
-  it('captures start, success, and failure from fval elements', async () => {
-    const { circuits } = await loadXmlCircuit('axway-es', 'PrimaryStore.xml');
+  it('captures start, success, and failure from fields', async () => {
+    const { circuits } = await loadYamlCircuit('axway-es', 'Policies/Health Check.yaml');
     const circuit = circuits.find((c) => c.name === 'Health Check');
     expect(circuit?.startFilter).toBe('Set Message');
 
@@ -264,7 +255,7 @@ describe('buildFlowGraph — YAML scenarios', () => {
 
 describe('buildFlowGraph', () => {
   it('builds nodes and green/red edges for a branching policy', async () => {
-    const { content, circuits } = await loadXmlCircuit('branching', 'policies/BranchingPolicy.xml');
+    const { content, circuits } = await loadYamlCircuit('branching', 'Policies/BranchingPolicy.yaml');
     const graph = buildFlowGraph(circuits[0], content);
 
     expect(graph.circuitName).toBe('BranchingPolicy');
@@ -278,7 +269,7 @@ describe('buildFlowGraph', () => {
   });
 
   it('marks the start filter and terminal nodes', async () => {
-    const { content, circuits } = await loadXmlCircuit('simple', 'policies/SimplePolicy.xml');
+    const { content, circuits } = await loadYamlCircuit('simple', 'Policies/SimplePolicy.yaml');
     const graph = buildFlowGraph(circuits[0], content);
 
     expect(graph.nodes.find((n) => n.name === 'Validate')?.isStart).toBe(true);
@@ -288,9 +279,9 @@ describe('buildFlowGraph', () => {
   });
 
   it('flags unreachable filters', async () => {
-    const { content, circuits } = await loadXmlCircuit(
+    const { content, circuits } = await loadYamlCircuit(
       'unreachable',
-      'policies/UnreachablePolicy.xml',
+      'Policies/UnreachablePolicy.yaml',
     );
     const graph = buildFlowGraph(circuits[0], content);
 
@@ -299,7 +290,7 @@ describe('buildFlowGraph', () => {
   });
 
   it('renders dangling links as edges to synthetic missing nodes', async () => {
-    const { content, circuits } = await loadXmlCircuit('dangling', 'policies/DanglingPolicy.xml');
+    const { content, circuits } = await loadYamlCircuit('dangling', 'Policies/DanglingPolicy.yaml');
     const graph = buildFlowGraph(circuits[0], content);
 
     const ghost = graph.nodes.find((n) => n.name === 'Ghost');
@@ -309,7 +300,7 @@ describe('buildFlowGraph', () => {
   });
 
   it('reports a warning and keeps all nodes reachable when there is no start filter', async () => {
-    const { content, circuits } = await loadXmlCircuit('no-start', 'policies/NoStartPolicy.xml');
+    const { content, circuits } = await loadYamlCircuit('no-start', 'Policies/NoStartPolicy.yaml');
     const graph = buildFlowGraph(circuits[0], content);
 
     expect(graph.warnings.some((w) => w.toLowerCase().includes('start'))).toBe(true);
@@ -318,7 +309,7 @@ describe('buildFlowGraph', () => {
   });
 
   it('exposes circuit references on nodes', async () => {
-    const { content, circuits } = await loadXmlCircuit('circuit-ref', 'policies/CallerPolicy.xml');
+    const { content, circuits } = await loadYamlCircuit('circuit-ref', 'Policies/CallerPolicy.yaml');
     const graph = buildFlowGraph(circuits[0], content);
 
     expect(graph.nodes.find((n) => n.name === 'CallAuth')?.circuitRef).toBe('AuthPolicy');
@@ -371,7 +362,7 @@ describe('buildFlowGraph', () => {
 
 describe('layoutFlowGraph', () => {
   it('places the start node on the top layer and successors below', async () => {
-    const { content, circuits } = await loadXmlCircuit('simple', 'policies/SimplePolicy.xml');
+    const { content, circuits } = await loadYamlCircuit('simple', 'Policies/SimplePolicy.yaml');
     const graph = buildFlowGraph(circuits[0], content);
     const layout = layoutFlowGraph(graph);
 
@@ -385,9 +376,9 @@ describe('layoutFlowGraph', () => {
   });
 
   it('assigns a position to every node including unreachable ones', async () => {
-    const { content, circuits } = await loadXmlCircuit(
+    const { content, circuits } = await loadYamlCircuit(
       'unreachable',
-      'policies/UnreachablePolicy.xml',
+      'Policies/UnreachablePolicy.yaml',
     );
     const graph = buildFlowGraph(circuits[0], content);
     const layout = layoutFlowGraph(graph);

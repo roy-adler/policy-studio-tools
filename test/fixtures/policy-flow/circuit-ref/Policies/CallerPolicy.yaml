@@ -1,0 +1,20 @@
+---
+meta:
+  type: FilterCircuit
+  _version: "4"
+fields:
+  name: CallerPolicy
+  start: CallAuth
+children:
+  CallAuth:
+    meta:
+      type: CircuitReferralFilter
+    fields:
+      name: CallAuth
+      circuit: Policies/AuthPolicy
+      successNode: Respond
+  Respond:
+    meta:
+      type: Reflector
+    fields:
+      name: Respond

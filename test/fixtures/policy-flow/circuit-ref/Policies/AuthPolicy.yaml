@@ -1,0 +1,13 @@
+---
+meta:
+  type: FilterCircuit
+  _version: "4"
+fields:
+  name: AuthPolicy
+  start: CheckToken
+children:
+  CheckToken:
+    meta:
+      type: OAuth
+    fields:
+      name: CheckToken
