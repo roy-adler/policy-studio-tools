@@ -28,7 +28,7 @@ Practical rules for every feature:
 | YAML entity store | `src/features/circuitSearch/yamlPolicyParser.ts` (`parseYamlEsPolicy`) | `meta.type: FilterCircuit`, `fields.name`, `fields.start`, `children` with per-filter `fields` (`successNode`, `failureNode`, `circuit`) |
 | Legacy simple YAML | same file (`parseLegacyYamlPolicy`) | our older `filters:` list format, kept for backwards compatibility |
 | Axway XML entity store | `src/features/circuitSearch/xmlPolicyParser.ts` (`parseAxwayEntityStoreXml`) | `<entity type="FilterCircuit">` with `fval` fields |
-| Simplified XML | same file (`parseSimplifiedPolicyXml`) | `<Circuit>`/`<Filter>` with attributes, used by legacy fixtures |
+| Simplified XML | same file (`parseSimplifiedPolicyXml`) | `<Circuit>`/`<Filter>` with attributes, kept for legacy XML parser coverage \(inline tests; no on-disk scenario fixtures\) |
 
 ## Development workflow
 
