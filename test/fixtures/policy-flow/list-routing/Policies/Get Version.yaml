@@ -1,0 +1,19 @@
+type: FilterCircuit
+fields:
+  name: Get Version
+  description: ""
+  start: ./something
+children:
+- type: PathParameterFilter
+  fields:
+    name: something
+    uriTemplate: /version{api}
+  routing:
+    success: ../somethingelse
+    failure: ../Handle Error
+- type: Reflector
+  fields:
+    name: somethingelse
+- type: AlertFilter
+  fields:
+    name: Handle Error

@@ -18,6 +18,57 @@ function edge(graph: PolicyFlowGraph, from: string, to: string) {
   return graph.edges.find((e) => e.from === from && e.to === to);
 }
 
+describe('flow link extraction — list children + routing.success dialect', () => {
+  it('parses list-style children with routing.success and routing.failure', async () => {
+    const { content, circuits } = await loadYamlCircuit(
+      'list-routing',
+      'Policies/Get Version.yaml',
+    );
+    expect(circuits).toHaveLength(1);
+    const circuit = circuits[0];
+
+    expect(circuit.name).toBe('Get Version');
+    expect(circuit.startFilter).toBe('something');
+    expect(circuit.filters.map((f) => f.name)).toEqual([
+      'something',
+      'somethingelse',
+      'Handle Error',
+    ]);
+
+    const start = circuit.filters.find((f) => f.name === 'something');
+    expect(start?.type).toBe('PathParameterFilter');
+    expect(start?.successNode).toBe('somethingelse');
+    expect(start?.failureNode).toBe('Handle Error');
+
+    const graph = buildFlowGraph(circuit, content);
+    expect(graph.nodes.find((n) => n.name === 'routing')).toBeUndefined();
+    expect(edge(graph, 'something', 'somethingelse')?.kind).toBe('success');
+    expect(edge(graph, 'something', 'Handle Error')?.kind).toBe('failure');
+    expect(graph.edges.filter((e) => e.dangling)).toHaveLength(0);
+    expect(graph.warnings).toEqual([]);
+  });
+
+  it('does not treat fields/routing/meta as filter names in list children', () => {
+    const content = `type: FilterCircuit
+fields:
+  name: List Flow
+  start: ./A
+children:
+- type: Check
+  fields:
+    name: A
+  routing:
+    success: ../B
+- type: Reflector
+  fields:
+    name: B
+`;
+    const { circuits } = parsePolicyYaml(content);
+    expect(circuits[0].filters.map((f) => f.name)).toEqual(['A', 'B']);
+    expect(circuits[0].filters.find((f) => f.name === 'A')?.successNode).toBe('B');
+  });
+});
+
 describe('flow link extraction — Policy Studio ./ prefix', () => {
   it('strips ./ from YAML start, success, and failure node references', () => {
     const content = `---

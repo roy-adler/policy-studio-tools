@@ -111,7 +111,31 @@ fixture.
 - `test/fixtures/policy-flow/circuit-ref/` — policy containing a filter referencing another circuit.
 - `test/fixtures/policy-flow/no-start/` — circuit without a resolvable start filter.
 - `test/fixtures/policy-flow/axway-es/` — Axway YAML entity-store dialect (`fields.start`, `successNode`, `failureNode`).
+- `test/fixtures/policy-flow/list-routing/` — primary exported dialect: list-style `children` (`- type: …`), `fields.start` with `./` refs, and `routing.success` / `routing.failure` (including `../` refs).
 - `test/fixtures/policy-flow/large/` — generated policy with 100+ filters for performance smoke test (may be gitignored and generated in CI).
+
+### YAML flow-link dialects
+
+Policy Studio YAML may express the same circuit in two shapes; both must produce
+identical flow graph models:
+
+1. **List + routing (primary export shape):**
+   ```yaml
+   type: FilterCircuit
+   fields:
+     name: Get Version
+     start: ./something
+   children:
+   - type: PathParameterFilter
+     fields:
+       name: something
+     routing:
+       success: ../somethingelse
+       failure: ../Handle Error
+   ```
+2. **Map + successNode (fixture / older shape):** named `children` keys with
+   `fields.successNode` / `fields.failureNode` (or the same keys under
+   `routing:`).
 
 ## Future Ideas
 

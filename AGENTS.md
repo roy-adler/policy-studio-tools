@@ -25,7 +25,7 @@ Practical rules for every feature:
 
 | Dialect | Parser | Notes |
 |---------|--------|-------|
-| YAML entity store | `src/features/circuitSearch/yamlPolicyParser.ts` (`parseYamlEsPolicy`) | `meta.type: FilterCircuit`, `fields.name`, `fields.start`, `children` with per-filter `fields` (`successNode`, `failureNode`, `circuit`) |
+| YAML entity store | `src/features/circuitSearch/yamlPolicyParser.ts` (`parseYamlEsPolicy`) | `type: FilterCircuit` (top-level or `meta.type`), `fields.name`, `fields.start`, `children` as either a **list** (`- type: …` / `fields` / `routing`) or a **map** (named keys with `meta`/`fields`). Flow links: `routing.success` / `routing.failure` (primary) or `successNode` / `failureNode` (legacy map dialect). Refs may use `./`, `../`, or fully qualified paths. |
 | Legacy simple YAML | same file (`parseLegacyYamlPolicy`) | our older `filters:` list format, kept for backwards compatibility |
 | Axway XML entity store | `src/features/circuitSearch/xmlPolicyParser.ts` (`parseAxwayEntityStoreXml`) | `<entity type="FilterCircuit">` with `fval` fields |
 | Simplified XML | same file (`parseSimplifiedPolicyXml`) | `<Circuit>`/`<Filter>` with attributes, kept for legacy XML parser coverage \(inline tests; no on-disk scenario fixtures\) |

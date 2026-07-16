@@ -45,8 +45,9 @@ export function normalizeQuery(query: string): string {
 }
 
 /**
- * Policy Studio flow links (start, successNode, failureNode) often use a "./Filter Name"
- * prefix or a fully qualified project path such as "Policies/Policy Library/Circuit/Filter".
+ * Policy Studio flow links (start, success/failure, successNode/failureNode) often use
+ * "./Filter Name", "../Filter Name", or a fully qualified project path such as
+ * "Policies/Policy Library/Circuit/Filter".
  */
 export function normalizeFilterNodeRef(value: string | undefined): string | undefined {
   if (value === undefined) {

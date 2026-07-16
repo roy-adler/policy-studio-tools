@@ -34,6 +34,27 @@ function offsetAtLine(lines: string[], lineIndex: number): number {
   return lines.slice(0, lineIndex).join('\n').length + (lineIndex > 0 ? 1 : 0);
 }
 
+const STRUCTURAL_CHILD_KEYS = new Set(['fields', 'meta', 'routing']);
+
+function parseFlowLinkKey(
+  trimmed: string,
+): { kind: 'success' | 'failure'; value: string } | undefined {
+  if (trimmed.startsWith('successNode:')) {
+    return { kind: 'success', value: trimmed.slice('successNode:'.length) };
+  }
+  if (trimmed.startsWith('failureNode:')) {
+    return { kind: 'failure', value: trimmed.slice('failureNode:'.length) };
+  }
+  // Primary Policy Studio export: routing.success / routing.failure
+  if (trimmed.startsWith('success:')) {
+    return { kind: 'success', value: trimmed.slice('success:'.length) };
+  }
+  if (trimmed.startsWith('failure:')) {
+    return { kind: 'failure', value: trimmed.slice('failure:'.length) };
+  }
+  return undefined;
+}
+
 function parseYamlEsPolicy(content: string): ParsedCircuit[] {
   const lines = content.split('\n');
   let circuitName: string | undefined;
@@ -42,6 +63,7 @@ function parseYamlEsPolicy(content: string): ParsedCircuit[] {
   let inChildren = false;
   let currentChild: Partial<ParsedFilter> | undefined;
   const filters: ParsedFilter[] = [];
+  let childrenKeyIndent = 0;
   let childIndent = 0;
 
   const flushChild = (endLine: number) => {
@@ -102,6 +124,7 @@ function parseYamlEsPolicy(content: string): ParsedCircuit[] {
 
     if (trimmed === 'children:') {
       inChildren = true;
+      childrenKeyIndent = indent;
       childIndent = indent + 2;
       continue;
     }
@@ -110,15 +133,44 @@ function parseYamlEsPolicy(content: string): ParsedCircuit[] {
       continue;
     }
 
-    if (inChildren && indent === childIndent && trimmed.endsWith(':') && !trimmed.startsWith('-')) {
+    // End of children block when a non-nested top-level key appears.
+    if (
+      indent <= childrenKeyIndent &&
+      trimmed !== '' &&
+      !trimmed.startsWith('#') &&
+      !trimmed.startsWith('-')
+    ) {
       flushChild(i - 1);
-      const childName = trimmed.slice(0, -1).trim();
+      inChildren = false;
+      i -= 1;
+      continue;
+    }
+
+    // List-style children: "- type: PathParameterFilter"
+    const listTypeMatch = trimmed.match(/^- type:\s*(.*)$/);
+    if (listTypeMatch && indent >= childrenKeyIndent) {
+      flushChild(i - 1);
       currentChild = {
-        name: childName,
+        type: unquote(listTypeMatch[1]),
         startOffset: offsetAtLine(lines, i),
         attributes: [],
         referencedCircuits: [],
       };
+      continue;
+    }
+
+    // Map-style children: "Set Message:" — never treat structural keys as filters.
+    if (inChildren && indent === childIndent && trimmed.endsWith(':') && !trimmed.startsWith('-')) {
+      const childName = trimmed.slice(0, -1).trim();
+      if (!STRUCTURAL_CHILD_KEYS.has(childName)) {
+        flushChild(i - 1);
+        currentChild = {
+          name: childName,
+          startOffset: offsetAtLine(lines, i),
+          attributes: [],
+          referencedCircuits: [],
+        };
+      }
       continue;
     }
 
@@ -138,19 +190,25 @@ function parseYamlEsPolicy(content: string): ParsedCircuit[] {
         shortName,
       ];
       currentChild.circuitRef = shortName;
-    } else if (trimmed.startsWith('successNode:')) {
-      currentChild.successNode = normalizeFilterNodeRef(unquote(trimmed.slice('successNode:'.length)));
-    } else if (trimmed.startsWith('failureNode:')) {
-      currentChild.failureNode = normalizeFilterNodeRef(unquote(trimmed.slice('failureNode:'.length)));
-    } else if (trimmed.startsWith('attributeName:')) {
-      currentChild.attributes = [
-        ...(currentChild.attributes ?? []),
-        trimmed.slice('attributeName:'.length).trim().replace(/^["']|["']$/g, ''),
-      ];
-    } else if (trimmed.startsWith('script:') || trimmed === 'body:') {
-      const { value, endIndex } = readScalarBlock(lines, i);
-      currentChild.script = value;
-      i = endIndex;
+    } else {
+      const flowLink = parseFlowLinkKey(trimmed);
+      if (flowLink) {
+        const normalized = normalizeFilterNodeRef(unquote(flowLink.value));
+        if (flowLink.kind === 'success') {
+          currentChild.successNode = normalized;
+        } else {
+          currentChild.failureNode = normalized;
+        }
+      } else if (trimmed.startsWith('attributeName:')) {
+        currentChild.attributes = [
+          ...(currentChild.attributes ?? []),
+          trimmed.slice('attributeName:'.length).trim().replace(/^["']|["']$/g, ''),
+        ];
+      } else if (trimmed.startsWith('script:') || trimmed === 'body:') {
+        const { value, endIndex } = readScalarBlock(lines, i);
+        currentChild.script = value;
+        i = endIndex;
+      }
     }
   }
 
