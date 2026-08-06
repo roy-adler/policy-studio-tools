@@ -31,13 +31,19 @@
         },
         "policyStudio.projects.includePaths": {
           "type": "array",
-          "items": { "type": "string" },
-          "default": ["**"],
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "**"
+          ],
           "description": "Glob allowlist limiting which paths are scanned for Policy Studio projects."
         },
         "policyStudio.projects.excludePaths": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "default": [
             "**/node_modules/**",
             "**/.git/**",
@@ -231,10 +237,14 @@
     "vscode:publish": "vsce publish --no-dependencies --no-update-package-json"
   },
   "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.10.0",
     "@types/vscode": "^1.85.0",
     "@vscode/vsce": "^3.2.1",
     "typescript": "^5.7.2",
     "vitest": "^3.0.0"
+  },
+  "dependencies": {
+    "js-yaml": "^5.2.3"
   }
 }
