@@ -16,14 +16,14 @@ describe('env values discovery', () => {
     expect(resolveSiblingEnvRoot(policyRoot)).toBe(envRoot);
   });
 
-  it('discovers stages that contain values.yaml and skips Certificate Store', () => {
+  it('discovers stages that contain values.yaml and skips KPS', () => {
     const result = discoverEnvStages(envRoot);
     expect(result.envRoot).toBe(envRoot);
     expect(result.stages.map((s) => s.id).sort()).toEqual(['DEVL', 'TEST']);
     expect(result.stages.every((s) => s.valuesFilePath.endsWith(`${path.sep}values.yaml`))).toBe(
       true,
     );
-    expect(result.skippedDirs).toContain('Certificate Store');
+    expect(result.skippedDirs).toContain('KPS');
   });
 
   it('returns empty stages when ENV has no stage values.yaml files', () => {
