@@ -15,6 +15,9 @@ import {
   setLeafValue,
 } from '../../src/features/envValuesEditor/envValuesMutations';
 import { writeDirtyEnvDocuments } from '../../src/features/envValuesEditor/envValuesWriter';
+import { ENV_VALUES_EDITOR_TOOL } from '../../src/features/envValuesEditor/toolDescriptor';
+import { pickProjectRootForEnvEditor } from '../../src/features/envValuesEditor/pickProjectRootForEnvEditor';
+import type { PolicyStudioProject } from '../../src/features/projectRegistry/types';
 
 const sampleRoot = path.join(__dirname, '..', 'fixtures', 'env-values-editor', 'sample');
 const policyRoot = path.join(sampleRoot, 'POLICY_yaml');
@@ -220,6 +223,55 @@ describe('env values writer', () => {
       kind: 'value',
       value: 'two',
     });
+  });
+});
+
+describe('env values tool descriptor', () => {
+  it('registers under Analyze with openEnvValuesEditor command', () => {
+    expect(ENV_VALUES_EDITOR_TOOL.group).toBe('analyze');
+    expect(ENV_VALUES_EDITOR_TOOL.command).toBe('policyStudioTools.openEnvValuesEditor');
+    expect(ENV_VALUES_EDITOR_TOOL.available).toBe(true);
+  });
+});
+
+describe('pickProjectRootForEnvEditor', () => {
+  const projectA: PolicyStudioProject = {
+    id: 'a',
+    rootPath: '/repo/a',
+    workspaceFolder: 'file:///repo',
+    relativePath: 'a',
+    displayName: 'Project A',
+    projectType: 'yaml',
+  };
+  const projectB: PolicyStudioProject = {
+    id: 'b',
+    rootPath: '/repo/b',
+    workspaceFolder: 'file:///repo',
+    relativePath: 'b',
+    displayName: 'Project B',
+    projectType: 'yaml',
+  };
+
+  it('prefers the active project when present in the list', () => {
+    const picked = pickProjectRootForEnvEditor(
+      [projectA, projectB],
+      { mode: 'activeProject', activeProjectId: 'b' },
+    );
+    expect(picked).toBe(projectB);
+  });
+
+  it('falls back to the single project when scope has no matching active project', () => {
+    const picked = pickProjectRootForEnvEditor([projectA], { mode: 'allProjects' });
+    expect(picked).toBe(projectA);
+  });
+
+  it('returns undefined when multiple projects and no active project match', () => {
+    const picked = pickProjectRootForEnvEditor([projectA, projectB], { mode: 'allProjects' });
+    expect(picked).toBeUndefined();
+  });
+
+  it('returns undefined when there are no projects', () => {
+    expect(pickProjectRootForEnvEditor([], { mode: 'allProjects' })).toBeUndefined();
   });
 });
 

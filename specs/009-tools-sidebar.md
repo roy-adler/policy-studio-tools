@@ -29,6 +29,7 @@ As a Policy Studio developer, I want to click the Policy Studio icon in the VS C
 | Navigate | `policyStudioTools.jumpToCircuit` | `003` |
 | Analyze | `policyStudioTools.showCircuitGraph` | `008` |
 | Analyze | `policyStudioTools.comparePolicies` | `006` |
+| Analyze | `policyStudioTools.openEnvValuesEditor` | `011` |
 | Validate | `policyStudioTools.validatePathTemplates` | `005` |
 | Export | `policyStudioTools.exportDocumentation` | `007` |
 | Traces | *(open `.trc` via custom editor; sidebar lists recent traces)* | `004` |
@@ -74,6 +75,7 @@ Navigate
 Analyze
   $(type-hierarchy) Circuit graph    → showCircuitGraph
   $(diff)   Compare policies         → comparePolicies
+  $(symbol-field) ENV values editor  → openEnvValuesEditor
 Validate
   $(warning) Validate path templates → validatePathTemplates
 Export
@@ -226,6 +228,7 @@ When implementing or updating feature specs, align UI entry points with this hub
 | `006-policy-diff` | Register Analyze tool; diff results may open in editor area, not sidebar (launch from hub only). |
 | `007-export-documentation` | Register Export tool; export options may stay quick pick / save dialog. |
 | `008-visual-circuit-graph` | Register Analyze tool; graph renders in editor-area webview panel launched from hub. |
+| `011-env-values-editor` | Register Analyze tool; split-pane editor renders in editor-area webview panel launched from hub. |
 
 ### UI placement principles (for all specs)
 

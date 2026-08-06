@@ -167,6 +167,11 @@
         "command": "policyStudioTools.showCircuitGraph",
         "title": "Show Circuit Graph",
         "category": "Policy Studio"
+      },
+      {
+        "command": "policyStudioTools.openEnvValuesEditor",
+        "title": "Open ENV Values Editor",
+        "category": "Policy Studio"
       }
     ],
     "customEditors": [
@@ -213,6 +218,10 @@
         },
         {
           "command": "policyStudioTools.showCircuitGraph",
+          "when": "policyStudio.projectDetected"
+        },
+        {
+          "command": "policyStudioTools.openEnvValuesEditor",
           "when": "policyStudio.projectDetected"
         },
         {
