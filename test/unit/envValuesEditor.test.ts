@@ -14,6 +14,7 @@ import {
   removeKey,
   setLeafValue,
 } from '../../src/features/envValuesEditor/envValuesMutations';
+import { writeDirtyEnvDocuments } from '../../src/features/envValuesEditor/envValuesWriter';
 
 const sampleRoot = path.join(__dirname, '..', 'fixtures', 'env-values-editor', 'sample');
 const policyRoot = path.join(sampleRoot, 'POLICY_yaml');
@@ -191,6 +192,34 @@ describe('env values mutations', () => {
     expect(next).toBe(model);
     expect(next.documents.DEVL.dirty).toBe(false);
     expect(next.documents.TEST.dirty).toBe(false);
+  });
+});
+
+describe('env values writer', () => {
+  it('writes only dirty stages and round-trips values', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'env-write-'));
+    const writeEnv = path.join(tmp, 'ENV');
+    fs.mkdirSync(path.join(writeEnv, 'DEVL'), { recursive: true });
+    fs.mkdirSync(path.join(writeEnv, 'TEST'), { recursive: true });
+    fs.writeFileSync(path.join(writeEnv, 'DEVL', 'values.yaml'), 'A:\n  AA: one\n');
+    fs.writeFileSync(path.join(writeEnv, 'TEST', 'values.yaml'), 'A:\n  AA: two\n');
+
+    let model = loadEnvValuesSession(writeEnv);
+    model = setLeafValue(model, 'A.AA', 'DEVL', 'updated');
+    const result = writeDirtyEnvDocuments(model);
+
+    expect(result.written).toEqual([path.join(writeEnv, 'DEVL', 'values.yaml')]);
+    expect(result.model.documents.DEVL.dirty).toBe(false);
+
+    const reloaded = loadEnvValuesSession(writeEnv);
+    expect(findLeaf(reloaded.tree, 'A.AA')?.cells?.DEVL).toEqual({
+      kind: 'value',
+      value: 'updated',
+    });
+    expect(findLeaf(reloaded.tree, 'A.AA')?.cells?.TEST).toEqual({
+      kind: 'value',
+      value: 'two',
+    });
   });
 });
 
