@@ -44,6 +44,31 @@ describe('env values model', () => {
     expect(parsed.data).toEqual({ A: { AA: '' } });
   });
 
+  it('rejects null or empty YAML root but accepts empty mapping', () => {
+    expect(parseEnvValuesYaml('').error).toBeTruthy();
+    expect(parseEnvValuesYaml('null').error).toBeTruthy();
+    expect(parseEnvValuesYaml('~').error).toBeTruthy();
+    const empty = parseEnvValuesYaml('{}\n');
+    expect(empty.error).toBeUndefined();
+    expect(empty.data).toEqual({});
+  });
+
+  it('warns when a stage contains a non-editable array path', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'env-array-'));
+    const arrayEnv = path.join(tmp, 'ENV');
+    fs.mkdirSync(path.join(arrayEnv, 'DEVL'), { recursive: true });
+    fs.mkdirSync(path.join(arrayEnv, 'TEST'), { recursive: true });
+    fs.writeFileSync(
+      path.join(arrayEnv, 'DEVL', 'values.yaml'),
+      'items:\n  - one\n  - two\nA:\n  AA: ok\n',
+    );
+    fs.writeFileSync(path.join(arrayEnv, 'TEST', 'values.yaml'), 'A:\n  AA: ok\n');
+    const model = loadEnvValuesSession(arrayEnv);
+    expect(model.warnings.some((w) => w.includes('items') && w.toLowerCase().includes('array'))).toBe(
+      true,
+    );
+  });
+
   it('marks BAB missing in TEST but present in DEVL', () => {
     const model = loadEnvValuesSession(envRoot);
     const bab = findLeaf(model.tree, 'B.BA.BAB');
@@ -82,8 +107,24 @@ describe('env values model', () => {
     fs.writeFileSync(path.join(conflictEnv, 'TEST', 'values.yaml'), 'A:\n  AA:\n    nested: x\n');
     const model = loadEnvValuesSession(conflictEnv);
     expect(model.warnings.some((w) => w.toLowerCase().includes('conflict'))).toBe(true);
+    expect(collectNodesWithCellsAndChildren(model.tree)).toEqual([]);
   });
 });
+
+function collectNodesWithCellsAndChildren(
+  nodes: import('../../src/features/envValuesEditor/types').EnvTreeNode[],
+): string[] {
+  const violations: string[] = [];
+  for (const node of nodes) {
+    if (node.cells && node.children && node.children.length > 0) {
+      violations.push(node.path);
+    }
+    if (node.children) {
+      violations.push(...collectNodesWithCellsAndChildren(node.children));
+    }
+  }
+  return violations;
+}
 
 function findLeaf(
   nodes: import('../../src/features/envValuesEditor/types').EnvTreeNode[],

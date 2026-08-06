@@ -12,7 +12,7 @@ export function parseEnvValuesYaml(text: string): { data: Record<string, unknown
   try {
     const loaded = load(text);
     if (loaded === null || loaded === undefined) {
-      return { data: {} };
+      return { data: {}, error: 'Root must be a YAML mapping' };
     }
     if (!isPlainObject(loaded)) {
       return { data: {}, error: 'Root must be a YAML mapping' };
@@ -37,7 +37,11 @@ export function isScalar(value: unknown): value is EnvScalar {
   );
 }
 
-export function getLeafPaths(data: Record<string, unknown>, prefix = ''): string[] {
+export function getLeafPaths(
+  data: Record<string, unknown>,
+  prefix = '',
+  warnings?: string[],
+): string[] {
   const paths: string[] = [];
 
   for (const [key, value] of Object.entries(data)) {
@@ -45,7 +49,9 @@ export function getLeafPaths(data: Record<string, unknown>, prefix = ''): string
     if (isScalar(value)) {
       paths.push(path);
     } else if (isPlainObject(value)) {
-      paths.push(...getLeafPaths(value, path));
+      paths.push(...getLeafPaths(value, path, warnings));
+    } else if (Array.isArray(value) && warnings) {
+      warnings.push(`Array at ${path} is not editable and was skipped`);
     }
   }
 
@@ -134,7 +140,7 @@ export function buildEnvValuesModel(
   const allPaths = new Set<string>();
 
   for (const document of validDocuments) {
-    for (const path of getLeafPaths(document.data)) {
+    for (const path of getLeafPaths(document.data, '', warnings)) {
       allPaths.add(path);
     }
   }
@@ -225,6 +231,10 @@ function buildTree(
           node.children = [];
         }
         current.push(node);
+      }
+
+      if (node.cells) {
+        break;
       }
 
       if (isLeaf) {
