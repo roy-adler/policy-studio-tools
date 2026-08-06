@@ -4,6 +4,7 @@ out/
 .DS_Store
 
 .worktrees/
+.superpowers/
 
 # Generated large circuit-search performance fixtures (lowercase policies/ dir)
 test/fixtures/circuit-search/large/policies/
