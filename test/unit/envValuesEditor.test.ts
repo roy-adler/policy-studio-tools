@@ -149,7 +149,70 @@ describe('env values mutations', () => {
     expect(next.documents.DEVL.dirty).toBe(true);
     expect(next.documents.TEST.dirty).toBe(true);
   });
+
+  it('setLeafValue refuses when stage has parseError', () => {
+    const model = loadEnvValuesSession(createParseErrorEnv());
+    const next = setLeafValue(model, 'A.AA', 'TEST', 'changed');
+    expect(next).toBe(model);
+    expect(next.documents.TEST.dirty).toBe(false);
+  });
+
+  it('createMissing refuses when stage has parseError', () => {
+    const model = loadEnvValuesSession(createParseErrorEnv());
+    const next = createMissing(model, 'A.AA', 'TEST');
+    expect(next).toBe(model);
+    expect(next.documents.TEST.dirty).toBe(false);
+  });
+
+  it('setLeafValue refuses when cell is conflict', () => {
+    const model = loadEnvValuesSession(createMapVsScalarConflictEnv());
+    const next = setLeafValue(model, 'A.AA', 'DEVL', 'changed');
+    expect(next).toBe(model);
+    expect(next.documents.DEVL.dirty).toBe(false);
+  });
+
+  it('createMissing refuses when cell is conflict', () => {
+    const model = loadEnvValuesSession(createMapVsScalarConflictEnv());
+    const next = createMissing(model, 'A.AA', 'TEST');
+    expect(next).toBe(model);
+    expect(next.documents.TEST.dirty).toBe(false);
+  });
+
+  it('createMissing refuses when cell is value not missing', () => {
+    const model = loadEnvValuesSession(envRoot);
+    const next = createMissing(model, 'B.BA.BAB', 'DEVL');
+    expect(next).toBe(model);
+    expect(next.documents.DEVL.dirty).toBe(false);
+  });
+
+  it('addKey refuses when any stage has conflict at path', () => {
+    const model = loadEnvValuesSession(createMapVsScalarConflictEnv());
+    const next = addKey(model, 'A.AA');
+    expect(next).toBe(model);
+    expect(next.documents.DEVL.dirty).toBe(false);
+    expect(next.documents.TEST.dirty).toBe(false);
+  });
 });
+
+function createParseErrorEnv(): string {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'env-bad-'));
+  const badEnv = path.join(tmp, 'ENV');
+  fs.mkdirSync(path.join(badEnv, 'DEVL'), { recursive: true });
+  fs.mkdirSync(path.join(badEnv, 'TEST'), { recursive: true });
+  fs.writeFileSync(path.join(badEnv, 'DEVL', 'values.yaml'), 'A:\n  AA: ok\n');
+  fs.writeFileSync(path.join(badEnv, 'TEST', 'values.yaml'), 'A: [\n');
+  return badEnv;
+}
+
+function createMapVsScalarConflictEnv(): string {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'env-conflict-'));
+  const conflictEnv = path.join(tmp, 'ENV');
+  fs.mkdirSync(path.join(conflictEnv, 'DEVL'), { recursive: true });
+  fs.mkdirSync(path.join(conflictEnv, 'TEST'), { recursive: true });
+  fs.writeFileSync(path.join(conflictEnv, 'DEVL', 'values.yaml'), 'A:\n  AA: scalar\n');
+  fs.writeFileSync(path.join(conflictEnv, 'TEST', 'values.yaml'), 'A:\n  AA:\n    nested: x\n');
+  return conflictEnv;
+}
 
 function collectNodesWithCellsAndChildren(
   nodes: import('../../src/features/envValuesEditor/types').EnvTreeNode[],

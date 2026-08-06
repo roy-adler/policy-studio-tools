@@ -45,7 +45,7 @@ export function setLeafValue(
   }
 
   const cell = getCellState(model, path, stageId);
-  if (cell && cell.kind !== 'value' && cell.kind !== 'missing') {
+  if (!cell || (cell.kind !== 'value' && cell.kind !== 'missing')) {
     return model;
   }
 
@@ -77,6 +77,13 @@ export function createMissing(
 }
 
 export function addKey(model: EnvValuesModel, path: string): EnvValuesModel {
+  for (const stage of model.stages) {
+    const cell = getCellState(model, path, stage.id);
+    if (cell?.kind === 'conflict') {
+      return model;
+    }
+  }
+
   const documents = cloneDocuments(model.documents);
   let changed = false;
 
