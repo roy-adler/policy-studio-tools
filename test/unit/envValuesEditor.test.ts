@@ -8,6 +8,12 @@ import {
 } from '../../src/features/envValuesEditor/discoverEnvStages';
 import { loadEnvValuesSession } from '../../src/features/envValuesEditor/loadEnvValuesSession';
 import { parseEnvValuesYaml } from '../../src/features/envValuesEditor/envValuesModel';
+import {
+  addKey,
+  createMissing,
+  removeKey,
+  setLeafValue,
+} from '../../src/features/envValuesEditor/envValuesMutations';
 
 const sampleRoot = path.join(__dirname, '..', 'fixtures', 'env-values-editor', 'sample');
 const policyRoot = path.join(sampleRoot, 'POLICY_yaml');
@@ -108,6 +114,40 @@ describe('env values model', () => {
     const model = loadEnvValuesSession(conflictEnv);
     expect(model.warnings.some((w) => w.toLowerCase().includes('conflict'))).toBe(true);
     expect(collectNodesWithCellsAndChildren(model.tree)).toEqual([]);
+  });
+});
+
+describe('env values mutations', () => {
+  it('setLeafValue updates one stage and marks it dirty', () => {
+    const model = loadEnvValuesSession(envRoot);
+    const next = setLeafValue(model, 'A.AA', 'DEVL', 'changed');
+    expect(findLeaf(next.tree, 'A.AA')?.cells?.DEVL).toEqual({ kind: 'value', value: 'changed' });
+    expect(next.documents.DEVL.dirty).toBe(true);
+    expect(next.documents.TEST.dirty).toBe(false);
+  });
+
+  it('createMissing inserts empty string for TEST BAB', () => {
+    const model = loadEnvValuesSession(envRoot);
+    const next = createMissing(model, 'B.BA.BAB', 'TEST');
+    expect(findLeaf(next.tree, 'B.BA.BAB')?.cells?.TEST).toEqual({ kind: 'value', value: '' });
+    expect(next.documents.TEST.dirty).toBe(true);
+  });
+
+  it('addKey creates path in all stages', () => {
+    const model = loadEnvValuesSession(envRoot);
+    const next = addKey(model, 'C.CA');
+    expect(findLeaf(next.tree, 'C.CA')?.cells?.DEVL).toEqual({ kind: 'value', value: '' });
+    expect(findLeaf(next.tree, 'C.CA')?.cells?.TEST).toEqual({ kind: 'value', value: '' });
+    expect(next.documents.DEVL.dirty).toBe(true);
+    expect(next.documents.TEST.dirty).toBe(true);
+  });
+
+  it('removeKey deletes path from all stages', () => {
+    const model = loadEnvValuesSession(envRoot);
+    const next = removeKey(model, 'A.AA');
+    expect(findLeaf(next.tree, 'A.AA')).toBeUndefined();
+    expect(next.documents.DEVL.dirty).toBe(true);
+    expect(next.documents.TEST.dirty).toBe(true);
   });
 });
 
