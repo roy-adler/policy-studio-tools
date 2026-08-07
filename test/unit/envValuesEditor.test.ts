@@ -7,7 +7,12 @@ import {
   resolveSiblingEnvRoot,
 } from '../../src/features/envValuesEditor/discoverEnvStages';
 import { loadEnvValuesSession } from '../../src/features/envValuesEditor/loadEnvValuesSession';
-import { parseEnvValuesYaml } from '../../src/features/envValuesEditor/envValuesModel';
+import {
+  deleteValueAtPath,
+  hasForbiddenPathSegment,
+  parseEnvValuesYaml,
+  setValueAtPath,
+} from '../../src/features/envValuesEditor/envValuesModel';
 import {
   addKey,
   createMissing,
@@ -15,9 +20,12 @@ import {
   setLeafValue,
 } from '../../src/features/envValuesEditor/envValuesMutations';
 import { writeDirtyEnvDocuments } from '../../src/features/envValuesEditor/envValuesWriter';
+import { renderEnvValuesEditorHtml } from '../../src/features/envValuesEditor/envValuesPanelHtml';
+import { resolveAddKeyPath } from '../../src/features/envValuesEditor/resolveAddKeyPath';
 import { ENV_VALUES_EDITOR_TOOL } from '../../src/features/envValuesEditor/toolDescriptor';
 import { pickProjectRootForEnvEditor } from '../../src/features/envValuesEditor/pickProjectRootForEnvEditor';
 import type { PolicyStudioProject } from '../../src/features/projectRegistry/types';
+import type { EnvValuesModel } from '../../src/features/envValuesEditor/types';
 
 const sampleRoot = path.join(__dirname, '..', 'fixtures', 'env-values-editor', 'sample');
 const policyRoot = path.join(sampleRoot, 'POLICY_yaml');
@@ -195,6 +203,102 @@ describe('env values mutations', () => {
     expect(next).toBe(model);
     expect(next.documents.DEVL.dirty).toBe(false);
     expect(next.documents.TEST.dirty).toBe(false);
+  });
+});
+
+describe('env values prototype pollution guard', () => {
+  it('hasForbiddenPathSegment flags __proto__, prototype, and constructor exactly', () => {
+    expect(hasForbiddenPathSegment('__proto__')).toBe(true);
+    expect(hasForbiddenPathSegment('__proto__.x')).toBe(true);
+    expect(hasForbiddenPathSegment('a.prototype.x')).toBe(true);
+    expect(hasForbiddenPathSegment('a.constructor')).toBe(true);
+    expect(hasForbiddenPathSegment('a.b.c')).toBe(false);
+    // Case-sensitive exact segment match only.
+    expect(hasForbiddenPathSegment('__PROTO__')).toBe(false);
+    expect(hasForbiddenPathSegment('myConstructorField')).toBe(false);
+  });
+
+  it('setValueAtPath throws instead of writing __proto__/prototype/constructor segments', () => {
+    const data: Record<string, unknown> = {};
+    expect(() => setValueAtPath(data, '__proto__.polluted', 'x')).toThrow();
+    expect(() => setValueAtPath(data, 'a.prototype.polluted', 'x')).toThrow();
+    expect(() => setValueAtPath(data, 'a.constructor.polluted', 'x')).toThrow();
+    expect((Object.prototype as Record<string, unknown>).polluted).toBeUndefined();
+  });
+
+  it('deleteValueAtPath throws instead of touching __proto__/prototype/constructor segments', () => {
+    const data: Record<string, unknown> = {};
+    expect(() => deleteValueAtPath(data, '__proto__.polluted')).toThrow();
+  });
+
+  it('addKey(model, "__proto__.x") does not pollute Object.prototype and does not succeed', () => {
+    const model = loadEnvValuesSession(envRoot);
+    const next = addKey(model, '__proto__.x');
+    expect(next).toBe(model);
+    expect(next.documents.DEVL.dirty).toBe(false);
+    expect(next.documents.TEST.dirty).toBe(false);
+    expect(findLeaf(next.tree, '__proto__.x')).toBeUndefined();
+    expect((Object.prototype as Record<string, unknown>).x).toBeUndefined();
+    expect(({} as Record<string, unknown>).x).toBeUndefined();
+  });
+
+  it('addKey refuses "prototype" and "constructor" segments too', () => {
+    const model = loadEnvValuesSession(envRoot);
+    expect(addKey(model, 'A.prototype')).toBe(model);
+    expect(addKey(model, 'A.constructor')).toBe(model);
+  });
+
+  it('setLeafValue, createMissing, and removeKey all refuse forbidden segments', () => {
+    const model = loadEnvValuesSession(envRoot);
+    expect(setLeafValue(model, '__proto__.x', 'DEVL', 'y')).toBe(model);
+    expect(createMissing(model, '__proto__.x', 'DEVL')).toBe(model);
+    expect(removeKey(model, '__proto__.x')).toBe(model);
+    expect((Object.prototype as Record<string, unknown>).x).toBeUndefined();
+  });
+});
+
+describe('resolveAddKeyPath', () => {
+  it('uses a dotted input as an absolute path regardless of selection', () => {
+    expect(resolveAddKeyPath('A.AA', 'B.NEW')).toBe('B.NEW');
+    expect(resolveAddKeyPath(undefined, 'B.NEW')).toBe('B.NEW');
+  });
+
+  it('joins a dot-free input onto the selected path as relative', () => {
+    expect(resolveAddKeyPath('A.AA', 'NEW')).toBe('A.AA.NEW');
+  });
+
+  it('uses the dot-free input as-is when nothing is selected', () => {
+    expect(resolveAddKeyPath(undefined, 'NEW')).toBe('NEW');
+  });
+
+  it('trims whitespace from the input', () => {
+    expect(resolveAddKeyPath('A.AA', '  NEW  ')).toBe('A.AA.NEW');
+    expect(resolveAddKeyPath(undefined, '  B.NEW  ')).toBe('B.NEW');
+  });
+});
+
+describe('renderEnvValuesEditorHtml empty state', () => {
+  it('shows an explanatory empty state when there are no stages', () => {
+    const emptyModel: EnvValuesModel = {
+      envRoot: '/example/ENV',
+      stages: [],
+      documents: {},
+      tree: [],
+      warnings: [],
+    };
+    const html = renderEnvValuesEditorHtml(emptyModel);
+    expect(html).toContain('No ENV stages found');
+    expect(html).toContain('values.yaml');
+    expect(html).toContain('/example/ENV');
+    expect(html).not.toContain('id="tree"');
+  });
+
+  it('renders the normal tree/detail layout when stages are present', () => {
+    const model = loadEnvValuesSession(envRoot);
+    const html = renderEnvValuesEditorHtml(model);
+    expect(html).toContain('id="tree"');
+    expect(html).toContain('id="detail"');
+    expect(html).not.toContain('No ENV stages found');
   });
 });
 

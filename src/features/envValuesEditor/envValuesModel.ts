@@ -70,6 +70,21 @@ export function getValueAtPath(data: Record<string, unknown>, path: string): unk
   return current;
 }
 
+const FORBIDDEN_PATH_SEGMENTS = new Set(['__proto__', 'prototype', 'constructor']);
+
+/** True when any dotted segment of `path` could be used for prototype pollution. */
+export function hasForbiddenPathSegment(path: string): boolean {
+  return path.split('.').some((segment) => FORBIDDEN_PATH_SEGMENTS.has(segment));
+}
+
+function assertSafePathSegments(path: string): void {
+  if (hasForbiddenPathSegment(path)) {
+    throw new Error(
+      `Invalid key path "${path}": segments "__proto__", "prototype", and "constructor" are not allowed.`,
+    );
+  }
+}
+
 export function pathExists(data: Record<string, unknown>, path: string): boolean {
   const parts = path.split('.');
   let current: unknown = data;
@@ -91,6 +106,7 @@ export function setValueAtPath(
   path: string,
   value: EnvScalar,
 ): void {
+  assertSafePathSegments(path);
   const parts = path.split('.');
   let current: Record<string, unknown> = data;
   for (let index = 0; index < parts.length; index++) {
@@ -111,6 +127,7 @@ export function setValueAtPath(
 }
 
 export function deleteValueAtPath(data: Record<string, unknown>, path: string): void {
+  assertSafePathSegments(path);
   const parts = path.split('.');
   let current: Record<string, unknown> = data;
   for (let index = 0; index < parts.length; index++) {

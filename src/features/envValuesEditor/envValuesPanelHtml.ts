@@ -1,4 +1,9 @@
+import * as crypto from 'crypto';
 import type { EnvScalar, EnvTreeNode, EnvValuesModel } from './types';
+
+function createNonce(): string {
+  return crypto.randomBytes(16).toString('hex');
+}
 
 function escapeHtml(value: string): string {
   return value
@@ -130,6 +135,24 @@ function getStyles(): string {
       padding: 2px 8px;
       cursor: pointer;
       font-size: 11px;
+    }
+    .empty-state {
+      max-width: 520px;
+      margin: 32px auto;
+      padding: 0 16px;
+    }
+    .empty-state h2 { font-size: 15px; margin-bottom: 8px; }
+    .empty-state p { line-height: 1.5; }
+    .empty-state pre {
+      background: var(--vscode-textCodeBlock-background, rgba(127, 127, 127, 0.1));
+      border-radius: 4px;
+      padding: 8px 12px;
+      overflow: auto;
+    }
+    .empty-state code {
+      background: var(--vscode-textCodeBlock-background, rgba(127, 127, 127, 0.1));
+      border-radius: 3px;
+      padding: 1px 4px;
     }
   </style>`;
 }
@@ -277,6 +300,20 @@ function renderDetail(model: EnvValuesModel, selectedPath?: string): string {
   return `<h2>${escapeHtml(selectedPath)}</h2><div class="stage-rows">${rows.join('')}</div>`;
 }
 
+function renderEmptyState(envRoot: string): string {
+  return `<div class="empty-state">
+    <h2>No ENV stages found</h2>
+    <p>This editor expects an ENV folder laid out with one subfolder per stage,
+    each containing a <code>values.yaml</code> file:</p>
+    <pre>ENV/
+  &lt;stage&gt;/
+    values.yaml</pre>
+    <p>No stage folders with a <code>values.yaml</code> file were found under
+    <code>${escapeHtml(envRoot)}</code>. Use "Open ENV folder…" above to point this
+    editor at a different ENV directory.</p>
+  </div>`;
+}
+
 function renderBanner(model: EnvValuesModel): string {
   const parseErrors = Object.values(model.documents)
     .filter((document) => document.parseError)
@@ -297,9 +334,14 @@ function renderBanner(model: EnvValuesModel): string {
 }
 
 export function renderEnvValuesEditorHtml(model: EnvValuesModel, selectedPath?: string): string {
-  const nonce = String(Date.now());
+  const nonce = createNonce();
   const dirtyCount = Object.values(model.documents).filter((document) => document.dirty).length;
   const modelJson = JSON.stringify(model).replace(/</g, '\\u003c');
+  const bodyHtml =
+    model.stages.length === 0
+      ? renderEmptyState(model.envRoot)
+      : `<div id="tree">${renderTree(model.tree, selectedPath)}</div>
+    <div id="detail">${renderDetail(model, selectedPath)}</div>`;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -313,8 +355,7 @@ export function renderEnvValuesEditorHtml(model: EnvValuesModel, selectedPath?: 
   ${getToolbarHtml(dirtyCount)}
   ${renderBanner(model)}
   <div id="body">
-    <div id="tree">${renderTree(model.tree, selectedPath)}</div>
-    <div id="detail">${renderDetail(model, selectedPath)}</div>
+    ${bodyHtml}
   </div>
   <script type="application/json" id="model">${modelJson}</script>
   <script nonce="${nonce}">

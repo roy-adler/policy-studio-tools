@@ -1,16 +1,23 @@
+import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { getSharedProjectRegistryStore } from '../projectRegistry/projectRegistryService';
 import { getSharedToolsHubService } from '../toolsSidebar/toolsHubService';
 import { resolveSiblingEnvRoot } from './discoverEnvStages';
+import { hasForbiddenPathSegment } from './envValuesModel';
 import { addKey, createMissing, removeKey, setLeafValue } from './envValuesMutations';
 import { getEnvValuesPanelShellHtml, renderEnvValuesEditorHtml } from './envValuesPanelHtml';
 import { writeDirtyEnvDocuments } from './envValuesWriter';
 import { loadEnvValuesSession } from './loadEnvValuesSession';
 import { pickProjectRootForEnvEditor } from './pickProjectRootForEnvEditor';
+import { resolveAddKeyPath } from './resolveAddKeyPath';
 import { ENV_VALUES_EDITOR_TOOL } from './toolDescriptor';
 import type { EnvValuesModel } from './types';
+
+function createNonce(): string {
+  return crypto.randomBytes(16).toString('hex');
+}
 
 const PICK_ENV_FOLDER_ACTION = 'Pick ENV folder…';
 const DISCARD_ACTION = 'Discard';
@@ -124,7 +131,7 @@ export class EnvValuesEditorService {
       return;
     }
 
-    const nonce = String(Date.now());
+    const nonce = createNonce();
     this.panel = vscode.window.createWebviewPanel(
       'policyStudio.envValuesEditor',
       'ENV values editor',
@@ -195,8 +202,10 @@ export class EnvValuesEditorService {
     }
 
     const input = await vscode.window.showInputBox({
-      prompt: 'Dotted key path to add (e.g. A.NEW_KEY)',
-      placeHolder: 'A.NEW_KEY',
+      prompt: this.selectedPath
+        ? `New key, relative to "${this.selectedPath}" (or a dotted path for an absolute key)`
+        : 'Dotted key path to add (e.g. A.NEW_KEY)',
+      placeHolder: this.selectedPath ? 'NEW_KEY or A.NEW_KEY' : 'A.NEW_KEY',
       validateInput: (value) => (value.trim().length > 0 ? undefined : 'Path is required'),
     });
 
@@ -204,7 +213,14 @@ export class EnvValuesEditorService {
       return;
     }
 
-    const targetPath = input.trim();
+    const targetPath = resolveAddKeyPath(this.selectedPath, input);
+    if (hasForbiddenPathSegment(targetPath)) {
+      void vscode.window.showErrorMessage(
+        `Invalid key path "${targetPath}": "__proto__", "prototype", and "constructor" are not allowed.`,
+      );
+      return;
+    }
+
     this.model = addKey(this.model, targetPath);
     this.selectedPath = targetPath;
     this.render();

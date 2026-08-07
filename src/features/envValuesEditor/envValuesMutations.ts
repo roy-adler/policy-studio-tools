@@ -1,6 +1,7 @@
 import {
   buildEnvValuesModel,
   deleteValueAtPath,
+  hasForbiddenPathSegment,
   pathExists,
   setValueAtPath,
 } from './envValuesModel';
@@ -39,6 +40,10 @@ export function setLeafValue(
   stageId: string,
   value: EnvScalar,
 ): EnvValuesModel {
+  if (hasForbiddenPathSegment(path)) {
+    return model;
+  }
+
   const document = model.documents[stageId];
   if (!document || document.parseError) {
     return model;
@@ -60,6 +65,10 @@ export function createMissing(
   path: string,
   stageId: string,
 ): EnvValuesModel {
+  if (hasForbiddenPathSegment(path)) {
+    return model;
+  }
+
   const document = model.documents[stageId];
   if (!document || document.parseError) {
     return model;
@@ -77,6 +86,10 @@ export function createMissing(
 }
 
 export function addKey(model: EnvValuesModel, path: string): EnvValuesModel {
+  if (hasForbiddenPathSegment(path)) {
+    return model;
+  }
+
   for (const stage of model.stages) {
     const cell = getCellState(model, path, stage.id);
     if (cell?.kind === 'conflict') {
@@ -104,6 +117,10 @@ export function addKey(model: EnvValuesModel, path: string): EnvValuesModel {
 }
 
 export function removeKey(model: EnvValuesModel, path: string): EnvValuesModel {
+  if (hasForbiddenPathSegment(path)) {
+    return model;
+  }
+
   const documents = cloneDocuments(model.documents);
   let changed = false;
 
