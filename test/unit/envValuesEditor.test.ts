@@ -62,6 +62,49 @@ describe('env values model', () => {
     expect(parsed.data).toEqual({ A: { AA: '' } });
   });
 
+  it('parses literal block scalars (|)', () => {
+    const parsed = parseEnvValuesYaml('A:\n  script: |\n    line1\n    line2\n  AA: ok\n');
+    expect(parsed.error).toBeUndefined();
+    expect(parsed.data).toEqual({
+      A: {
+        script: 'line1\nline2\n',
+        AA: 'ok',
+      },
+    });
+  });
+
+  it('parses folded block scalars (>) and chomping (-)', () => {
+    const folded = parseEnvValuesYaml('msg: >\n  hello\n  world\n');
+    expect(folded.error).toBeUndefined();
+    expect(folded.data).toEqual({ msg: 'hello world\n' });
+
+    const stripped = parseEnvValuesYaml('msg: |-\n  hello\n  world\n');
+    expect(stripped.error).toBeUndefined();
+    expect(stripped.data).toEqual({ msg: 'hello\nworld' });
+  });
+
+  it('preserves blank lines inside literal block scalars', () => {
+    const parsed = parseEnvValuesYaml('body: |\n  a\n\n  b\n');
+    expect(parsed.error).toBeUndefined();
+    expect(parsed.data).toEqual({ body: 'a\n\nb\n' });
+  });
+
+  it('loads stage files that use block scalars without parse errors', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'env-block-'));
+    const blockEnv = path.join(tmp, 'ENV');
+    fs.mkdirSync(path.join(blockEnv, 'DEVL'), { recursive: true });
+    fs.writeFileSync(
+      path.join(blockEnv, 'DEVL', 'values.yaml'),
+      'A:\n  script: |\n    return true;\n  AA: Inhalt\n',
+    );
+    const model = loadEnvValuesSession(blockEnv);
+    expect(model.documents.DEVL.parseError).toBeUndefined();
+    expect(findLeaf(model.tree, 'A.script')?.cells?.DEVL).toEqual({
+      kind: 'value',
+      value: 'return true;\n',
+    });
+  });
+
   it('rejects null or empty YAML root but accepts empty mapping', () => {
     expect(parseEnvValuesYaml('').error).toBeTruthy();
     expect(parseEnvValuesYaml('null').error).toBeTruthy();
