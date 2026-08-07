@@ -6,7 +6,13 @@ import type { EnvStageDocument, EnvValuesModel } from './types';
 export function loadEnvValuesSession(envRoot: string): EnvValuesModel {
   const discovery = discoverEnvStages(envRoot);
   const documents: EnvStageDocument[] = discovery.stages.map((stage) => {
-    const text = fs.readFileSync(stage.valuesFilePath, 'utf8');
+    let text: string;
+    try {
+      text = fs.readFileSync(stage.valuesFilePath, 'utf8');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to read "${stage.valuesFilePath}": ${message}`);
+    }
     const parsed = parseEnvValuesYaml(text);
     return {
       stageId: stage.id,

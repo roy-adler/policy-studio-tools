@@ -95,6 +95,15 @@ export function addKey(model: EnvValuesModel, path: string): EnvValuesModel {
     return model;
   }
 
+  for (const document of Object.values(model.documents)) {
+    if (document.parseError) {
+      continue;
+    }
+    if (pathExists(document.data, path)) {
+      return model;
+    }
+  }
+
   for (const stage of model.stages) {
     const cell = getCellState(model, path, stage.id);
     if (cell?.kind === 'conflict') {

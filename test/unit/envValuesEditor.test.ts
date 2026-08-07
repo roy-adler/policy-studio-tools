@@ -208,6 +208,19 @@ describe('env values mutations', () => {
     expect(next.documents.TEST.dirty).toBe(false);
   });
 
+  it('addKey refuses to overwrite a key that already exists in any stage', () => {
+    const model = loadEnvValuesSession(envRoot);
+    const next = addKey(model, 'A.AA');
+    expect(next).toBe(model);
+    expect(findLeaf(next.tree, 'A.AA')?.cells?.DEVL).toEqual({ kind: 'value', value: 'Inhalt' });
+    expect(findLeaf(next.tree, 'A.AA')?.cells?.TEST).toEqual({
+      kind: 'value',
+      value: 'Inhalt-test',
+    });
+    expect(next.documents.DEVL.dirty).toBe(false);
+    expect(next.documents.TEST.dirty).toBe(false);
+  });
+
   it('addKey refuses when any stage has conflict at path', () => {
     const model = loadEnvValuesSession(createMapVsScalarConflictEnv());
     const next = addKey(model, 'A.AA');

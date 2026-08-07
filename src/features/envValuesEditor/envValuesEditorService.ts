@@ -82,7 +82,30 @@ export class EnvValuesEditorService {
       return;
     }
 
+    if (!(await this.confirmDiscardIfDirty())) {
+      return;
+    }
+
     this.loadAndShow(envRoot);
+  }
+
+  private hasDirtyDocuments(): boolean {
+    return (
+      !!this.model && Object.values(this.model.documents).some((document) => document.dirty)
+    );
+  }
+
+  private async confirmDiscardIfDirty(): Promise<boolean> {
+    if (!this.hasDirtyDocuments()) {
+      return true;
+    }
+
+    const confirm = await vscode.window.showWarningMessage(
+      'Discard unsaved changes and reload from disk?',
+      { modal: true },
+      DISCARD_ACTION,
+    );
+    return confirm === DISCARD_ACTION;
   }
 
   private async resolveEnvRoot(sibling: string): Promise<string | undefined> {
@@ -115,9 +138,14 @@ export class EnvValuesEditorService {
   }
 
   private loadAndShow(envRoot: string): void {
-    this.model = loadEnvValuesSession(envRoot);
-    this.selectedPath = undefined;
-    this.showPanel();
+    try {
+      this.model = loadEnvValuesSession(envRoot);
+      this.selectedPath = undefined;
+      this.showPanel();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      void vscode.window.showErrorMessage(`Failed to load ENV values: ${message}`);
+    }
   }
 
   private showPanel(): void {
@@ -221,7 +249,16 @@ export class EnvValuesEditorService {
       return;
     }
 
-    this.model = addKey(this.model, targetPath);
+    const previousModel = this.model;
+    const nextModel = addKey(this.model, targetPath);
+    if (nextModel === previousModel) {
+      void vscode.window.showWarningMessage(
+        `Could not add "${targetPath}": the key already exists or the path conflicts with an existing value.`,
+      );
+      return;
+    }
+
+    this.model = nextModel;
     this.selectedPath = targetPath;
     this.render();
   }
@@ -253,16 +290,21 @@ export class EnvValuesEditorService {
       return;
     }
 
-    const result = writeDirtyEnvDocuments(this.model);
-    this.model = result.model;
-    this.render();
+    try {
+      const result = writeDirtyEnvDocuments(this.model);
+      this.model = result.model;
+      this.render();
 
-    if (result.written.length > 0) {
-      void vscode.window.showInformationMessage(
-        `Saved ${result.written.length} ENV values file(s).`,
-      );
-    } else {
-      void vscode.window.showInformationMessage('No changes to save.');
+      if (result.written.length > 0) {
+        void vscode.window.showInformationMessage(
+          `Saved ${result.written.length} ENV values file(s).`,
+        );
+      } else {
+        void vscode.window.showInformationMessage('No changes to save.');
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      void vscode.window.showErrorMessage(`Failed to save ENV values: ${message}`);
     }
   }
 
@@ -272,17 +314,9 @@ export class EnvValuesEditorService {
     }
 
     const envRoot = this.model.envRoot;
-    const hasDirtyStages = Object.values(this.model.documents).some((document) => document.dirty);
 
-    if (hasDirtyStages) {
-      const confirm = await vscode.window.showWarningMessage(
-        'Discard unsaved changes and reload from disk?',
-        { modal: true },
-        DISCARD_ACTION,
-      );
-      if (confirm !== DISCARD_ACTION) {
-        return;
-      }
+    if (!(await this.confirmDiscardIfDirty())) {
+      return;
     }
 
     this.loadAndShow(envRoot);
@@ -293,6 +327,11 @@ export class EnvValuesEditorService {
     if (!folder) {
       return;
     }
+
+    if (!(await this.confirmDiscardIfDirty())) {
+      return;
+    }
+
     this.loadAndShow(folder);
   }
 }
