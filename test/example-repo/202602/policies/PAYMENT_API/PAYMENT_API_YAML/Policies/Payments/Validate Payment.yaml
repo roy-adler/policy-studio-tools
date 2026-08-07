@@ -1,0 +1,18 @@
+type: FilterCircuit
+fields:
+  name: Validate Payment
+  description: Validate payment request
+  start: ./Check Amount
+children:
+- type: Check
+  fields:
+    name: Check Amount
+  routing:
+    success: ../Authorize
+    failure: ../Reject
+- type: Reflector
+  fields:
+    name: Authorize
+- type: AlertFilter
+  fields:
+    name: Reject

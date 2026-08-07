@@ -1,0 +1,24 @@
+type: FilterCircuit
+fields:
+  name: MediateJwt
+  description: Mediate JWT claims into headers
+  start: ./Read Claims
+children:
+- type: Extractor
+  fields:
+    name: Read Claims
+  routing:
+    success: ../Set Headers
+    failure: ../Mediation Failed
+- type: ChangeMessageFilter
+  fields:
+    name: Set Headers
+  routing:
+    success: ../Done
+    failure: ../Mediation Failed
+- type: Reflector
+  fields:
+    name: Done
+- type: AlertFilter
+  fields:
+    name: Mediation Failed

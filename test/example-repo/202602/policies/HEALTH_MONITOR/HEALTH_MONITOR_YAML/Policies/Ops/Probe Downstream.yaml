@@ -1,0 +1,18 @@
+type: FilterCircuit
+fields:
+  name: Probe Downstream
+  description: Probe dependent service
+  start: ./Call Downstream
+children:
+- type: ConnectToURL
+  fields:
+    name: Call Downstream
+  routing:
+    success: ../Downstream OK
+    failure: ../Downstream Down
+- type: Reflector
+  fields:
+    name: Downstream OK
+- type: AlertFilter
+  fields:
+    name: Downstream Down

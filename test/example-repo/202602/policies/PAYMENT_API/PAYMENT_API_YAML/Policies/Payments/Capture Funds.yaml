@@ -1,0 +1,18 @@
+type: FilterCircuit
+fields:
+  name: Capture Funds
+  description: Capture authorized funds
+  start: ./Capture
+children:
+- type: ChangeMessageFilter
+  fields:
+    name: Capture
+  routing:
+    success: ../Captured
+    failure: ../Capture Failed
+- type: Reflector
+  fields:
+    name: Captured
+- type: AlertFilter
+  fields:
+    name: Capture Failed

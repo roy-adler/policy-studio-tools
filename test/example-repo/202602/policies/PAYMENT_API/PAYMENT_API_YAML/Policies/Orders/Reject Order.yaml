@@ -1,0 +1,18 @@
+type: FilterCircuit
+fields:
+  name: Reject Order
+  description: Reject invalid order
+  start: ./Build Rejection
+children:
+- type: ChangeMessageFilter
+  fields:
+    name: Build Rejection
+  routing:
+    success: ../Send Rejection
+    failure: ../Alert Ops
+- type: Reflector
+  fields:
+    name: Send Rejection
+- type: AlertFilter
+  fields:
+    name: Alert Ops

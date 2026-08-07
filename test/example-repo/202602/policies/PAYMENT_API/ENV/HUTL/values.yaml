@@ -1,0 +1,19 @@
+---
+Service:
+  PAYMENT_API_Service:
+    Payment_Monitor:
+      serviceCert: /Environment/Development/serviceCert.pem
+    Payment_API:
+      serviceCert: /Environment/Development/serviceCert.pem
+Cassandra_Settings:
+  password: HKJNENfmkeJRK=
+  sslCertificate: /Environment/Development/sslCertificate.pem
+  sslTrustedCerts:
+  - /Environment/Development/sslClientIssuingCA.pem
+  - /Environment/Development/sslDeviceIssuingCA.pem
+  - /Environment/Development/sslRootCA.pem
+Default_Alert_Configuration:
+  Cert_expires:
+    password: jhkfheJSEKJrkejkrle=
+    from: whoever@example.com
+    username: payment-api-hutl-user

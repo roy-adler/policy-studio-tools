@@ -1,0 +1,18 @@
+type: FilterCircuit
+fields:
+  name: Raise Alert
+  description: Raise operational alert
+  start: ./Emit Alert
+children:
+- type: AlertFilter
+  fields:
+    name: Emit Alert
+  routing:
+    success: ../Ack
+    failure: ../Alert Failed
+- type: Reflector
+  fields:
+    name: Ack
+- type: AlertFilter
+  fields:
+    name: Alert Failed

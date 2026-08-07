@@ -1,0 +1,18 @@
+type: FilterCircuit
+fields:
+  name: Check Token
+  description: OAuth token introspection
+  start: ./Check Token
+children:
+- type: OAuth
+  fields:
+    name: Check Token
+  routing:
+    success: ../Allow
+    failure: ../Deny
+- type: Reflector
+  fields:
+    name: Allow
+- type: AlertFilter
+  fields:
+    name: Deny

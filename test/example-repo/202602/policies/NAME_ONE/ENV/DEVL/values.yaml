@@ -1,0 +1,19 @@
+---
+Service:
+  EZIO_DPS_ATH_Service:
+    EZIO_DSP_ATH_Monitor:
+      serviceCert: /Environment/Development/serviceCert.pem
+    EZIO_DSP_AUTH:
+      serviceCert: /Environment/Development/serviceCert.pem
+Cassandra_Settings:
+  password: HKJNENfmkeJRK=
+  sslCertificate: /Environment/Development/sslCertificate.pem
+  sslTrustedCerts:
+  - /Environment/Development/sslClientIssuingCA.pem
+  - /Environment/Development/sslDeviceIssuingCA.pem
+  - /Environment/Development/sslRootCA.pem
+Default_Alert_Configuration:
+  Cert_expires:
+    password: jhkfheJSEKJrkejkrle=
+    from: whoever@example.com
+    username: example-devl-user

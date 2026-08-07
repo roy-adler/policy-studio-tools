@@ -1,0 +1,19 @@
+type: FilterCircuit
+fields:
+  name: Health Check
+  description: Local health endpoint
+  start: ./Ping
+children:
+- type: PathParameterFilter
+  fields:
+    name: Ping
+    uriTemplate: /health
+  routing:
+    success: ../Healthy
+    failure: ../Unhealthy
+- type: Reflector
+  fields:
+    name: Healthy
+- type: AlertFilter
+  fields:
+    name: Unhealthy

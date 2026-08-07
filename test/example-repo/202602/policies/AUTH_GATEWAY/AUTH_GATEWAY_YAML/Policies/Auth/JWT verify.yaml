@@ -1,0 +1,24 @@
+type: FilterCircuit
+fields:
+  name: JWT verify
+  description: Verify inbound JWT
+  start: ./Extract Token
+children:
+- type: Extractor
+  fields:
+    name: Extract Token
+  routing:
+    success: ../Verify Signature
+    failure: ../Reject Token
+- type: OAuth
+  fields:
+    name: Verify Signature
+  routing:
+    success: ../Accept Token
+    failure: ../Reject Token
+- type: Reflector
+  fields:
+    name: Accept Token
+- type: AlertFilter
+  fields:
+    name: Reject Token

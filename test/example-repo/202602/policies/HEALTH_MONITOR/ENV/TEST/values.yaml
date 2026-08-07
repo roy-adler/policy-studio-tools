@@ -1,0 +1,19 @@
+---
+Service:
+  HEALTH_MONITOR_Service:
+    Health_Monitor:
+      serviceCert: /Environment/Development/serviceCert.pem
+    Health_API:
+      serviceCert: /Environment/Development/serviceCert.pem
+Cassandra_Settings:
+  password: HKJNENfmkeJRK=
+  sslCertificate: /Environment/Development/sslCertificate.pem
+  sslTrustedCerts:
+  - /Environment/Development/sslClientIssuingCA.pem
+  - /Environment/Development/sslDeviceIssuingCA.pem
+  - /Environment/Development/sslRootCA.pem
+Default_Alert_Configuration:
+  Cert_expires:
+    password: jhkfheJSEKJrkejkrle=
+    from: whoever@example.com
+    username: health-monitor-test-user
