@@ -154,6 +154,24 @@ function getStyles(): string {
       border-radius: 3px;
       padding: 1px 4px;
     }
+    textarea.list-input {
+      width: 100%;
+      min-height: 88px;
+      resize: vertical;
+      font-family: var(--vscode-editor-font-family, var(--vscode-font-family));
+      font-size: 12px;
+      background: var(--vscode-input-background);
+      color: var(--vscode-input-foreground);
+      border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+      border-radius: 3px;
+      padding: 6px 8px;
+      line-height: 1.4;
+    }
+    .list-hint {
+      font-size: 11px;
+      opacity: 0.75;
+      margin-top: 4px;
+    }
   </style>`;
 }
 
@@ -293,6 +311,17 @@ function renderDetail(model: EnvValuesModel, selectedPath?: string): string {
       </div>`;
     }
 
+    if (cell.kind === 'list') {
+      const text = cell.values.map((entry) => formatScalar(entry)).join('\n');
+      return `<div class="stage-row">
+        <div class="stage-label">${escapeHtml(stage.id)}</div>
+        <div class="stage-value">
+          <textarea class="list-input" data-path="${escapeHtml(selectedPath)}" data-stage="${escapeHtml(stage.id)}" rows="${Math.max(3, cell.values.length + 1)}">${escapeHtml(text)}</textarea>
+          <div class="list-hint">One list item per line</div>
+        </div>
+      </div>`;
+    }
+
     return `<div class="stage-row">
       <div class="stage-label">${escapeHtml(stage.id)}</div>
       <div class="stage-value">
@@ -382,6 +411,21 @@ export function renderEnvValuesEditorHtml(
           path: el.dataset.path,
           stageId: el.dataset.stage,
           value: el.value,
+        });
+      });
+    });
+
+    document.querySelectorAll('.list-input').forEach((el) => {
+      el.addEventListener('change', () => {
+        const values = el.value
+          .split(/\\r?\\n/)
+          .map((line) => line.trimEnd())
+          .filter((line) => line.length > 0);
+        vscode.postMessage({
+          type: 'setList',
+          path: el.dataset.path,
+          stageId: el.dataset.stage,
+          values,
         });
       });
     });

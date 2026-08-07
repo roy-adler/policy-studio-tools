@@ -13,6 +13,7 @@ export interface EnvStageDiscovery {
 
 export type EnvCellState =
   | { kind: 'value'; value: EnvScalar }
+  | { kind: 'list'; values: EnvScalar[] }
   | { kind: 'missing' }
   | { kind: 'conflict'; detail: string };
 

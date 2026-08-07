@@ -18,6 +18,7 @@ import {
   createMissing,
   removeKey,
   setLeafValue,
+  setListValue,
 } from '../../src/features/envValuesEditor/envValuesMutations';
 import { writeDirtyEnvDocuments } from '../../src/features/envValuesEditor/envValuesWriter';
 import { renderEnvValuesEditorHtml } from '../../src/features/envValuesEditor/envValuesPanelHtml';
@@ -161,11 +162,10 @@ describe('env values model', () => {
       kind: 'value',
       value: 'LONG_PASSWORD',
     });
-    expect(
-      model.warnings.some(
-        (w) => w.includes('Cassandra_Settings.sslTrustedCerts') && w.toLowerCase().includes('array'),
-      ),
-    ).toBe(true);
+    expect(findLeaf(model.tree, 'Cassandra_Settings.sslTrustedCerts')?.cells?.DEVL).toEqual({
+      kind: 'list',
+      values: ['/path/one', '/path/two'],
+    });
   });
 
   it('treats empty string as present value, not missing', () => {
@@ -226,20 +226,84 @@ describe('env values model', () => {
     expect(empty.data).toEqual({});
   });
 
-  it('warns when a stage contains a non-editable array path', () => {
+  it('treats scalar lists as editable leaves', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'env-scalar-list-'));
+    const listEnv = path.join(tmp, 'ENV');
+    fs.mkdirSync(path.join(listEnv, 'DEVL'), { recursive: true });
+    fs.mkdirSync(path.join(listEnv, 'TEST'), { recursive: true });
+    fs.writeFileSync(
+      path.join(listEnv, 'DEVL', 'values.yaml'),
+      [
+        'Cassandra_Settings:',
+        '  sslTrustedCerts:',
+        '  - /Environment/Development/sslClientIssuingCA.pem',
+        '  - /Environment/Development/sslRootCA.pem',
+        '  password: secret',
+        '',
+      ].join('\n'),
+    );
+    fs.writeFileSync(
+      path.join(listEnv, 'TEST', 'values.yaml'),
+      [
+        'Cassandra_Settings:',
+        '  sslTrustedCerts:',
+        '  - /Environment/Test/sslRootCA.pem',
+        '  password: secret-test',
+        '',
+      ].join('\n'),
+    );
+
+    const model = loadEnvValuesSession(listEnv);
+    const certs = findLeaf(model.tree, 'Cassandra_Settings.sslTrustedCerts');
+    expect(certs?.cells?.DEVL).toEqual({
+      kind: 'list',
+      values: [
+        '/Environment/Development/sslClientIssuingCA.pem',
+        '/Environment/Development/sslRootCA.pem',
+      ],
+    });
+    expect(certs?.cells?.TEST).toEqual({
+      kind: 'list',
+      values: ['/Environment/Test/sslRootCA.pem'],
+    });
+  });
+
+  it('loads sslTrustedCerts lists from the example-repo fixture', () => {
+    const exampleEnv = path.join(
+      __dirname,
+      '..',
+      'example-repo',
+      '202602',
+      'policies',
+      'NAME_ONE',
+      'ENV',
+    );
+    const model = loadEnvValuesSession(exampleEnv);
+    expect(model.documents.DEVL?.parseError).toBeUndefined();
+    const certs = findLeaf(model.tree, 'Cassandra_Settings.sslTrustedCerts');
+    expect(certs?.cells?.DEVL?.kind).toBe('list');
+    if (certs?.cells?.DEVL?.kind === 'list') {
+      expect(certs.cells.DEVL.values).toContain(
+        '/Environment/Development/sslClientIssuingCA.pem',
+      );
+    }
+  });
+
+  it('warns when a stage contains a non-scalar array path', () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'env-array-'));
     const arrayEnv = path.join(tmp, 'ENV');
     fs.mkdirSync(path.join(arrayEnv, 'DEVL'), { recursive: true });
     fs.mkdirSync(path.join(arrayEnv, 'TEST'), { recursive: true });
     fs.writeFileSync(
       path.join(arrayEnv, 'DEVL', 'values.yaml'),
-      'items:\n  - one\n  - two\nA:\n  AA: ok\n',
+      'items:\n  - name: one\n    value: 1\nA:\n  AA: ok\n',
     );
     fs.writeFileSync(path.join(arrayEnv, 'TEST', 'values.yaml'), 'A:\n  AA: ok\n');
     const model = loadEnvValuesSession(arrayEnv);
-    expect(model.warnings.some((w) => w.includes('items') && w.toLowerCase().includes('array'))).toBe(
-      true,
-    );
+    expect(
+      model.warnings.some((w) => w.includes('items') && w.toLowerCase().includes('non-scalar')),
+    ).toBe(true);
+    expect(findLeaf(model.tree, 'items')).toBeUndefined();
   });
 
   it('marks BAB missing in TEST but present in DEVL', () => {
@@ -298,6 +362,29 @@ describe('env values mutations', () => {
     const next = createMissing(model, 'B.BA.BAB', 'TEST');
     expect(findLeaf(next.tree, 'B.BA.BAB')?.cells?.TEST).toEqual({ kind: 'value', value: '' });
     expect(next.documents.TEST.dirty).toBe(true);
+  });
+
+  it('setListValue updates a scalar list and createMissing inserts [] for list paths', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'env-list-mut-'));
+    const listEnv = path.join(tmp, 'ENV');
+    fs.mkdirSync(path.join(listEnv, 'DEVL'), { recursive: true });
+    fs.mkdirSync(path.join(listEnv, 'TEST'), { recursive: true });
+    fs.writeFileSync(
+      path.join(listEnv, 'DEVL', 'values.yaml'),
+      'certs:\n- a.pem\n- b.pem\n',
+    );
+    fs.writeFileSync(path.join(listEnv, 'TEST', 'values.yaml'), 'other: x\n');
+
+    const model = loadEnvValuesSession(listEnv);
+    const edited = setListValue(model, 'certs', 'DEVL', ['only.pem']);
+    expect(findLeaf(edited.tree, 'certs')?.cells?.DEVL).toEqual({
+      kind: 'list',
+      values: ['only.pem'],
+    });
+    expect(edited.documents.DEVL.dirty).toBe(true);
+
+    const created = createMissing(edited, 'certs', 'TEST');
+    expect(findLeaf(created.tree, 'certs')?.cells?.TEST).toEqual({ kind: 'list', values: [] });
   });
 
   it('addKey creates path in all stages', () => {

@@ -5,7 +5,13 @@ import * as vscode from 'vscode';
 import { getSharedProjectRegistryStore } from '../projectRegistry/projectRegistryService';
 import { getSharedToolsHubService } from '../toolsSidebar/toolsHubService';
 import { hasForbiddenPathSegment } from './envValuesModel';
-import { addKey, createMissing, removeKey, setLeafValue } from './envValuesMutations';
+import {
+  addKey,
+  createMissing,
+  removeKey,
+  setLeafValue,
+  setListValue,
+} from './envValuesMutations';
 import { getEnvValuesPanelShellHtml, renderEnvValuesEditorHtml } from './envValuesPanelHtml';
 import { writeDirtyEnvDocuments } from './envValuesWriter';
 import { listEnvRootsForProjects, type EnvRootCandidate } from './listEnvRoots';
@@ -26,6 +32,7 @@ type IncomingMessage =
   | { type: 'ready' }
   | { type: 'select'; path: string }
   | { type: 'setValue'; path: string; stageId: string; value: string }
+  | { type: 'setList'; path: string; stageId: string; values: string[] }
   | { type: 'createMissing'; path: string; stageId: string }
   | { type: 'save' }
   | { type: 'reload' }
@@ -247,6 +254,13 @@ export class EnvValuesEditorService {
           return;
         }
         this.model = setLeafValue(this.model, message.path, message.stageId, message.value);
+        this.render();
+        break;
+      case 'setList':
+        if (!this.model) {
+          return;
+        }
+        this.model = setListValue(this.model, message.path, message.stageId, message.values);
         this.render();
         break;
       case 'createMissing':

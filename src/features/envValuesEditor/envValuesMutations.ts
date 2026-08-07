@@ -63,6 +63,35 @@ export function setLeafValue(
   return rebuildModel(model.envRoot, documents);
 }
 
+/** Set a scalar-list leaf (one stage). Accepts missing or existing list cells. */
+export function setListValue(
+  model: EnvValuesModel,
+  path: string,
+  stageId: string,
+  values: EnvScalar[],
+): EnvValuesModel {
+  if (hasForbiddenPathSegment(path)) {
+    return model;
+  }
+
+  const document = model.documents[stageId];
+  if (!document || document.parseError) {
+    return model;
+  }
+
+  const cell = getCellState(model, path, stageId);
+  if (!cell || (cell.kind !== 'list' && cell.kind !== 'missing')) {
+    return model;
+  }
+
+  const documents = cloneDocuments(model.documents);
+  if (!setValueAtPath(documents[stageId].data, path, values)) {
+    return model;
+  }
+  documents[stageId].dirty = true;
+  return rebuildModel(model.envRoot, documents);
+}
+
 export function createMissing(
   model: EnvValuesModel,
   path: string,
@@ -82,8 +111,16 @@ export function createMissing(
     return model;
   }
 
+  const otherHasList = Object.keys(model.documents).some((otherId) => {
+    if (otherId === stageId) {
+      return false;
+    }
+    return getCellState(model, path, otherId)?.kind === 'list';
+  });
+  const initial: EnvScalar | EnvScalar[] = otherHasList ? [] : '';
+
   const documents = cloneDocuments(model.documents);
-  if (!setValueAtPath(documents[stageId].data, path, '')) {
+  if (!setValueAtPath(documents[stageId].data, path, initial)) {
     return model;
   }
   documents[stageId].dirty = true;

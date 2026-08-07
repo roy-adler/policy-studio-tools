@@ -24,7 +24,7 @@ As a Policy Studio developer, I want to see and edit all environment `values.yam
 - **Optional override:** Folder picker when sibling `ENV/` is missing or the user chooses “Open ENV folder…”.
 - **Monorepo ENV switcher:** When multiple projects in scope have a sibling `ENV/`, the user picks which ENV set to edit via a searchable Quick Pick (filter by policy/project name or path). The webview toolbar exposes **Switch ENV…** (same picker) and **Open ENV folder…**.
 - **Stage files:** Every immediate child directory of `ENV/` that contains a `values.yaml`.
-- **YAML shape (v1):** Nested maps with scalar leaf values (string/number/boolean/null). Lists are out of scope as first-class editable values.
+- **YAML shape (v1):** Nested maps with scalar leaf values (string/number/boolean/null), plus **lists of scalars** (e.g. `sslTrustedCerts: [ path1, path2 ]`). Lists of maps/objects remain non-editable (warned and skipped).
 - VS Code command: `policyStudioTools.openEnvValuesEditor`.
 - Tools sidebar registration via `ToolsHubService.registerTool` (`009-tools-sidebar.md`).
 
@@ -54,17 +54,21 @@ As a Policy Studio developer, I want to see and edit all environment `values.yam
 ### Model
 
 1. Parse each stage’s `values.yaml` as a nested map.
-2. Build a **merged key tree**: union of all dotted paths to scalar leaves (e.g. `B.BA.BAA`).
+2. Build a **merged key tree**: union of all dotted paths to scalar leaves and scalar-list leaves (e.g. `B.BA.BAA`, `Cassandra_Settings.sslTrustedCerts`).
 3. For each path × stage cell:
-   - **present** with a value (including empty string / null — empty is allowed and not a warning)
+   - **present** with a scalar value (including empty string / null — empty is allowed and not a warning)
+   - **present** with a scalar list (including empty list `[]`)
    - **missing** — path does not exist in that stage’s document → **warning**
 4. Intermediate map nodes appear in the tree but are not editable as values.
-5. If the same path is a map in one stage and a scalar in another → **structural conflict** warning; do not allow silent overwrite of the conflicting side.
+5. If the same path is a map in one stage and a scalar/list in another, or scalar vs list → **structural conflict** warning; do not allow silent overwrite of the conflicting side.
+6. Lists whose items are not all scalars are skipped with a warning (not shown as editable leaves).
 
 ### Editor UI (split pane)
 
 - Selecting a leaf in the tree shows per-stage fields in the detail pane.
-- Missing cells show a warning affordance and **Create missing** (inserts the key with an empty string into that stage’s in-memory model).
+- Scalar leaves: single-line text input.
+- Scalar-list leaves: multiline text area (**one list item per line**); blank lines are ignored on save; order is preserved.
+- Missing cells show a warning affordance and **Create missing** (inserts `""` for scalar leaves, or `[]` when any other stage has a list at that path).
 - **Add key:** User supplies a key path (relative to current node or absolute). Key is created in **all** discovered stages (empty string initially).
 - **Remove key:** Confirm, then remove the path from every stage that has it.
 - Edits mark the model dirty; **Save** persists only dirty stage files, preserving nesting. Prefer stable key order when rewriting (insertion order / existing file order where practical).
@@ -95,7 +99,7 @@ As a Policy Studio developer, I want to see and edit all environment `values.yam
 - [ ] Split-pane UI: key tree left, per-stage values right for the selected path.
 - [ ] Empty leaf values do not produce missing-key warnings.
 - [ ] Missing keys show a warning and support Create missing.
-- [ ] User can edit values, add keys, and remove keys; Save writes changed `values.yaml` files.
+- [ ] User can edit scalar values and scalar lists (e.g. `sslTrustedCerts`), add keys, and remove keys; Save writes changed `values.yaml` files.
 - [ ] Optional folder picker works when sibling `ENV/` is absent or overridden.
 - [ ] Invalid YAML in one stage does not block loading other stages.
 - [ ] Structural map/scalar conflicts are warned, not silently overwritten.
@@ -109,7 +113,7 @@ As a Policy Studio developer, I want to see and edit all environment `values.yam
 - Integrating KPS or environment-switch scripts
 - Diff highlighting of unequal values across stages (may come later)
 - Live bidirectional sync with open text editors
-- YAML sequences/lists as editable first-class values
+- Lists of maps/objects as editable values (scalar lists are in scope)
 
 ## Notes
 

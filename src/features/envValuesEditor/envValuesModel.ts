@@ -25,6 +25,11 @@ export function isScalar(value: unknown): value is EnvScalar {
   );
 }
 
+/** True when value is an array and every item is a scalar (including empty []). */
+export function isScalarArray(value: unknown): value is EnvScalar[] {
+  return Array.isArray(value) && value.every((item) => isScalar(item));
+}
+
 export function getLeafPaths(
   data: Record<string, unknown>,
   prefix = '',
@@ -34,12 +39,12 @@ export function getLeafPaths(
 
   for (const [key, value] of Object.entries(data)) {
     const path = prefix ? `${prefix}.${key}` : key;
-    if (isScalar(value)) {
+    if (isScalar(value) || isScalarArray(value)) {
       paths.push(path);
     } else if (isPlainObject(value)) {
       paths.push(...getLeafPaths(value, path, warnings));
     } else if (Array.isArray(value) && warnings) {
-      warnings.push(`Array at ${path} is not editable and was skipped`);
+      warnings.push(`Array at ${path} is not editable (non-scalar items) and was skipped`);
     }
   }
 
@@ -114,7 +119,7 @@ export function canSetValueAtPath(data: Record<string, unknown>, path: string): 
 export function setValueAtPath(
   data: Record<string, unknown>,
   path: string,
-  value: EnvScalar,
+  value: EnvScalar | EnvScalar[],
 ): boolean {
   assertSafePathSegments(path);
   if (!canSetValueAtPath(data, path)) {
@@ -197,6 +202,11 @@ export function buildEnvValuesModel(
         continue;
       }
 
+      if (isScalarArray(value)) {
+        cells[document.stageId] = { kind: 'list', values: value };
+        continue;
+      }
+
       const detail = `Structural conflict at ${leafPath} in ${document.stageId}`;
       cells[document.stageId] = { kind: 'conflict', detail };
       warnings.push(`Conflict: ${detail}`);
@@ -204,7 +214,12 @@ export function buildEnvValuesModel(
 
     for (const document of validDocuments) {
       const value = getValueAtPath(document.data, leafPath);
-      if (!pathExists(document.data, leafPath) || !isScalar(value)) {
+      if (!pathExists(document.data, leafPath)) {
+        continue;
+      }
+      const documentIsScalar = isScalar(value);
+      const documentIsList = isScalarArray(value);
+      if (!documentIsScalar && !documentIsList) {
         continue;
       }
       for (const other of validDocuments) {
@@ -212,13 +227,24 @@ export function buildEnvValuesModel(
           continue;
         }
         const otherValue = getValueAtPath(other.data, leafPath);
-        if (pathExists(other.data, leafPath) && isPlainObject(otherValue)) {
-          const detail = `Map vs scalar conflict at ${leafPath} between ${document.stageId} and ${other.stageId}`;
-          cells[document.stageId] = { kind: 'conflict', detail };
-          cells[other.stageId] = { kind: 'conflict', detail };
-          if (!warnings.some((warning) => warning.includes(detail))) {
-            warnings.push(`Conflict: ${detail}`);
-          }
+        if (!pathExists(other.data, leafPath)) {
+          continue;
+        }
+        const otherIsMap = isPlainObject(otherValue);
+        const otherIsScalar = isScalar(otherValue);
+        const otherIsList = isScalarArray(otherValue);
+        const incompatible =
+          otherIsMap ||
+          (documentIsScalar && otherIsList) ||
+          (documentIsList && otherIsScalar);
+        if (!incompatible) {
+          continue;
+        }
+        const detail = `Type conflict at ${leafPath} between ${document.stageId} and ${other.stageId}`;
+        cells[document.stageId] = { kind: 'conflict', detail };
+        cells[other.stageId] = { kind: 'conflict', detail };
+        if (!warnings.some((warning) => warning.includes(detail))) {
+          warnings.push(`Conflict: ${detail}`);
         }
       }
     }
