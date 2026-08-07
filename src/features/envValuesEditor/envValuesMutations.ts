@@ -2,11 +2,20 @@ import {
   buildEnvValuesModel,
   canSetValueAtPath,
   deleteValueAtPath,
+  getValueAtPath,
   hasForbiddenPathSegment,
   pathExists,
   setValueAtPath,
 } from './envValuesModel';
-import type { EnvCellState, EnvScalar, EnvStageDocument, EnvValuesModel } from './types';
+import type {
+  EnvCellState,
+  EnvScalar,
+  EnvScalarQuoteStyle,
+  EnvStageDocument,
+  EnvValuesModel,
+  EnvYamlStyle,
+} from './types';
+import { emptyYamlStyle } from './yamlMaps';
 
 function cloneDocuments(
   documents: Record<string, EnvStageDocument>,
@@ -84,12 +93,57 @@ export function setListValue(
     return model;
   }
 
+  const previous = getValueAtPath(document.data, path);
+  const oldValues = Array.isArray(previous) ? (previous as EnvScalar[]) : [];
+
   const documents = cloneDocuments(model.documents);
   if (!setValueAtPath(documents[stageId].data, path, values)) {
     return model;
   }
+  documents[stageId].style = syncListStyle(documents[stageId].style, path, oldValues, values);
   documents[stageId].dirty = true;
   return rebuildModel(model.envRoot, documents);
+}
+
+function syncListStyle(
+  style: EnvYamlStyle | undefined,
+  path: string,
+  oldValues: EnvScalar[],
+  newValues: EnvScalar[],
+): EnvYamlStyle {
+  const next = style ? { ...style } : emptyYamlStyle();
+  next.quotes = { ...next.quotes };
+  next.lists = { ...next.lists, [path]: next.lists[path] ?? 'compact' };
+  next.listItemQuotes = { ...next.listItemQuotes };
+
+  const oldStyles: Array<EnvScalarQuoteStyle | undefined> = oldValues.map(
+    (_, index) => next.listItemQuotes[`${path}[${index}]`],
+  );
+  for (const key of Object.keys(next.listItemQuotes)) {
+    if (key.startsWith(`${path}[`)) {
+      delete next.listItemQuotes[key];
+    }
+  }
+
+  let oldIndex = 0;
+  for (let newIndex = 0; newIndex < newValues.length; newIndex++) {
+    let found = -1;
+    for (let candidate = oldIndex; candidate < oldValues.length; candidate++) {
+      if (oldValues[candidate] === newValues[newIndex]) {
+        found = candidate;
+        break;
+      }
+    }
+    if (found !== -1) {
+      const quote = oldStyles[found];
+      if (quote) {
+        next.listItemQuotes[`${path}[${newIndex}]`] = quote;
+      }
+      oldIndex = found + 1;
+    }
+  }
+
+  return next;
 }
 
 export function createMissing(
@@ -122,6 +176,15 @@ export function createMissing(
   const documents = cloneDocuments(model.documents);
   if (!setValueAtPath(documents[stageId].data, path, initial)) {
     return model;
+  }
+  if (Array.isArray(initial)) {
+    const style = documents[stageId].style
+      ? { ...documents[stageId].style! }
+      : emptyYamlStyle();
+    style.lists = { ...style.lists, [path]: style.lists[path] ?? 'compact' };
+    style.quotes = { ...style.quotes };
+    style.listItemQuotes = { ...style.listItemQuotes };
+    documents[stageId].style = style;
   }
   documents[stageId].dirty = true;
   return rebuildModel(model.envRoot, documents);

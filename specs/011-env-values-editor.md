@@ -67,11 +67,15 @@ As a Policy Studio developer, I want to see and edit all environment `values.yam
 
 - Selecting a leaf in the tree shows per-stage fields in the detail pane.
 - Scalar leaves: single-line text input.
-- Scalar-list leaves: multiline text area (**one list item per line**); blank lines are ignored on save; order is preserved.
+- Scalar-list leaves: **per-item text inputs** for each stage, with **+** (add item) and **−** (remove item) controls; order is preserved.
 - Missing cells show a warning affordance and **Create missing** (inserts `""` for scalar leaves, or `[]` when any other stage has a list at that path).
 - **Add key:** User supplies a key path (relative to current node or absolute). Key is created in **all** discovered stages (empty string initially).
 - **Remove key:** Confirm, then remove the path from every stage that has it.
-- Edits mark the model dirty; **Save** persists only dirty stage files, preserving nesting. Prefer stable key order when rewriting (insertion order / existing file order where practical).
+- Edits mark the model dirty; **Save** persists only dirty stage files.
+- **YAML write fidelity (v1):** When rewriting a stage file, preserve:
+  - leading `---` document marker when the original file had one
+  - **compact list indentation** when the original used it (`key:` then `- item` at the same indent as `key`)
+  - **single-quoted** scalars when the original used `'…'` (double-quoted / plain left as such; new values may use plain or double when quoting is required)
 - **Reload** re-reads from disk; if dirty, confirm discard.
 
 ### Integration

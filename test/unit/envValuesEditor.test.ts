@@ -576,6 +576,25 @@ describe('renderEnvValuesEditorHtml empty state', () => {
     expect(html).toContain('id="detail"');
     expect(html).not.toContain('No ENV stages found');
   });
+
+  it('renders scalar lists as per-item inputs with add/remove controls', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'env-list-ui-'));
+    const listEnv = path.join(tmp, 'ENV');
+    fs.mkdirSync(path.join(listEnv, 'DEVL'), { recursive: true });
+    fs.writeFileSync(
+      path.join(listEnv, 'DEVL', 'values.yaml'),
+      'certs:\n- a.pem\n- b.pem\n',
+    );
+
+    const model = loadEnvValuesSession(listEnv);
+    const html = renderEnvValuesEditorHtml(model, 'certs');
+    expect(html).toContain('class="list-editor"');
+    expect(html).toContain('class="list-item-input"');
+    expect(html).toContain('class="list-remove"');
+    expect(html).toContain('class="list-add"');
+    expect(html).not.toContain('class="list-input"');
+    expect(html).not.toContain('One list item per line');
+  });
 });
 
 describe('env values writer', () => {
@@ -603,6 +622,39 @@ describe('env values writer', () => {
       kind: 'value',
       value: 'two',
     });
+  });
+
+  it('preserves document start, compact list indent, and single quotes on save', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'env-style-'));
+    const writeEnv = path.join(tmp, 'ENV');
+    fs.mkdirSync(path.join(writeEnv, 'DEVL'), { recursive: true });
+    const original = [
+      '---',
+      'Cassandra_Settings:',
+      "  host: 'db.example.local'",
+      '  sslTrustedCerts:',
+      '  - /Environment Configuration/Certificate Store/FileName2',
+      '  - /Environment Configuration/Certificate Store/FileName3',
+      '  sslCertificate: /Environment Configuration/Certificate Store/FileName1.fileending',
+      '',
+    ].join('\n');
+    fs.writeFileSync(path.join(writeEnv, 'DEVL', 'values.yaml'), original);
+
+    let model = loadEnvValuesSession(writeEnv);
+    expect(model.documents.DEVL.style?.documentStart).toBe(true);
+    expect(model.documents.DEVL.style?.lists['Cassandra_Settings.sslTrustedCerts']).toBe(
+      'compact',
+    );
+    expect(model.documents.DEVL.style?.quotes['Cassandra_Settings.host']).toBe('single');
+
+    model = setLeafValue(model, 'Cassandra_Settings.host', 'DEVL', 'db2.example.local');
+    writeDirtyEnvDocuments(model);
+
+    const written = fs.readFileSync(path.join(writeEnv, 'DEVL', 'values.yaml'), 'utf8');
+    expect(written.startsWith('---\n')).toBe(true);
+    expect(written).toContain("host: 'db2.example.local'");
+    expect(written).toContain('  sslTrustedCerts:\n  - /Environment Configuration');
+    expect(written).not.toMatch(/sslTrustedCerts:\n {4}- /);
   });
 });
 

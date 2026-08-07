@@ -18,6 +18,7 @@ export function loadEnvValuesSession(envRoot: string): EnvValuesModel {
       stageId: stage.id,
       filePath: stage.valuesFilePath,
       data: parsed.data,
+      style: parsed.style,
       parseError: parsed.error,
       dirty: false,
     };

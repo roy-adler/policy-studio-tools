@@ -11,6 +11,12 @@
  * parse error rather than silently producing wrong data.
  */
 
+import type {
+  EnvListIndentStyle,
+  EnvScalarQuoteStyle,
+  EnvYamlStyle,
+} from './types';
+
 export type YamlValue =
   | string
   | number
@@ -27,30 +33,64 @@ interface LogicalLine {
   blank: boolean;
 }
 
+interface ParsedScalar {
+  value: string | number | boolean | null;
+  quote: EnvScalarQuoteStyle;
+}
+
 const BLOCK_SCALAR_INDICATOR = /^([|>])([-+])?(\d+)?$/;
 
-export function parseMappingYaml(text: string): { data: Record<string, unknown>; error?: string } {
+export function emptyYamlStyle(): EnvYamlStyle {
+  return { documentStart: false, quotes: {}, listItemQuotes: {}, lists: {} };
+}
+
+function detectDocumentStart(text: string): boolean {
+  for (const raw of text.split(/\r\n|\r|\n/)) {
+    const trimmed = raw.trim();
+    if (trimmed === '') {
+      continue;
+    }
+    return trimmed === '---';
+  }
+  return false;
+}
+
+function joinPath(prefix: string, key: string): string {
+  return prefix ? `${prefix}.${key}` : key;
+}
+
+export function parseMappingYaml(text: string): {
+  data: Record<string, unknown>;
+  error?: string;
+  style?: EnvYamlStyle;
+} {
+  const style = emptyYamlStyle();
+  style.documentStart = detectDocumentStart(text);
   try {
-    const root = parseYamlDocument(text);
+    const root = parseYamlDocument(text, style);
     if (root === null || root === undefined) {
-      return { data: {}, error: 'Root must be a YAML mapping' };
+      return { data: {}, error: 'Root must be a YAML mapping', style };
     }
     if (!isPlainObject(root)) {
-      return { data: {}, error: 'Root must be a YAML mapping' };
+      return { data: {}, error: 'Root must be a YAML mapping', style };
     }
-    return { data: root as Record<string, unknown> };
+    return { data: root as Record<string, unknown>, style };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return { data: {}, error: message };
+    return { data: {}, error: message, style };
   }
 }
 
-export function dumpMappingYaml(data: Record<string, unknown>): string {
+export function dumpMappingYaml(data: Record<string, unknown>, style?: EnvYamlStyle): string {
+  const effective = style ?? emptyYamlStyle();
   if (Object.keys(data).length === 0) {
-    return '{}\n';
+    return effective.documentStart ? '---\n{}\n' : '{}\n';
   }
   const lines: string[] = [];
-  serializeMapping(data as Record<string, YamlValue>, 0, lines);
+  if (effective.documentStart) {
+    lines.push('---');
+  }
+  serializeMapping(data as Record<string, YamlValue>, 0, lines, '', effective);
   return `${lines.join('\n')}\n`;
 }
 
@@ -58,7 +98,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function parseYamlDocument(text: string): YamlValue {
+function parseYamlDocument(text: string, style: EnvYamlStyle): YamlValue {
   const lines = tokenizeLines(text);
   let start = skipBlanks(lines, 0);
   if (start >= lines.length) {
@@ -78,14 +118,15 @@ function parseYamlDocument(text: string): YamlValue {
   let nextPos: number;
 
   if (isListItem(first.content)) {
-    [value, nextPos] = parseSequence(lines, start, first.indent);
+    [value, nextPos] = parseSequence(lines, start, first.indent, '', style, 'indented');
   } else if (findTopLevelColonIndex(stripInlineComment(first.content)) !== -1) {
-    [value, nextPos] = parseMapping(lines, start, first.indent);
+    [value, nextPos] = parseMapping(lines, start, first.indent, '', style);
   } else {
     if (skipBlanks(lines, start + 1) < lines.length) {
       throw new Error(`Unexpected content at line ${lines[skipBlanks(lines, start + 1)].lineNo}`);
     }
-    value = parseScalar(stripInlineComment(first.content).trim(), first.lineNo);
+    const parsed = parseScalar(stripInlineComment(first.content).trim(), first.lineNo);
+    value = parsed.value;
     nextPos = start + 1;
   }
 
@@ -231,6 +272,8 @@ function parseMapping(
   lines: LogicalLine[],
   startPos: number,
   indent: number,
+  pathPrefix: string,
+  style: EnvYamlStyle,
 ): [Record<string, YamlValue>, number] {
   const obj: Record<string, YamlValue> = {};
   let pos = startPos;
@@ -252,49 +295,75 @@ function parseMapping(
     }
 
     const { key, rest } = splitKeyValue(line.content, line.lineNo);
+    const path = joinPath(pathPrefix, key);
     pos++;
 
     if (rest === '') {
       pos = skipBlanks(lines, pos);
       if (pos < lines.length && lines[pos].indent > indent) {
         const childIndent = lines[pos].indent;
-        const [value, nextPos] = parseNode(lines, pos, childIndent);
-        obj[key] = value;
-        pos = nextPos;
+        if (isListItem(lines[pos].content)) {
+          style.lists[path] = 'indented';
+          const [value, nextPos] = parseSequence(
+            lines,
+            pos,
+            childIndent,
+            path,
+            style,
+            'indented',
+          );
+          obj[key] = value;
+          pos = nextPos;
+        } else {
+          const [value, nextPos] = parseNode(lines, pos, childIndent, path, style);
+          obj[key] = value;
+          pos = nextPos;
+        }
       } else if (
         pos < lines.length &&
         lines[pos].indent === indent &&
         isListItem(lines[pos].content)
       ) {
-        // Compact form: sequence value shares the mapping entry indent
-        //   sslTrustedCerts:
-        //   - item1
-        //   - item2
-        const [value, nextPos] = parseSequence(lines, pos, indent);
+        style.lists[path] = 'compact';
+        const [value, nextPos] = parseSequence(lines, pos, indent, path, style, 'compact');
         obj[key] = value;
         pos = nextPos;
       } else {
         obj[key] = null;
+        style.quotes[path] = 'plain';
       }
     } else if (rest === '{}') {
       obj[key] = {};
     } else if (rest === '[]') {
       obj[key] = [];
+      style.lists[path] = 'indented';
     } else if (BLOCK_SCALAR_INDICATOR.test(rest)) {
+      const indicator = rest[0] as '|' | '>';
+      style.quotes[path] = indicator === '|' ? 'literal' : 'folded';
       const [value, nextPos] = parseBlockScalar(lines, pos, indent, rest, line.lineNo);
       obj[key] = value;
       pos = nextPos;
     } else {
-      obj[key] = parseScalar(rest, line.lineNo);
+      const parsed = parseScalar(rest, line.lineNo);
+      obj[key] = parsed.value;
+      style.quotes[path] = parsed.quote;
     }
   }
 
   return [obj, pos];
 }
 
-function parseSequence(lines: LogicalLine[], startPos: number, indent: number): [YamlValue[], number] {
+function parseSequence(
+  lines: LogicalLine[],
+  startPos: number,
+  indent: number,
+  pathPrefix: string,
+  style: EnvYamlStyle,
+  listStyle: EnvListIndentStyle,
+): [YamlValue[], number] {
   const arr: YamlValue[] = [];
   let pos = startPos;
+  style.lists[pathPrefix] = listStyle;
 
   while (pos < lines.length) {
     pos = skipBlanks(lines, pos);
@@ -309,51 +378,52 @@ function parseSequence(lines: LogicalLine[], startPos: number, indent: number): 
       throw new Error(`Unexpected indentation at line ${line.lineNo}`);
     }
     if (!isListItem(line.content)) {
-      // Same-indent mapping key ends this sequence and belongs to the parent
-      // mapping (common after compact lists):
-      //   sslTrustedCerts:
-      //   - a
-      //   sslCertificate: /path
+      // Same-indent mapping key ends this sequence and belongs to the parent mapping.
       break;
     }
 
     const itemContent = line.content === '-' ? '' : line.content.slice(2).trim();
     const itemStructural = stripInlineComment(itemContent).trim();
+    const itemPath = `${pathPrefix}[${arr.length}]`;
     pos++;
 
     if (itemStructural === '') {
       pos = skipBlanks(lines, pos);
       if (pos < lines.length && lines[pos].indent > indent) {
         const childIndent = lines[pos].indent;
-        const [value, nextPos] = parseNode(lines, pos, childIndent);
+        const [value, nextPos] = parseNode(lines, pos, childIndent, itemPath, style);
         arr.push(value);
         pos = nextPos;
       } else {
         arr.push(null);
+        style.listItemQuotes[itemPath] = 'plain';
       }
     } else if (itemStructural === '{}') {
       arr.push({});
     } else if (itemStructural === '[]') {
       arr.push([]);
     } else if (BLOCK_SCALAR_INDICATOR.test(itemStructural)) {
+      const indicator = itemStructural[0] as '|' | '>';
+      style.listItemQuotes[itemPath] = indicator === '|' ? 'literal' : 'folded';
       const [value, nextPos] = parseBlockScalar(lines, pos, indent, itemStructural, line.lineNo);
       arr.push(value);
       pos = nextPos;
     } else if (findTopLevelColonIndex(itemStructural) !== -1) {
-      // Inline mapping on the dash line, with optional continuation keys:
-      //   - Name: foo
-      //     Value: bar
       const [value, nextPos] = parseInlineSequenceMapping(
         lines,
         pos,
         indent,
         itemStructural,
         line.lineNo,
+        itemPath,
+        style,
       );
       arr.push(value);
       pos = nextPos;
     } else {
-      arr.push(parseScalar(itemStructural, line.lineNo));
+      const parsed = parseScalar(itemStructural, line.lineNo);
+      arr.push(parsed.value);
+      style.listItemQuotes[itemPath] = parsed.quote;
     }
   }
 
@@ -370,35 +440,40 @@ function parseInlineSequenceMapping(
   sequenceIndent: number,
   firstPair: string,
   lineNo: number,
+  pathPrefix: string,
+  style: EnvYamlStyle,
 ): [Record<string, YamlValue>, number] {
   const obj: Record<string, YamlValue> = {};
   const { key, rest } = splitKeyValue(firstPair, lineNo);
+  const path = joinPath(pathPrefix, key);
 
   if (rest === '') {
     pos = skipBlanks(lines, pos);
     if (pos < lines.length && lines[pos].indent > sequenceIndent) {
-      // Could be nested structure under this key; require indent > dash content
-      // column. Dash is at sequenceIndent; content typically at sequenceIndent+2.
       const childIndent = lines[pos].indent;
       if (childIndent > sequenceIndent + 1) {
-        const [value, nextPos] = parseNode(lines, pos, childIndent);
+        const [value, nextPos] = parseNode(lines, pos, childIndent, path, style);
         obj[key] = value;
         pos = nextPos;
       } else {
         obj[key] = null;
+        style.quotes[path] = 'plain';
       }
     } else {
       obj[key] = null;
+      style.quotes[path] = 'plain';
     }
   } else if (BLOCK_SCALAR_INDICATOR.test(rest)) {
+    style.quotes[path] = rest[0] === '|' ? 'literal' : 'folded';
     const [value, nextPos] = parseBlockScalar(lines, pos, sequenceIndent, rest, lineNo);
     obj[key] = value;
     pos = nextPos;
   } else {
-    obj[key] = parseScalar(rest, lineNo);
+    const parsed = parseScalar(rest, lineNo);
+    obj[key] = parsed.value;
+    style.quotes[path] = parsed.quote;
   }
 
-  // Continuation keys: indented further than the `-` marker (sequenceIndent).
   while (pos < lines.length) {
     pos = skipBlanks(lines, pos);
     if (pos >= lines.length) {
@@ -409,29 +484,40 @@ function parseInlineSequenceMapping(
       break;
     }
     const { key: contKey, rest: contRest } = splitKeyValue(line.content, line.lineNo);
+    const contPath = joinPath(pathPrefix, contKey);
     pos++;
     if (contRest === '') {
       pos = skipBlanks(lines, pos);
       if (pos < lines.length && lines[pos].indent > line.indent) {
-        const [value, nextPos] = parseNode(lines, pos, lines[pos].indent);
+        const [value, nextPos] = parseNode(lines, pos, lines[pos].indent, contPath, style);
         obj[contKey] = value;
         pos = nextPos;
       } else {
         obj[contKey] = null;
+        style.quotes[contPath] = 'plain';
       }
     } else if (BLOCK_SCALAR_INDICATOR.test(contRest)) {
+      style.quotes[contPath] = contRest[0] === '|' ? 'literal' : 'folded';
       const [value, nextPos] = parseBlockScalar(lines, pos, line.indent, contRest, line.lineNo);
       obj[contKey] = value;
       pos = nextPos;
     } else {
-      obj[contKey] = parseScalar(contRest, line.lineNo);
+      const parsed = parseScalar(contRest, line.lineNo);
+      obj[contKey] = parsed.value;
+      style.quotes[contPath] = parsed.quote;
     }
   }
 
   return [obj, pos];
 }
 
-function parseNode(lines: LogicalLine[], pos: number, indent: number): [YamlValue, number] {
+function parseNode(
+  lines: LogicalLine[],
+  pos: number,
+  indent: number,
+  pathPrefix: string,
+  style: EnvYamlStyle,
+): [YamlValue, number] {
   pos = skipBlanks(lines, pos);
   if (pos >= lines.length) {
     throw new Error('Unexpected end of document');
@@ -441,9 +527,9 @@ function parseNode(lines: LogicalLine[], pos: number, indent: number): [YamlValu
     throw new Error(`Unexpected indentation at line ${line.lineNo}`);
   }
   if (isListItem(line.content)) {
-    return parseSequence(lines, pos, indent);
+    return parseSequence(lines, pos, indent, pathPrefix, style, 'indented');
   }
-  return parseMapping(lines, pos, indent);
+  return parseMapping(lines, pos, indent, pathPrefix, style);
 }
 
 /**
@@ -591,20 +677,20 @@ const FALSE_UNQUOTED = new Set(['false', 'False', 'FALSE']);
 const INT_PATTERN = /^[-+]?\d+$/;
 const FLOAT_PATTERN = /^[-+]?(\d+\.\d*|\.\d+|\d+)([eE][-+]?\d+)?$/;
 
-function parseScalar(rest: string, lineNo: number): string | number | boolean | null {
+function parseScalar(rest: string, lineNo: number): ParsedScalar {
   if (rest[0] === '"') {
     const end = findClosingQuote(rest, 0);
     if (end !== rest.length - 1) {
       throw new Error(`Unterminated or malformed double-quoted string at line ${lineNo}`);
     }
-    return unescapeDoubleQuoted(rest.slice(1, end));
+    return { value: unescapeDoubleQuoted(rest.slice(1, end)), quote: 'double' };
   }
   if (rest[0] === "'") {
     const end = findClosingQuote(rest, 0);
     if (end !== rest.length - 1) {
       throw new Error(`Unterminated or malformed single-quoted string at line ${lineNo}`);
     }
-    return rest.slice(1, end).replace(/''/g, "'");
+    return { value: rest.slice(1, end).replace(/''/g, "'"), quote: 'single' };
   }
 
   if (rest[0] === '{' || rest[0] === '[') {
@@ -613,28 +699,27 @@ function parseScalar(rest: string, lineNo: number): string | number | boolean | 
   if (rest[0] === '&' || rest[0] === '*' || rest[0] === '!') {
     throw new Error(`Anchors, aliases, and tags are not supported at line ${lineNo}`);
   }
-  // Block scalars are handled by parseBlockScalar via the mapping/sequence parsers.
 
   if (rest === '') {
-    return null;
+    return { value: null, quote: 'plain' };
   }
   if (RESERVED_UNQUOTED.has(rest)) {
-    return null;
+    return { value: null, quote: 'plain' };
   }
   if (TRUE_UNQUOTED.has(rest)) {
-    return true;
+    return { value: true, quote: 'plain' };
   }
   if (FALSE_UNQUOTED.has(rest)) {
-    return false;
+    return { value: false, quote: 'plain' };
   }
   if (INT_PATTERN.test(rest)) {
-    return parseInt(rest, 10);
+    return { value: parseInt(rest, 10), quote: 'plain' };
   }
   if (FLOAT_PATTERN.test(rest)) {
-    return parseFloat(rest);
+    return { value: parseFloat(rest), quote: 'plain' };
   }
 
-  return rest;
+  return { value: rest, quote: 'plain' };
 }
 
 function unquoteScalarText(text: string): string {
@@ -683,29 +768,39 @@ function unescapeDoubleQuoted(text: string): string {
   return out;
 }
 
-function serializeMapping(obj: Record<string, YamlValue>, indentLevel: number, lines: string[]): void {
+function serializeMapping(
+  obj: Record<string, YamlValue>,
+  indentLevel: number,
+  lines: string[],
+  pathPrefix: string,
+  style: EnvYamlStyle,
+): void {
   const pad = '  '.repeat(indentLevel);
   for (const [key, value] of Object.entries(obj)) {
     const formattedKey = formatKey(key);
+    const path = joinPath(pathPrefix, key);
     if (isPlainObject(value)) {
       const entries = Object.keys(value);
       if (entries.length === 0) {
         lines.push(`${pad}${formattedKey}: {}`);
       } else {
         lines.push(`${pad}${formattedKey}:`);
-        serializeMapping(value as Record<string, YamlValue>, indentLevel + 1, lines);
+        serializeMapping(value as Record<string, YamlValue>, indentLevel + 1, lines, path, style);
       }
     } else if (Array.isArray(value)) {
       if (value.length === 0) {
         lines.push(`${pad}${formattedKey}: []`);
       } else {
         lines.push(`${pad}${formattedKey}:`);
-        serializeSequence(value, indentLevel + 1, lines);
+        const listStyle = style.lists[path] ?? 'compact';
+        // compact: items share the key's indent; indented: one level deeper
+        const itemIndent = listStyle === 'compact' ? indentLevel : indentLevel + 1;
+        serializeSequence(value, itemIndent, lines, path, style);
       }
-    } else if (typeof value === 'string' && value.includes('\n')) {
-      serializeBlockScalar(formattedKey, value, indentLevel, lines);
+    } else if (typeof value === 'string' && (value.includes('\n') || style.quotes[path] === 'literal' || style.quotes[path] === 'folded')) {
+      serializeBlockScalar(formattedKey, value, indentLevel, lines, style.quotes[path]);
     } else {
-      lines.push(`${pad}${formattedKey}: ${formatScalar(value)}`);
+      lines.push(`${pad}${formattedKey}: ${formatScalar(value, style.quotes[path])}`);
     }
   }
 }
@@ -715,12 +810,14 @@ function serializeBlockScalar(
   value: string,
   indentLevel: number,
   lines: string[],
+  quote?: EnvScalarQuoteStyle,
 ): void {
   const pad = '  '.repeat(indentLevel);
   const contentPad = '  '.repeat(indentLevel + 1);
+  const indicator = quote === 'folded' ? '>' : '|';
   const chomp = value.endsWith('\n') ? '' : '-';
   const body = value.endsWith('\n') ? value.slice(0, -1) : value;
-  lines.push(`${pad}${formattedKey}: |${chomp}`);
+  lines.push(`${pad}${formattedKey}: ${indicator}${chomp}`);
   if (body === '') {
     return;
   }
@@ -729,28 +826,35 @@ function serializeBlockScalar(
   }
 }
 
-function serializeSequence(arr: YamlValue[], indentLevel: number, lines: string[]): void {
+function serializeSequence(
+  arr: YamlValue[],
+  indentLevel: number,
+  lines: string[],
+  pathPrefix: string,
+  style: EnvYamlStyle,
+): void {
   const pad = '  '.repeat(indentLevel);
-  for (const item of arr) {
+  arr.forEach((item, index) => {
+    const itemPath = `${pathPrefix}[${index}]`;
     if (isPlainObject(item)) {
       const entries = Object.keys(item);
       if (entries.length === 0) {
         lines.push(`${pad}- {}`);
       } else {
         lines.push(`${pad}-`);
-        serializeMapping(item as Record<string, YamlValue>, indentLevel + 1, lines);
+        serializeMapping(item as Record<string, YamlValue>, indentLevel + 1, lines, itemPath, style);
       }
     } else if (Array.isArray(item)) {
       if (item.length === 0) {
         lines.push(`${pad}- []`);
       } else {
         lines.push(`${pad}-`);
-        serializeSequence(item, indentLevel + 1, lines);
+        serializeSequence(item, indentLevel + 1, lines, itemPath, style);
       }
     } else {
-      lines.push(`${pad}- ${formatScalar(item)}`);
+      lines.push(`${pad}- ${formatScalar(item, style.listItemQuotes[itemPath])}`);
     }
-  }
+  });
 }
 
 const SAFE_PLAIN_KEY = /^[A-Za-z0-9_][A-Za-z0-9_.-]*$/;
@@ -765,7 +869,10 @@ function formatKey(key: string): string {
 const RESERVED_WORDS = /^(true|false|null|~|yes|no|on|off)$/i;
 const NEEDS_QUOTING = /^[\s]|[\s]$|^[-?:,[\]{}#&*!|>'"%@`]|: |:$| #|\n/;
 
-function formatScalar(value: string | number | boolean | null): string {
+function formatScalar(
+  value: string | number | boolean | null,
+  preferred?: EnvScalarQuoteStyle,
+): string {
   if (value === null) {
     return 'null';
   }
@@ -776,14 +883,19 @@ function formatScalar(value: string | number | boolean | null): string {
     return String(value);
   }
   if (value === '') {
-    return '""';
+    return preferred === 'single' ? "''" : '""';
   }
-  if (
+
+  const needsQuotes =
     RESERVED_WORDS.test(value) ||
     INT_PATTERN.test(value) ||
     FLOAT_PATTERN.test(value) ||
-    NEEDS_QUOTING.test(value)
-  ) {
+    NEEDS_QUOTING.test(value);
+
+  if (preferred === 'single') {
+    return `'${value.replace(/'/g, "''")}'`;
+  }
+  if (preferred === 'double' || needsQuotes) {
     return JSON.stringify(value);
   }
   return value;

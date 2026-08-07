@@ -25,11 +25,29 @@ export interface EnvTreeNode {
   cells?: Record<string, EnvCellState>;
 }
 
+/** How a scalar was written in the original YAML (used on save). */
+export type EnvScalarQuoteStyle = 'plain' | 'single' | 'double' | 'literal' | 'folded';
+
+/** How a sequence was indented relative to its key. */
+export type EnvListIndentStyle = 'compact' | 'indented';
+
+export interface EnvYamlStyle {
+  documentStart: boolean;
+  /** Dotted path → quote style for scalar leaves */
+  quotes: Record<string, EnvScalarQuoteStyle>;
+  /** Dotted path → quote style for list items (`path[0]`, `path[1]`, …) */
+  listItemQuotes: Record<string, EnvScalarQuoteStyle>;
+  /** Dotted path → list indentation style */
+  lists: Record<string, EnvListIndentStyle>;
+}
+
 export interface EnvStageDocument {
   stageId: string;
   filePath: string;
   /** Nested plain object; maps only + scalar leaves */
   data: Record<string, unknown>;
+  /** Original YAML formatting hints for write-back */
+  style?: EnvYamlStyle;
   parseError?: string;
   dirty: boolean;
 }

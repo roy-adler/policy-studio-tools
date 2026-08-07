@@ -114,7 +114,9 @@ function getStyles(): string {
     h2 { font-size: 14px; margin: 0 0 4px; word-break: break-all; }
     .stage-rows { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
     .stage-row { display: flex; align-items: center; gap: 10px; }
+    .stage-row.list-stage { align-items: flex-start; }
     .stage-label { flex: 0 0 80px; font-weight: 600; }
+    .stage-row.list-stage .stage-label { padding-top: 6px; }
     .stage-value { flex: 1; display: flex; align-items: center; gap: 8px; }
     .stage-value input {
       flex: 1;
@@ -136,6 +138,28 @@ function getStyles(): string {
       cursor: pointer;
       font-size: 11px;
     }
+    .list-editor {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 0;
+    }
+    .list-item-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .list-item-row .list-item-input { flex: 1; min-width: 0; }
+    .list-item-row .list-remove,
+    .list-editor .list-add {
+      flex: none;
+      min-width: 28px;
+      padding: 2px 0;
+      font-size: 14px;
+      line-height: 1.2;
+    }
+    .list-editor .list-add { align-self: flex-start; }
     .empty-state {
       max-width: 520px;
       margin: 32px auto;
@@ -153,24 +177,6 @@ function getStyles(): string {
       background: var(--vscode-textCodeBlock-background, rgba(127, 127, 127, 0.1));
       border-radius: 3px;
       padding: 1px 4px;
-    }
-    textarea.list-input {
-      width: 100%;
-      min-height: 88px;
-      resize: vertical;
-      font-family: var(--vscode-editor-font-family, var(--vscode-font-family));
-      font-size: 12px;
-      background: var(--vscode-input-background);
-      color: var(--vscode-input-foreground);
-      border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
-      border-radius: 3px;
-      padding: 6px 8px;
-      line-height: 1.4;
-    }
-    .list-hint {
-      font-size: 11px;
-      opacity: 0.75;
-      margin-top: 4px;
     }
   </style>`;
 }
@@ -312,12 +318,24 @@ function renderDetail(model: EnvValuesModel, selectedPath?: string): string {
     }
 
     if (cell.kind === 'list') {
-      const text = cell.values.map((entry) => formatScalar(entry)).join('\n');
-      return `<div class="stage-row">
+      const items =
+        cell.values.length === 0
+          ? ''
+          : cell.values
+              .map(
+                (entry, index) => `<div class="list-item-row">
+            <input type="text" class="list-item-input" data-path="${escapeHtml(selectedPath)}" data-stage="${escapeHtml(stage.id)}" data-index="${index}" value="${escapeHtml(formatScalar(entry))}" />
+            <button type="button" class="list-remove" data-path="${escapeHtml(selectedPath)}" data-stage="${escapeHtml(stage.id)}" data-index="${index}" title="Remove item">−</button>
+          </div>`,
+              )
+              .join('');
+      return `<div class="stage-row list-stage">
         <div class="stage-label">${escapeHtml(stage.id)}</div>
         <div class="stage-value">
-          <textarea class="list-input" data-path="${escapeHtml(selectedPath)}" data-stage="${escapeHtml(stage.id)}" rows="${Math.max(3, cell.values.length + 1)}">${escapeHtml(text)}</textarea>
-          <div class="list-hint">One list item per line</div>
+          <div class="list-editor" data-path="${escapeHtml(selectedPath)}" data-stage="${escapeHtml(stage.id)}">
+            ${items}
+            <button type="button" class="list-add" data-path="${escapeHtml(selectedPath)}" data-stage="${escapeHtml(stage.id)}" title="Add item">+</button>
+          </div>
         </div>
       </div>`;
     }
@@ -415,18 +433,37 @@ export function renderEnvValuesEditorHtml(
       });
     });
 
-    document.querySelectorAll('.list-input').forEach((el) => {
+    function collectListValues(editor) {
+      return Array.from(editor.querySelectorAll('.list-item-input')).map((input) => input.value);
+    }
+
+    function postList(path, stageId, values) {
+      vscode.postMessage({ type: 'setList', path, stageId, values });
+    }
+
+    document.querySelectorAll('.list-item-input').forEach((el) => {
       el.addEventListener('change', () => {
-        const values = el.value
-          .split(/\\r?\\n/)
-          .map((line) => line.trimEnd())
-          .filter((line) => line.length > 0);
-        vscode.postMessage({
-          type: 'setList',
-          path: el.dataset.path,
-          stageId: el.dataset.stage,
-          values,
-        });
+        const editor = el.closest('.list-editor');
+        postList(editor.dataset.path, editor.dataset.stage, collectListValues(editor));
+      });
+    });
+
+    document.querySelectorAll('.list-remove').forEach((el) => {
+      el.addEventListener('click', () => {
+        const editor = el.closest('.list-editor');
+        const index = Number(el.dataset.index);
+        const values = collectListValues(editor);
+        values.splice(index, 1);
+        postList(editor.dataset.path, editor.dataset.stage, values);
+      });
+    });
+
+    document.querySelectorAll('.list-add').forEach((el) => {
+      el.addEventListener('click', () => {
+        const editor = el.closest('.list-editor');
+        const values = collectListValues(editor);
+        values.push('');
+        postList(editor.dataset.path, editor.dataset.stage, values);
       });
     });
 

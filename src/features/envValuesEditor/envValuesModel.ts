@@ -5,10 +5,15 @@ import type {
   EnvStageDocument,
   EnvTreeNode,
   EnvValuesModel,
+  EnvYamlStyle,
 } from './types';
 import { parseMappingYaml } from './yamlMaps';
 
-export function parseEnvValuesYaml(text: string): { data: Record<string, unknown>; error?: string } {
+export function parseEnvValuesYaml(text: string): {
+  data: Record<string, unknown>;
+  error?: string;
+  style?: EnvYamlStyle;
+} {
   return parseMappingYaml(text);
 }
 

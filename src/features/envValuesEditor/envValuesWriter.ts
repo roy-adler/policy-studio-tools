@@ -13,7 +13,7 @@ export function writeDirtyEnvDocuments(model: EnvValuesModel): {
     if (!doc.dirty || doc.parseError) {
       continue;
     }
-    const text = dumpMappingYaml(doc.data);
+    const text = dumpMappingYaml(doc.data, doc.style);
     try {
       fs.writeFileSync(doc.filePath, text, 'utf8');
     } catch (error) {
