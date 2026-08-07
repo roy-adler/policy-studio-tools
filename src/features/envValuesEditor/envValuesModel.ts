@@ -101,19 +101,45 @@ export function pathExists(data: Record<string, unknown>, path: string): boolean
   return parts.length === 0;
 }
 
+/** True when `path` can be written without turning a scalar intermediate into a map. */
+export function canSetValueAtPath(data: Record<string, unknown>, path: string): boolean {
+  if (hasForbiddenPathSegment(path)) {
+    return false;
+  }
+
+  const parts = path.split('.');
+  let current: unknown = data;
+  for (let index = 0; index < parts.length - 1; index++) {
+    const part = parts[index];
+    if (!isPlainObject(current)) {
+      return false;
+    }
+    const next = current[part];
+    if (next !== undefined && !isPlainObject(next)) {
+      return false;
+    }
+    current = next ?? {};
+  }
+  return true;
+}
+
 export function setValueAtPath(
   data: Record<string, unknown>,
   path: string,
   value: EnvScalar,
-): void {
+): boolean {
   assertSafePathSegments(path);
+  if (!canSetValueAtPath(data, path)) {
+    return false;
+  }
+
   const parts = path.split('.');
   let current: Record<string, unknown> = data;
   for (let index = 0; index < parts.length; index++) {
     const part = parts[index];
     if (index === parts.length - 1) {
       current[part] = value;
-      return;
+      return true;
     }
     const next = current[part];
     if (!isPlainObject(next)) {
@@ -124,6 +150,7 @@ export function setValueAtPath(
       current = next;
     }
   }
+  return true;
 }
 
 export function deleteValueAtPath(data: Record<string, unknown>, path: string): void {

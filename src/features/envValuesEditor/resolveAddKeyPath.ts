@@ -4,9 +4,9 @@
  * Rules (per spec: "relative to current node or absolute"):
  * - If the trimmed input already contains a `.`, it is treated as a fully
  *   qualified, absolute dotted path from the root and used verbatim.
- * - Otherwise, if a node is currently selected in the tree, the input is
- *   treated as relative to that selection and joined onto it
- *   (`${selectedPath}.${input}`).
+ * - Otherwise, if a node is currently selected, the input is treated as a
+ *   sibling key: parent of the selection plus the input (`A.AA` + `NEW` →
+ *   `A.NEW`; a root-level selection `AA` + `NEW` → `NEW`).
  * - Otherwise (no selection and no dot), the trimmed input is used as-is,
  *   i.e. treated as a new top-level key.
  */
@@ -18,7 +18,11 @@ export function resolveAddKeyPath(selectedPath: string | undefined, input: strin
   }
 
   if (selectedPath) {
-    return `${selectedPath}.${trimmed}`;
+    const lastDot = selectedPath.lastIndexOf('.');
+    if (lastDot === -1) {
+      return trimmed;
+    }
+    return `${selectedPath.slice(0, lastDot)}.${trimmed}`;
   }
 
   return trimmed;

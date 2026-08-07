@@ -197,6 +197,17 @@ describe('env values mutations', () => {
     expect(next.documents.DEVL.dirty).toBe(false);
   });
 
+  it('addKey refuses when path would overwrite a scalar intermediate', () => {
+    const model = loadEnvValuesSession(envRoot);
+    const next = addKey(model, 'A.AA.NEW');
+    expect(next).toBe(model);
+    expect(findLeaf(next.tree, 'A.AA')?.cells?.DEVL).toEqual({ kind: 'value', value: 'Inhalt' });
+    expect(findLeaf(next.tree, 'A.AA')?.cells?.TEST).toEqual({ kind: 'value', value: 'Inhalt-test' });
+    expect(findLeaf(next.tree, 'A.AA.NEW')).toBeUndefined();
+    expect(next.documents.DEVL.dirty).toBe(false);
+    expect(next.documents.TEST.dirty).toBe(false);
+  });
+
   it('addKey refuses when any stage has conflict at path', () => {
     const model = loadEnvValuesSession(createMapVsScalarConflictEnv());
     const next = addKey(model, 'A.AA');
@@ -224,6 +235,12 @@ describe('env values prototype pollution guard', () => {
     expect(() => setValueAtPath(data, 'a.prototype.polluted', 'x')).toThrow();
     expect(() => setValueAtPath(data, 'a.constructor.polluted', 'x')).toThrow();
     expect((Object.prototype as Record<string, unknown>).polluted).toBeUndefined();
+  });
+
+  it('setValueAtPath refuses when a scalar intermediate would be overwritten', () => {
+    const data: Record<string, unknown> = { A: { AA: 'scalar' } };
+    expect(setValueAtPath(data, 'A.AA.NEW', '')).toBe(false);
+    expect(data).toEqual({ A: { AA: 'scalar' } });
   });
 
   it('deleteValueAtPath throws instead of touching __proto__/prototype/constructor segments', () => {
@@ -263,16 +280,20 @@ describe('resolveAddKeyPath', () => {
     expect(resolveAddKeyPath(undefined, 'B.NEW')).toBe('B.NEW');
   });
 
-  it('joins a dot-free input onto the selected path as relative', () => {
-    expect(resolveAddKeyPath('A.AA', 'NEW')).toBe('A.AA.NEW');
+  it('joins a dot-free input as a sibling of the selected path', () => {
+    expect(resolveAddKeyPath('A.AA', 'NEW')).toBe('A.NEW');
+    expect(resolveAddKeyPath('A.AA', '  NEW  ')).toBe('A.NEW');
+  });
+
+  it('uses the dot-free input at root when selection has no parent', () => {
+    expect(resolveAddKeyPath('AA', 'NEW')).toBe('NEW');
   });
 
   it('uses the dot-free input as-is when nothing is selected', () => {
     expect(resolveAddKeyPath(undefined, 'NEW')).toBe('NEW');
   });
 
-  it('trims whitespace from the input', () => {
-    expect(resolveAddKeyPath('A.AA', '  NEW  ')).toBe('A.AA.NEW');
+  it('trims whitespace from dotted absolute input', () => {
     expect(resolveAddKeyPath(undefined, '  B.NEW  ')).toBe('B.NEW');
   });
 });

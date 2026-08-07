@@ -1,5 +1,6 @@
 import {
   buildEnvValuesModel,
+  canSetValueAtPath,
   deleteValueAtPath,
   hasForbiddenPathSegment,
   pathExists,
@@ -55,7 +56,9 @@ export function setLeafValue(
   }
 
   const documents = cloneDocuments(model.documents);
-  setValueAtPath(documents[stageId].data, path, value);
+  if (!setValueAtPath(documents[stageId].data, path, value)) {
+    return model;
+  }
   documents[stageId].dirty = true;
   return rebuildModel(model.envRoot, documents);
 }
@@ -80,7 +83,9 @@ export function createMissing(
   }
 
   const documents = cloneDocuments(model.documents);
-  setValueAtPath(documents[stageId].data, path, '');
+  if (!setValueAtPath(documents[stageId].data, path, '')) {
+    return model;
+  }
   documents[stageId].dirty = true;
   return rebuildModel(model.envRoot, documents);
 }
@@ -97,6 +102,15 @@ export function addKey(model: EnvValuesModel, path: string): EnvValuesModel {
     }
   }
 
+  for (const document of Object.values(model.documents)) {
+    if (document.parseError) {
+      continue;
+    }
+    if (!canSetValueAtPath(document.data, path)) {
+      return model;
+    }
+  }
+
   const documents = cloneDocuments(model.documents);
   let changed = false;
 
@@ -104,7 +118,9 @@ export function addKey(model: EnvValuesModel, path: string): EnvValuesModel {
     if (document.parseError) {
       continue;
     }
-    setValueAtPath(document.data, path, '');
+    if (!setValueAtPath(document.data, path, '')) {
+      return model;
+    }
     document.dirty = true;
     changed = true;
   }
