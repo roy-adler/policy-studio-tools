@@ -23,6 +23,7 @@ import { writeDirtyEnvDocuments } from '../../src/features/envValuesEditor/envVa
 import { renderEnvValuesEditorHtml } from '../../src/features/envValuesEditor/envValuesPanelHtml';
 import { resolveAddKeyPath } from '../../src/features/envValuesEditor/resolveAddKeyPath';
 import { ENV_VALUES_EDITOR_TOOL } from '../../src/features/envValuesEditor/toolDescriptor';
+import { listEnvRootsForProjects } from '../../src/features/envValuesEditor/listEnvRoots';
 import { pickProjectRootForEnvEditor } from '../../src/features/envValuesEditor/pickProjectRootForEnvEditor';
 import type { PolicyStudioProject } from '../../src/features/projectRegistry/types';
 import type { EnvValuesModel } from '../../src/features/envValuesEditor/types';
@@ -34,6 +35,34 @@ const envRoot = path.join(sampleRoot, 'ENV');
 describe('env values discovery', () => {
   it('resolves sibling ENV next to the policy project', () => {
     expect(resolveSiblingEnvRoot(policyRoot)).toBe(envRoot);
+  });
+
+  it('lists ENV roots for projects that have sibling ENV stages', () => {
+    const project: PolicyStudioProject = {
+      id: 'sample',
+      displayName: 'POLICY_yaml',
+      rootPath: policyRoot,
+      relativePath: 'sample/POLICY_yaml',
+      projectType: 'yaml',
+      markerPath: path.join(policyRoot, 'values.yaml'),
+    };
+    const bareDir = fs.mkdtempSync(path.join(os.tmpdir(), 'env-bare-proj-'));
+    const barePolicy = path.join(bareDir, 'BarePolicy_yaml');
+    fs.mkdirSync(barePolicy);
+    const withoutEnv: PolicyStudioProject = {
+      id: 'bare',
+      displayName: 'BarePolicy_yaml',
+      rootPath: barePolicy,
+      relativePath: 'BarePolicy_yaml',
+      projectType: 'yaml',
+      markerPath: path.join(barePolicy, 'values.yaml'),
+    };
+
+    const listed = listEnvRootsForProjects([withoutEnv, project]);
+    expect(listed).toHaveLength(1);
+    expect(listed[0].envRoot).toBe(envRoot);
+    expect(listed[0].stageIds.sort()).toEqual(['DEVL', 'TEST']);
+    expect(listed[0].bundleName).toBe('sample');
   });
 
   it('discovers stages that contain values.yaml and skips KPS', () => {
@@ -78,6 +107,33 @@ describe('env values model', () => {
           '/Environment Configuration/Certificate Store/FileName2',
           '/Environment Configuration/Certificate Store/FileName3',
         ],
+      },
+    });
+  });
+
+  it('ends a compact sequence when the next sibling mapping key appears', () => {
+    // Real ENV files often put scalar keys after a compact list at the same indent.
+    const yaml = [
+      'Cassandra_Settings:',
+      '  sslTrustedCerts:',
+      '  - /Environment Configuration/Certificate Store/FileName2',
+      '  - /Environment Configuration/Certificate Store/FileName3',
+      '  sslCertificate: /Environment Configuration/Certificate Store/FileName1.fileending',
+      '  passwords: |-',
+      '    LONG_PASSWORD',
+      '',
+    ].join('\n');
+
+    const parsed = parseEnvValuesYaml(yaml);
+    expect(parsed.error).toBeUndefined();
+    expect(parsed.data).toEqual({
+      Cassandra_Settings: {
+        sslTrustedCerts: [
+          '/Environment Configuration/Certificate Store/FileName2',
+          '/Environment Configuration/Certificate Store/FileName3',
+        ],
+        sslCertificate: '/Environment Configuration/Certificate Store/FileName1.fileending',
+        passwords: 'LONG_PASSWORD',
       },
     });
   });

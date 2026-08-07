@@ -4,13 +4,12 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { getSharedProjectRegistryStore } from '../projectRegistry/projectRegistryService';
 import { getSharedToolsHubService } from '../toolsSidebar/toolsHubService';
-import { resolveSiblingEnvRoot } from './discoverEnvStages';
 import { hasForbiddenPathSegment } from './envValuesModel';
 import { addKey, createMissing, removeKey, setLeafValue } from './envValuesMutations';
 import { getEnvValuesPanelShellHtml, renderEnvValuesEditorHtml } from './envValuesPanelHtml';
 import { writeDirtyEnvDocuments } from './envValuesWriter';
+import { listEnvRootsForProjects, type EnvRootCandidate } from './listEnvRoots';
 import { loadEnvValuesSession } from './loadEnvValuesSession';
-import { pickProjectRootForEnvEditor } from './pickProjectRootForEnvEditor';
 import { resolveAddKeyPath } from './resolveAddKeyPath';
 import { ENV_VALUES_EDITOR_TOOL } from './toolDescriptor';
 import type { EnvValuesModel } from './types';
@@ -19,7 +18,7 @@ function createNonce(): string {
   return crypto.randomBytes(16).toString('hex');
 }
 
-const PICK_ENV_FOLDER_ACTION = 'Pick ENV folder…';
+const BROWSE_ENV_FOLDER_LABEL = 'Browse ENV folder…';
 const DISCARD_ACTION = 'Discard';
 const REMOVE_ACTION = 'Remove';
 
@@ -32,12 +31,21 @@ type IncomingMessage =
   | { type: 'reload' }
   | { type: 'addKey' }
   | { type: 'removeKey' }
-  | { type: 'pickEnv' };
+  | { type: 'pickEnv' }
+  | { type: 'switchEnv' };
+
+type EnvQuickPickItem = vscode.QuickPickItem & {
+  kind?: vscode.QuickPickItemKind;
+  envRoot?: string;
+  browse?: boolean;
+};
 
 export class EnvValuesEditorService {
   private panel: vscode.WebviewPanel | undefined;
   private model: EnvValuesModel | undefined;
   private selectedPath: string | undefined;
+  /** Display label for the open ENV set (bundle / project name). */
+  private envLabel: string | undefined;
 
   constructor(private readonly context: vscode.ExtensionContext) {}
 
@@ -52,33 +60,11 @@ export class EnvValuesEditorService {
   }
 
   private async openEditor(): Promise<void> {
-    const store = getSharedProjectRegistryStore();
-    const projects = store.getProjectsInScope();
-
-    if (projects.length === 0) {
-      void vscode.window.showErrorMessage('No Policy Studio projects in the current scope.');
-      return;
-    }
-
-    let project = pickProjectRootForEnvEditor(projects, store.getScope());
-    if (!project) {
-      const picked = await vscode.window.showQuickPick(
-        projects.map((entry) => ({
-          label: entry.displayName,
-          description: entry.relativePath || entry.rootPath,
-          project: entry,
-        })),
-        { placeHolder: 'Select a project for the ENV values editor' },
-      );
-      project = picked?.project;
-    }
-
-    if (!project) {
-      return;
-    }
-
-    const envRoot = await this.resolveEnvRoot(resolveSiblingEnvRoot(project.rootPath));
-    if (!envRoot) {
+    const selection = await this.pickEnvRoot({
+      placeHolder: 'Select which ENV values to edit (type to filter)',
+      allowCancel: true,
+    });
+    if (!selection) {
       return;
     }
 
@@ -86,7 +72,77 @@ export class EnvValuesEditorService {
       return;
     }
 
-    this.loadAndShow(envRoot);
+    this.loadAndShow(selection.envRoot, selection.label);
+  }
+
+  /**
+   * Searchable Quick Pick of in-scope projects that have a sibling ENV/,
+   * plus Browse ENV folder….
+   */
+  private async pickEnvRoot(options: {
+    placeHolder: string;
+    allowCancel: boolean;
+  }): Promise<{ envRoot: string; label: string } | undefined> {
+    const store = getSharedProjectRegistryStore();
+    const projects = store.getProjectsInScope();
+    const candidates = listEnvRootsForProjects(projects);
+
+    if (candidates.length === 0 && projects.length === 0) {
+      void vscode.window.showErrorMessage('No Policy Studio projects in the current scope.');
+      return undefined;
+    }
+
+    if (candidates.length === 1) {
+      const only = candidates[0];
+      // Still offer browse via explicit toolbar later; open the only match directly.
+      return { envRoot: only.envRoot, label: formatCandidateLabel(only) };
+    }
+
+    const items: EnvQuickPickItem[] = [
+      ...candidates.map((candidate) => ({
+        label: formatCandidateLabel(candidate),
+        description: candidate.project.relativePath || candidate.project.rootPath,
+        detail: `Stages: ${candidate.stageIds.join(', ')} — ${candidate.envRoot}`,
+        envRoot: candidate.envRoot,
+      })),
+      { label: '', kind: vscode.QuickPickItemKind.Separator },
+      {
+        label: BROWSE_ENV_FOLDER_LABEL,
+        description: 'Choose any ENV folder on disk',
+        browse: true,
+      },
+    ];
+
+    if (candidates.length === 0) {
+      void vscode.window.showWarningMessage(
+        'No sibling ENV/ folders with values.yaml were found for projects in scope. Browse to pick one, or check project scope.',
+      );
+    }
+
+    const picked = await vscode.window.showQuickPick(items, {
+      placeHolder: options.placeHolder,
+      matchOnDescription: true,
+      matchOnDetail: true,
+      ignoreFocusOut: true,
+    });
+
+    if (!picked) {
+      return options.allowCancel ? undefined : undefined;
+    }
+
+    if (picked.browse) {
+      const folder = await this.pickEnvFolder();
+      if (!folder) {
+        return undefined;
+      }
+      return { envRoot: folder, label: path.basename(path.dirname(folder)) || path.basename(folder) };
+    }
+
+    if (!picked.envRoot) {
+      return undefined;
+    }
+
+    return { envRoot: picked.envRoot, label: picked.label };
   }
 
   private hasDirtyDocuments(): boolean {
@@ -108,24 +164,6 @@ export class EnvValuesEditorService {
     return confirm === DISCARD_ACTION;
   }
 
-  private async resolveEnvRoot(sibling: string): Promise<string | undefined> {
-    if (fs.existsSync(sibling)) {
-      return sibling;
-    }
-
-    const choice = await vscode.window.showWarningMessage(
-      `No ENV folder found next to the project (expected ${sibling}).`,
-      { modal: true },
-      PICK_ENV_FOLDER_ACTION,
-    );
-
-    if (choice !== PICK_ENV_FOLDER_ACTION) {
-      return undefined;
-    }
-
-    return this.pickEnvFolder();
-  }
-
   private async pickEnvFolder(): Promise<string | undefined> {
     const folders = await vscode.window.showOpenDialog({
       canSelectFiles: false,
@@ -137,10 +175,11 @@ export class EnvValuesEditorService {
     return folders?.[0]?.fsPath;
   }
 
-  private loadAndShow(envRoot: string): void {
+  private loadAndShow(envRoot: string, label?: string): void {
     try {
       this.model = loadEnvValuesSession(envRoot);
       this.selectedPath = undefined;
+      this.envLabel = label ?? path.basename(path.dirname(envRoot)) ?? path.basename(envRoot);
       this.showPanel();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -181,12 +220,17 @@ export class EnvValuesEditorService {
     if (!this.panel || !this.model) {
       return;
     }
-    this.panel.title = `ENV values editor: ${path.basename(this.model.envRoot)}`;
-    this.panel.webview.html = renderEnvValuesEditorHtml(this.model, this.selectedPath);
+    const titleLabel = this.envLabel ?? path.basename(this.model.envRoot);
+    this.panel.title = `ENV values: ${titleLabel}`;
+    this.panel.webview.html = renderEnvValuesEditorHtml(
+      this.model,
+      this.selectedPath,
+      titleLabel,
+    );
   }
 
   private async handleMessage(message: IncomingMessage): Promise<void> {
-    if (!this.model) {
+    if (!this.model && message.type !== 'switchEnv' && message.type !== 'pickEnv') {
       return;
     }
 
@@ -199,10 +243,16 @@ export class EnvValuesEditorService {
         this.render();
         break;
       case 'setValue':
+        if (!this.model) {
+          return;
+        }
         this.model = setLeafValue(this.model, message.path, message.stageId, message.value);
         this.render();
         break;
       case 'createMissing':
+        if (!this.model) {
+          return;
+        }
         this.model = createMissing(this.model, message.path, message.stageId);
         this.render();
         break;
@@ -221,7 +271,26 @@ export class EnvValuesEditorService {
       case 'pickEnv':
         await this.handlePickEnv();
         break;
+      case 'switchEnv':
+        await this.handleSwitchEnv();
+        break;
     }
+  }
+
+  private async handleSwitchEnv(): Promise<void> {
+    const selection = await this.pickEnvRoot({
+      placeHolder: 'Switch ENV values set (type to filter)',
+      allowCancel: true,
+    });
+    if (!selection) {
+      return;
+    }
+
+    if (!(await this.confirmDiscardIfDirty())) {
+      return;
+    }
+
+    this.loadAndShow(selection.envRoot, selection.label);
   }
 
   private async handleAddKey(): Promise<void> {
@@ -314,12 +383,13 @@ export class EnvValuesEditorService {
     }
 
     const envRoot = this.model.envRoot;
+    const label = this.envLabel;
 
     if (!(await this.confirmDiscardIfDirty())) {
       return;
     }
 
-    this.loadAndShow(envRoot);
+    this.loadAndShow(envRoot, label);
   }
 
   private async handlePickEnv(): Promise<void> {
@@ -334,4 +404,11 @@ export class EnvValuesEditorService {
 
     this.loadAndShow(folder);
   }
+}
+
+function formatCandidateLabel(candidate: EnvRootCandidate): string {
+  if (candidate.bundleName && candidate.bundleName !== candidate.project.displayName) {
+    return `${candidate.bundleName} — ${candidate.project.displayName}`;
+  }
+  return candidate.project.displayName;
 }

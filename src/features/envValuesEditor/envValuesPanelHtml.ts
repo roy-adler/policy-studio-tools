@@ -157,14 +157,18 @@ function getStyles(): string {
   </style>`;
 }
 
-function getToolbarHtml(dirtyCount: number): string {
+function getToolbarHtml(dirtyCount: number, envLabel?: string): string {
+  const title = envLabel
+    ? `ENV values — ${escapeHtml(envLabel)}`
+    : 'ENV values editor';
   return `<header>
-    <span class="title">ENV values editor</span>
+    <span class="title">${title}</span>
     <div class="toolbar">
       <button id="save">Save${dirtyCount > 0 ? ` (${dirtyCount})` : ''}</button>
       <button id="reload">Reload</button>
       <button id="addKey">Add key</button>
       <button id="removeKey">Remove key</button>
+      <button id="switchEnv">Switch ENV…</button>
       <button id="pickEnv">Open ENV folder…</button>
     </div>
   </header>`;
@@ -333,7 +337,11 @@ function renderBanner(model: EnvValuesModel): string {
   return parts.join('');
 }
 
-export function renderEnvValuesEditorHtml(model: EnvValuesModel, selectedPath?: string): string {
+export function renderEnvValuesEditorHtml(
+  model: EnvValuesModel,
+  selectedPath?: string,
+  envLabel?: string,
+): string {
   const nonce = createNonce();
   const dirtyCount = Object.values(model.documents).filter((document) => document.dirty).length;
   const modelJson = JSON.stringify(model).replace(/</g, '\\u003c');
@@ -352,7 +360,7 @@ export function renderEnvValuesEditorHtml(model: EnvValuesModel, selectedPath?: 
   ${getStyles()}
 </head>
 <body>
-  ${getToolbarHtml(dirtyCount)}
+  ${getToolbarHtml(dirtyCount, envLabel)}
   ${renderBanner(model)}
   <div id="body">
     ${bodyHtml}
@@ -399,6 +407,9 @@ export function renderEnvValuesEditorHtml(model: EnvValuesModel, selectedPath?: 
     });
     document.getElementById('removeKey').addEventListener('click', () => {
       vscode.postMessage({ type: 'removeKey' });
+    });
+    document.getElementById('switchEnv').addEventListener('click', () => {
+      vscode.postMessage({ type: 'switchEnv' });
     });
     document.getElementById('pickEnv').addEventListener('click', () => {
       vscode.postMessage({ type: 'pickEnv' });

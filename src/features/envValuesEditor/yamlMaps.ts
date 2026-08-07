@@ -309,7 +309,12 @@ function parseSequence(lines: LogicalLine[], startPos: number, indent: number): 
       throw new Error(`Unexpected indentation at line ${line.lineNo}`);
     }
     if (!isListItem(line.content)) {
-      throw new Error(`Cannot mix mapping and sequence entries at line ${line.lineNo}`);
+      // Same-indent mapping key ends this sequence and belongs to the parent
+      // mapping (common after compact lists):
+      //   sslTrustedCerts:
+      //   - a
+      //   sslCertificate: /path
+      break;
     }
 
     const itemContent = line.content === '-' ? '' : line.content.slice(2).trim();
@@ -335,15 +340,95 @@ function parseSequence(lines: LogicalLine[], startPos: number, indent: number): 
       arr.push(value);
       pos = nextPos;
     } else if (findTopLevelColonIndex(itemStructural) !== -1) {
-      throw new Error(
-        `Sequence items with inline mapping keys are not supported at line ${line.lineNo}`,
+      // Inline mapping on the dash line, with optional continuation keys:
+      //   - Name: foo
+      //     Value: bar
+      const [value, nextPos] = parseInlineSequenceMapping(
+        lines,
+        pos,
+        indent,
+        itemStructural,
+        line.lineNo,
       );
+      arr.push(value);
+      pos = nextPos;
     } else {
       arr.push(parseScalar(itemStructural, line.lineNo));
     }
   }
 
   return [arr, pos];
+}
+
+/**
+ * Parse a sequence item that starts as `- key: value` and may continue with
+ * more keys indented past the dash column.
+ */
+function parseInlineSequenceMapping(
+  lines: LogicalLine[],
+  pos: number,
+  sequenceIndent: number,
+  firstPair: string,
+  lineNo: number,
+): [Record<string, YamlValue>, number] {
+  const obj: Record<string, YamlValue> = {};
+  const { key, rest } = splitKeyValue(firstPair, lineNo);
+
+  if (rest === '') {
+    pos = skipBlanks(lines, pos);
+    if (pos < lines.length && lines[pos].indent > sequenceIndent) {
+      // Could be nested structure under this key; require indent > dash content
+      // column. Dash is at sequenceIndent; content typically at sequenceIndent+2.
+      const childIndent = lines[pos].indent;
+      if (childIndent > sequenceIndent + 1) {
+        const [value, nextPos] = parseNode(lines, pos, childIndent);
+        obj[key] = value;
+        pos = nextPos;
+      } else {
+        obj[key] = null;
+      }
+    } else {
+      obj[key] = null;
+    }
+  } else if (BLOCK_SCALAR_INDICATOR.test(rest)) {
+    const [value, nextPos] = parseBlockScalar(lines, pos, sequenceIndent, rest, lineNo);
+    obj[key] = value;
+    pos = nextPos;
+  } else {
+    obj[key] = parseScalar(rest, lineNo);
+  }
+
+  // Continuation keys: indented further than the `-` marker (sequenceIndent).
+  while (pos < lines.length) {
+    pos = skipBlanks(lines, pos);
+    if (pos >= lines.length) {
+      break;
+    }
+    const line = lines[pos];
+    if (line.indent <= sequenceIndent || isListItem(line.content)) {
+      break;
+    }
+    const { key: contKey, rest: contRest } = splitKeyValue(line.content, line.lineNo);
+    pos++;
+    if (contRest === '') {
+      pos = skipBlanks(lines, pos);
+      if (pos < lines.length && lines[pos].indent > line.indent) {
+        const [value, nextPos] = parseNode(lines, pos, lines[pos].indent);
+        obj[contKey] = value;
+        pos = nextPos;
+      } else {
+        obj[contKey] = null;
+      }
+    } else if (BLOCK_SCALAR_INDICATOR.test(contRest)) {
+      const [value, nextPos] = parseBlockScalar(lines, pos, line.indent, contRest, line.lineNo);
+      obj[contKey] = value;
+      pos = nextPos;
+    } else {
+      obj[contKey] = parseScalar(contRest, line.lineNo);
+    }
+  }
+
+  return [obj, pos];
 }
 
 function parseNode(lines: LogicalLine[], pos: number, indent: number): [YamlValue, number] {

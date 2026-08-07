@@ -22,6 +22,7 @@ As a Policy Studio developer, I want to see and edit all environment `values.yam
     KPS/                   ← ignored
   ```
 - **Optional override:** Folder picker when sibling `ENV/` is missing or the user chooses “Open ENV folder…”.
+- **Monorepo ENV switcher:** When multiple projects in scope have a sibling `ENV/`, the user picks which ENV set to edit via a searchable Quick Pick (filter by policy/project name or path). The webview toolbar exposes **Switch ENV…** (same picker) and **Open ENV folder…**.
 - **Stage files:** Every immediate child directory of `ENV/` that contains a `values.yaml`.
 - **YAML shape (v1):** Nested maps with scalar leaf values (string/number/boolean/null). Lists are out of scope as first-class editable values.
 - VS Code command: `policyStudioTools.openEnvValuesEditor`.
@@ -40,11 +41,15 @@ As a Policy Studio developer, I want to see and edit all environment `values.yam
 
 ### Discovery
 
-1. Resolve the active project root from the project registry.
-2. Look for `../ENV` relative to that project root (sibling).
-3. If found, list immediate subdirectories that contain `values.yaml`; each subdirectory name is the stage id (e.g. `DEVL`).
-4. If not found, prompt the user to pick an `ENV` folder (or cancel with a clear message).
+1. Collect Policy Studio projects from `getProjectsInScope()` (`000`).
+2. For each project, resolve sibling `../ENV`. Keep candidates that exist and contain at least one stage `values.yaml`.
+3. **ENV selection:**
+   - **0 candidates:** offer folder picker (or clear error if cancelled).
+   - **1 candidate:** open it directly (still allow Switch ENV / Open folder later).
+   - **2+ candidates:** show a searchable Quick Pick (VS Code filter) listing policy/project display name, relative path, and stage ids; include a **Browse ENV folder…** item.
+4. For the chosen ENV root, list immediate subdirectories that contain `values.yaml`; each subdirectory name is the stage id (e.g. `DEVL`).
 5. Ignore `Certificate Store` and any other content that is not a stage `values.yaml` for v1 editing.
+6. **Switch ENV…** in the editor re-runs the picker (with dirty-discard confirm if needed) and reloads the panel.
 
 ### Model
 
@@ -77,14 +82,15 @@ As a Policy Studio developer, I want to see and edit all environment `values.yam
 - **Stage folder without values.yaml:** Skip that folder (not a stage).
 - **Invalid YAML in one stage:** Report error for that stage; keep other stages editable.
 - **Empty ENV (no stages):** Show empty state explaining expected layout.
-- **Multi-project monorepo:** Use active project only for sibling resolution.
+- **Multi-project monorepo:** Offer a searchable picker of all in-scope projects that have a sibling `ENV/`; do not silently pick only the active project when several ENVs exist.
 - **User-picked ENV unrelated to project:** Allowed; discovery runs on the picked folder.
 - **Concurrent external edits:** No live watch in v1; Reload picks up disk changes.
 - **Large nested trees:** Tree should remain usable (expand/collapse); no hard limit required for v1 beyond reasonable fixture sizes.
 
 ## Acceptance Criteria
 
-- [ ] Command `policyStudioTools.openEnvValuesEditor` opens the editor for the active project’s sibling `ENV/` when present.
+- [ ] Command `policyStudioTools.openEnvValuesEditor` opens the editor for a chosen sibling `ENV/` (direct open when only one; searchable picker when several).
+- [ ] Toolbar can Switch ENV… (searchable) and Open ENV folder….
 - [ ] Stages are auto-discovered from `ENV/<stage>/values.yaml`.
 - [ ] Split-pane UI: key tree left, per-stage values right for the selected path.
 - [ ] Empty leaf values do not produce missing-key warnings.
