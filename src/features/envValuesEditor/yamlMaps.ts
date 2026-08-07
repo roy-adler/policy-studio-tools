@@ -261,6 +261,18 @@ function parseMapping(
         const [value, nextPos] = parseNode(lines, pos, childIndent);
         obj[key] = value;
         pos = nextPos;
+      } else if (
+        pos < lines.length &&
+        lines[pos].indent === indent &&
+        isListItem(lines[pos].content)
+      ) {
+        // Compact form: sequence value shares the mapping entry indent
+        //   sslTrustedCerts:
+        //   - item1
+        //   - item2
+        const [value, nextPos] = parseSequence(lines, pos, indent);
+        obj[key] = value;
+        pos = nextPos;
       } else {
         obj[key] = null;
       }

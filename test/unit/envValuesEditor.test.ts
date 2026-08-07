@@ -56,6 +56,62 @@ describe('env values discovery', () => {
 });
 
 describe('env values model', () => {
+  it('parses compact sequences where list items share the key indent', () => {
+    const yaml = [
+      'Cassandra_Settings:',
+      '  passwords: |-',
+      '    LONG_PASSWORD',
+      '  sslCertificate: /Environment Configuration/Certificate Store/FileName1.fileending',
+      '  sslTrustedCerts:',
+      '  - /Environment Configuration/Certificate Store/FileName2',
+      '  - /Environment Configuration/Certificate Store/FileName3',
+      '',
+    ].join('\n');
+
+    const parsed = parseEnvValuesYaml(yaml);
+    expect(parsed.error).toBeUndefined();
+    expect(parsed.data).toEqual({
+      Cassandra_Settings: {
+        passwords: 'LONG_PASSWORD',
+        sslCertificate: '/Environment Configuration/Certificate Store/FileName1.fileending',
+        sslTrustedCerts: [
+          '/Environment Configuration/Certificate Store/FileName2',
+          '/Environment Configuration/Certificate Store/FileName3',
+        ],
+      },
+    });
+  });
+
+  it('loads stages with compact sequences and still exposes scalar leaves', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'env-compact-seq-'));
+    const compactEnv = path.join(tmp, 'ENV');
+    fs.mkdirSync(path.join(compactEnv, 'DEVL'), { recursive: true });
+    fs.writeFileSync(
+      path.join(compactEnv, 'DEVL', 'values.yaml'),
+      [
+        'Cassandra_Settings:',
+        '  passwords: |-',
+        '    LONG_PASSWORD',
+        '  sslTrustedCerts:',
+        '  - /path/one',
+        '  - /path/two',
+        '',
+      ].join('\n'),
+    );
+
+    const model = loadEnvValuesSession(compactEnv);
+    expect(model.documents.DEVL.parseError).toBeUndefined();
+    expect(findLeaf(model.tree, 'Cassandra_Settings.passwords')?.cells?.DEVL).toEqual({
+      kind: 'value',
+      value: 'LONG_PASSWORD',
+    });
+    expect(
+      model.warnings.some(
+        (w) => w.includes('Cassandra_Settings.sslTrustedCerts') && w.toLowerCase().includes('array'),
+      ),
+    ).toBe(true);
+  });
+
   it('treats empty string as present value, not missing', () => {
     const parsed = parseEnvValuesYaml('A:\n  AA: ""\n');
     expect(parsed.error).toBeUndefined();
