@@ -246,14 +246,10 @@
     "vscode:publish": "vsce publish --no-dependencies --no-update-package-json"
   },
   "devDependencies": {
-    "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.10.0",
     "@types/vscode": "^1.85.0",
     "@vscode/vsce": "^3.2.1",
     "typescript": "^5.7.2",
     "vitest": "^3.0.0"
-  },
-  "dependencies": {
-    "js-yaml": "^5.2.3"
   }
 }

@@ -1,4 +1,3 @@
-import { load } from 'js-yaml';
 import type {
   EnvCellState,
   EnvScalar,
@@ -7,21 +6,10 @@ import type {
   EnvTreeNode,
   EnvValuesModel,
 } from './types';
+import { parseMappingYaml } from './yamlMaps';
 
 export function parseEnvValuesYaml(text: string): { data: Record<string, unknown>; error?: string } {
-  try {
-    const loaded = load(text);
-    if (loaded === null || loaded === undefined) {
-      return { data: {}, error: 'Root must be a YAML mapping' };
-    }
-    if (!isPlainObject(loaded)) {
-      return { data: {}, error: 'Root must be a YAML mapping' };
-    }
-    return { data: loaded };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return { data: {}, error: message };
-  }
+  return parseMappingYaml(text);
 }
 
 export function isPlainObject(value: unknown): value is Record<string, unknown> {

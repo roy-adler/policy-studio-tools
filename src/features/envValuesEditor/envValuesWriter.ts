@@ -1,6 +1,6 @@
 import * as fs from 'fs';
-import { dump } from 'js-yaml';
 import type { EnvValuesModel } from './types';
+import { dumpMappingYaml } from './yamlMaps';
 
 export function writeDirtyEnvDocuments(model: EnvValuesModel): {
   written: string[];
@@ -13,12 +13,13 @@ export function writeDirtyEnvDocuments(model: EnvValuesModel): {
     if (!doc.dirty || doc.parseError) {
       continue;
     }
-    const text = dump(doc.data, {
-      lineWidth: -1,
-      noRefs: true,
-      sortKeys: false,
-    });
-    fs.writeFileSync(doc.filePath, text, 'utf8');
+    const text = dumpMappingYaml(doc.data);
+    try {
+      fs.writeFileSync(doc.filePath, text, 'utf8');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Failed to write "${doc.filePath}": ${message}`);
+    }
     written.push(doc.filePath);
     documents[stageId] = { ...doc, dirty: false };
   }
