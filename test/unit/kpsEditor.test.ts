@@ -8,6 +8,14 @@ import {
 } from '../../src/features/kpsEditor/discoverKpsStages';
 import { loadKpsSession } from '../../src/features/kpsEditor/loadKpsSession';
 import { buildKpsSession } from '../../src/features/kpsEditor/kpsTableModel';
+import {
+  addRow,
+  createMissing,
+  isSessionDirty,
+  removeRow,
+  setCell,
+} from '../../src/features/kpsEditor/kpsTableMutations';
+import { writeDirtyKpsTables } from '../../src/features/kpsEditor/kpsTableWriter';
 
 const sampleRoot = path.join(__dirname, '..', 'fixtures', 'kps-editor', 'sample');
 const policyRoot = path.join(sampleRoot, 'POLICY_yaml');
@@ -102,5 +110,68 @@ describe('kps session model', () => {
     expect(table.stages.DEVL.rows[0].cells.name?.editable).toBe(true);
     expect(table.stages.DEVL.rows[0].cells.meta?.editable).toBe(false);
     expect(table.stages.DEVL.rows[0].extra.meta).toEqual({ nested: true });
+  });
+});
+
+describe('kps mutations and writer', () => {
+  function cloneSession(): ReturnType<typeof loadKpsSession> {
+    return loadKpsSession(kpsRoot);
+  }
+
+  it('edits a cell on the active stage and preserves number type', () => {
+    const session = cloneSession();
+    const table = 'T_CC_Sample_Routes.json';
+    // seed a number cell
+    session.tables[table].stages.DEVL.rows[0].cells.count = {
+      editable: true,
+      value: 1,
+    };
+    session.tables[table].columns.push('count');
+    setCell(session, table, 'DEVL', 0, 'count', '42');
+    expect(session.tables[table].stages.DEVL.rows[0].cells.count?.value).toBe(42);
+    expect(session.tables[table].stages.DEVL.dirty).toBe(true);
+    expect(session.tables[table].stages.TEST.dirty).toBe(false);
+  });
+
+  it('adds and removes rows on the active stage only', () => {
+    const session = cloneSession();
+    const table = 'T_CC_Sample_WebServices.json';
+    const beforeTest = session.tables[table].stages.TEST.rows.length;
+    addRow(session, table, 'DEVL');
+    expect(session.tables[table].stages.DEVL.rows).toHaveLength(3);
+    expect(session.tables[table].stages.TEST.rows).toHaveLength(beforeTest);
+    const newRow = session.tables[table].stages.DEVL.rows[2];
+    expect(newRow.cells.name?.value).toBe('');
+    removeRow(session, table, 'DEVL', 2);
+    expect(session.tables[table].stages.DEVL.rows).toHaveLength(2);
+  });
+
+  it('creates a missing stage file as empty array and marks dirty', () => {
+    const session = cloneSession();
+    const table = 'T_CC_Sample_Routes.json';
+    expect(session.tables[table].stages.HUTL.status).toBe('missing');
+    createMissing(session, table, 'HUTL');
+    expect(session.tables[table].stages.HUTL.status).toBe('present');
+    expect(session.tables[table].stages.HUTL.rows).toEqual([]);
+    expect(session.tables[table].stages.HUTL.dirty).toBe(true);
+    expect(isSessionDirty(session)).toBe(true);
+  });
+
+  it('writes only dirty stage files with pretty JSON', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kps-write-'));
+    const tmpKps = path.join(tmp, 'KPS');
+    fs.cpSync(kpsRoot, tmpKps, { recursive: true });
+    const session = loadKpsSession(tmpKps);
+    const table = 'T_CC_Sample_WebServices.json';
+    setCell(session, table, 'DEVL', 0, 'version', '9.9.9');
+    const result = writeDirtyKpsTables(session);
+    expect(result.written).toHaveLength(1);
+    expect(result.written[0]).toContain(`${path.sep}DEVL${path.sep}`);
+    const written = JSON.parse(fs.readFileSync(session.tables[table].stages.DEVL.filePath, 'utf8'));
+    expect(written[0].version).toBe('9.9.9');
+    expect(session.tables[table].stages.DEVL.dirty).toBe(false);
+    const raw = fs.readFileSync(session.tables[table].stages.DEVL.filePath, 'utf8');
+    expect(raw.endsWith('\n')).toBe(true);
+    expect(raw).toContain('\n    {');
   });
 });

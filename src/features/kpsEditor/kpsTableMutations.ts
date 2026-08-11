@@ -1,0 +1,127 @@
+import type { KpsRow, KpsScalar, KpsSession, KpsStageTable } from './types';
+
+function requirePresentStage(
+  session: KpsSession,
+  tableName: string,
+  stageId: string,
+): KpsStageTable {
+  const table = session.tables[tableName];
+  if (!table) {
+    throw new Error(`Unknown table: ${tableName}`);
+  }
+  const stage = table.stages[stageId];
+  if (!stage) {
+    throw new Error(`Unknown stage: ${stageId}`);
+  }
+  if (stage.status !== 'present') {
+    throw new Error(`Stage ${stageId} is not editable (status=${stage.status})`);
+  }
+  return stage;
+}
+
+function coerceCellValue(previous: KpsScalar | undefined, text: string): KpsScalar {
+  if (typeof previous === 'number') {
+    const trimmed = text.trim();
+    if (trimmed !== '' && !Number.isNaN(Number(trimmed))) {
+      return Number(trimmed);
+    }
+  }
+  if (typeof previous === 'boolean') {
+    if (text === 'true') {
+      return true;
+    }
+    if (text === 'false') {
+      return false;
+    }
+  }
+  if (previous === null && text === '') {
+    return null;
+  }
+  return text;
+}
+
+export function setCell(
+  session: KpsSession,
+  tableName: string,
+  stageId: string,
+  rowIndex: number,
+  column: string,
+  text: string,
+): void {
+  const stage = requirePresentStage(session, tableName, stageId);
+  const row = stage.rows[rowIndex];
+  if (!row) {
+    throw new Error(`Row index out of range: ${rowIndex}`);
+  }
+  const existing = row.cells[column];
+  if (existing && !existing.editable) {
+    throw new Error(`Cell "${column}" is not editable`);
+  }
+  const previous = existing?.value;
+  row.cells[column] = {
+    editable: true,
+    value: coerceCellValue(previous, text),
+  };
+  stage.dirty = true;
+}
+
+function emptyRow(columns: string[]): KpsRow {
+  const cells: KpsRow['cells'] = {};
+  for (const column of columns) {
+    cells[column] = { editable: true, value: '' };
+  }
+  return { cells, extra: {} };
+}
+
+export function addRow(session: KpsSession, tableName: string, stageId: string): void {
+  const table = session.tables[tableName];
+  if (!table) {
+    throw new Error(`Unknown table: ${tableName}`);
+  }
+  const stage = requirePresentStage(session, tableName, stageId);
+  stage.rows.push(emptyRow(table.columns));
+  stage.dirty = true;
+}
+
+export function removeRow(
+  session: KpsSession,
+  tableName: string,
+  stageId: string,
+  rowIndex: number,
+): void {
+  const stage = requirePresentStage(session, tableName, stageId);
+  if (rowIndex < 0 || rowIndex >= stage.rows.length) {
+    throw new Error(`Row index out of range: ${rowIndex}`);
+  }
+  stage.rows.splice(rowIndex, 1);
+  stage.dirty = true;
+}
+
+export function createMissing(session: KpsSession, tableName: string, stageId: string): void {
+  const table = session.tables[tableName];
+  if (!table) {
+    throw new Error(`Unknown table: ${tableName}`);
+  }
+  const stage = table.stages[stageId];
+  if (!stage) {
+    throw new Error(`Unknown stage: ${stageId}`);
+  }
+  if (stage.status !== 'missing') {
+    throw new Error(`Stage ${stageId} is not missing`);
+  }
+  stage.status = 'present';
+  stage.rows = [];
+  stage.parseError = undefined;
+  stage.dirty = true;
+}
+
+export function isSessionDirty(session: KpsSession): boolean {
+  for (const table of Object.values(session.tables)) {
+    for (const stage of Object.values(table.stages)) {
+      if (stage.dirty) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
