@@ -24,6 +24,7 @@ import {
   resolveKpsOpenDecision,
 } from '../../src/features/kpsEditor/resolveKpsSelection';
 import { KPS_EDITOR_TOOL } from '../../src/features/kpsEditor/toolDescriptor';
+import { renderKpsEditorHtml } from '../../src/features/kpsEditor/kpsPanelHtml';
 import type { PolicyStudioProject } from '../../src/features/projectRegistry/types';
 
 const sampleRoot = path.join(__dirname, '..', 'fixtures', 'kps-editor', 'sample');
@@ -303,5 +304,26 @@ describe('kps selection and tool descriptor', () => {
         '/repo/a/KPS',
       ),
     ).toEqual({ kind: 'switch', candidate: candidates[1] });
+  });
+});
+
+describe('kps panel html', () => {
+  it('renders layout B with table tabs, stage tabs, and grid columns', () => {
+    const session = loadKpsSession(kpsRoot);
+    const html = renderKpsEditorHtml(session, {
+      cspSource: 'https://example',
+      tableName: 'T_CC_Sample_WebServices.json',
+      stageId: 'DEVL',
+      kpsLabel: 'sample',
+      nonce: 'testnonce',
+    });
+    expect(html).toContain('T_CC_Sample_WebServices');
+    expect(html).toContain('T_CC_Sample_Routes');
+    expect(html).toContain('DEVL');
+    expect(html).toContain('TEST');
+    expect(html).toContain('HUTL');
+    expect(html).toContain('<th>name</th>');
+    expect(html).toContain('Add row');
+    expect(html).toContain('Switch KPS');
   });
 });
