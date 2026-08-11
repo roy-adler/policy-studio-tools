@@ -16,6 +16,15 @@ import {
   setCell,
 } from '../../src/features/kpsEditor/kpsTableMutations';
 import { writeDirtyKpsTables } from '../../src/features/kpsEditor/kpsTableWriter';
+import { listKpsRootsForProjects } from '../../src/features/kpsEditor/listKpsRoots';
+import type { KpsRootCandidate } from '../../src/features/kpsEditor/listKpsRoots';
+import { pickProjectRootForKpsEditor } from '../../src/features/kpsEditor/pickProjectRootForKpsEditor';
+import {
+  resolveKpsFollowActiveProject,
+  resolveKpsOpenDecision,
+} from '../../src/features/kpsEditor/resolveKpsSelection';
+import { KPS_EDITOR_TOOL } from '../../src/features/kpsEditor/toolDescriptor';
+import type { PolicyStudioProject } from '../../src/features/projectRegistry/types';
 
 const sampleRoot = path.join(__dirname, '..', 'fixtures', 'kps-editor', 'sample');
 const policyRoot = path.join(sampleRoot, 'POLICY_yaml');
@@ -173,5 +182,126 @@ describe('kps mutations and writer', () => {
     const raw = fs.readFileSync(session.tables[table].stages.DEVL.filePath, 'utf8');
     expect(raw.endsWith('\n')).toBe(true);
     expect(raw).toContain('\n    {');
+  });
+});
+
+describe('kps selection and tool descriptor', () => {
+  it('lists KPS roots for projects that have sibling KPS stages', () => {
+    const project: PolicyStudioProject = {
+      id: 'sample',
+      displayName: 'POLICY_yaml',
+      rootPath: policyRoot,
+      workspaceFolder: sampleRoot,
+      relativePath: 'POLICY_yaml',
+      projectType: 'yaml',
+    };
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kps-no-sibling-'));
+    const bareRoot = path.join(tmp, 'POLICY_yaml');
+    fs.mkdirSync(bareRoot);
+    const withoutKps: PolicyStudioProject = {
+      id: 'bare',
+      displayName: 'bare',
+      rootPath: bareRoot,
+      workspaceFolder: tmp,
+      relativePath: 'POLICY_yaml',
+      projectType: 'yaml',
+    };
+    const listed = listKpsRootsForProjects([withoutKps, project]);
+    expect(listed).toHaveLength(1);
+    expect(listed[0].kpsRoot).toBe(path.resolve(kpsRoot));
+    expect(listed[0].stageIds.sort()).toEqual(['DEVL', 'HUTL', 'TEST']);
+    expect(listed[0].tableNames).toContain('T_CC_Sample_WebServices.json');
+  });
+
+  it('registers under Analyze with openKpsEditor command', () => {
+    expect(KPS_EDITOR_TOOL.group).toBe('analyze');
+    expect(KPS_EDITOR_TOOL.command).toBe('policyStudioTools.openKpsEditor');
+    expect(KPS_EDITOR_TOOL.available).toBe(true);
+  });
+
+  it('prefers the active project when opening KPS', () => {
+    const projectA: PolicyStudioProject = {
+      id: 'a',
+      rootPath: '/repo/NAME_ONE/NAME_ONE_YAML',
+      workspaceFolder: '/repo',
+      relativePath: 'NAME_ONE/NAME_ONE_YAML',
+      displayName: 'NAME_ONE_YAML',
+      projectType: 'yaml',
+    };
+    const projectB: PolicyStudioProject = {
+      id: 'b',
+      rootPath: '/repo/PAYMENT_API/PAYMENT_API_YAML',
+      workspaceFolder: '/repo',
+      relativePath: 'PAYMENT_API/PAYMENT_API_YAML',
+      displayName: 'PAYMENT_API_YAML',
+      projectType: 'yaml',
+    };
+    const candidateA: KpsRootCandidate = {
+      kpsRoot: '/repo/NAME_ONE/KPS',
+      project: projectA,
+      bundleName: 'NAME_ONE',
+      stageIds: ['DEVL'],
+      tableNames: ['a.json'],
+    };
+    const candidateB: KpsRootCandidate = {
+      kpsRoot: '/repo/PAYMENT_API/KPS',
+      project: projectB,
+      bundleName: 'PAYMENT_API',
+      stageIds: ['DEVL'],
+      tableNames: ['b.json'],
+    };
+    expect(
+      resolveKpsOpenDecision([candidateA, candidateB], {
+        mode: 'activeProject',
+        activeProjectId: 'b',
+      }),
+    ).toEqual({ kind: 'open', candidate: candidateB });
+    expect(resolveKpsOpenDecision([candidateA, candidateB], { mode: 'allProjects' })).toEqual({
+      kind: 'pick',
+    });
+    expect(pickProjectRootForKpsEditor([projectA, projectB], { mode: 'allProjects' })).toBeUndefined();
+  });
+
+  it('follows active project to a different KPS root', () => {
+    const projectA: PolicyStudioProject = {
+      id: 'a',
+      rootPath: '/repo/a/yaml',
+      workspaceFolder: '/repo',
+      relativePath: 'a/yaml',
+      displayName: 'A',
+      projectType: 'yaml',
+    };
+    const projectB: PolicyStudioProject = {
+      id: 'b',
+      rootPath: '/repo/b/yaml',
+      workspaceFolder: '/repo',
+      relativePath: 'b/yaml',
+      displayName: 'B',
+      projectType: 'yaml',
+    };
+    const candidates: KpsRootCandidate[] = [
+      {
+        kpsRoot: '/repo/a/KPS',
+        project: projectA,
+        bundleName: 'a',
+        stageIds: ['DEVL'],
+        tableNames: ['t.json'],
+      },
+      {
+        kpsRoot: '/repo/b/KPS',
+        project: projectB,
+        bundleName: 'b',
+        stageIds: ['DEVL'],
+        tableNames: ['t.json'],
+      },
+    ];
+    expect(
+      resolveKpsFollowActiveProject(
+        candidates,
+        [projectA, projectB],
+        { mode: 'activeProject', activeProjectId: 'b' },
+        '/repo/a/KPS',
+      ),
+    ).toEqual({ kind: 'switch', candidate: candidates[1] });
   });
 });
