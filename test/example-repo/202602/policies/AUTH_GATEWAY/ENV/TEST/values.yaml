@@ -4,7 +4,7 @@ Service:
     Auth_Monitor:
       serviceCert: /Environment/Development/serviceCert.pem
     Auth_API:
-      serviceCert: /Environment/Development/serviceCert.pem
+      serviceCert: /Environment/Development/serviceCertTest.pem
 Cassandra_Settings:
   password: HKJNENfmkeJRK=
   sslCertificate: /Environment/Development/sslCertificate.pem

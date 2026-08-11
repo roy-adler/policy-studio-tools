@@ -10,7 +10,7 @@ As a Policy Studio developer, I want to see and edit all environment `values.yam
 
 ## Inputs
 
-- **Project scope:** Active Policy Studio project from `getProjectsInScope()` / active project (`000-multi-project-monorepo.md`). Do not assume the workspace root is the project.
+- **Project scope:** Prefer the active/selected Policy Studio project from the project registry (`000-multi-project-monorepo.md`). ENV discovery for switching uses all discovered projects so sibling ENV folders remain searchable.
 - **Default ENV root:** Sibling folder named `ENV` next to the policy project directory:
   ```
   Parent/
@@ -41,15 +41,17 @@ As a Policy Studio developer, I want to see and edit all environment `values.yam
 
 ### Discovery
 
-1. Collect Policy Studio projects from `getProjectsInScope()` (`000`).
-2. For each project, resolve sibling `../ENV`. Keep candidates that exist and contain at least one stage `values.yaml`.
-3. **ENV selection:**
-   - **0 candidates:** offer folder picker (or clear error if cancelled).
-   - **1 candidate:** open it directly (still allow Switch ENV / Open folder later).
-   - **2+ candidates:** show a searchable Quick Pick (VS Code filter) listing policy/project display name, relative path, and stage ids; include a **Browse ENV folder…** item.
+1. Collect Policy Studio projects. For **opening** the editor, prefer the active/selected project’s sibling `ENV/` when it exists (even when scope includes many projects). For **Switch ENV…**, list candidates from **all discovered projects** in the registry (not only the current single-project scope), so the picker is useful while an active project is selected.
+2. For each candidate project, resolve sibling `../ENV`. Keep candidates that exist and contain at least one stage `values.yaml`.
+3. **ENV selection on open:**
+   - Prefer the sibling ENV of the **active project** (or the sole selected project) when that ENV has stages.
+   - Else if exactly **1** candidate among projects in scope: open it directly.
+   - Else if **2+** candidates: show a searchable Quick Pick (VS Code filter) listing policy/project display name, relative path, and stage ids; include a **Browse ENV folder…** item.
+   - **0 candidates:** offer Browse / folder picker (or clear error if cancelled).
 4. For the chosen ENV root, list immediate subdirectories that contain `values.yaml`; each subdirectory name is the stage id (e.g. `DEVL`).
 5. Ignore `Certificate Store` and any other content that is not a stage `values.yaml` for v1 editing.
-6. **Switch ENV…** in the editor re-runs the picker (with dirty-discard confirm if needed) and reloads the panel.
+6. **Switch ENV…** always shows the searchable Quick Pick (even when only one candidate exists), with dirty-discard confirm if needed, then reloads the panel. **Open ENV folder…** remains a direct folder picker.
+7. **Follow active project:** While the ENV editor panel is open, changing the selected/active policy project switches the editor to that project’s sibling `ENV/` when it has stages (with dirty-discard confirm if needed). If the newly selected project has no editable ENV, keep the current session and show a short warning. Changing scope to “all projects” does not force a switch.
 
 ### Model
 

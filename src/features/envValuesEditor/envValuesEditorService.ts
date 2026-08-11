@@ -17,8 +17,10 @@ import { writeDirtyEnvDocuments } from './envValuesWriter';
 import { listEnvRootsForProjects, type EnvRootCandidate } from './listEnvRoots';
 import { loadEnvValuesSession } from './loadEnvValuesSession';
 import { resolveAddKeyPath } from './resolveAddKeyPath';
+import { resolveEnvFollowActiveProject, resolveEnvOpenDecision } from './resolveEnvSelection';
 import { ENV_VALUES_EDITOR_TOOL } from './toolDescriptor';
 import type { EnvValuesModel } from './types';
+import type { PolicyStudioProject } from '../projectRegistry/types';
 
 function createNonce(): string {
   return crypto.randomBytes(16).toString('hex');
@@ -53,23 +55,81 @@ export class EnvValuesEditorService {
   private selectedPath: string | undefined;
   /** Display label for the open ENV set (bundle / project name). */
   private envLabel: string | undefined;
+  /** Prevent overlapping follow-project switches while a confirm dialog is open. */
+  private followInFlight = false;
 
   constructor(private readonly context: vscode.ExtensionContext) {}
 
   activate(): void {
     getSharedToolsHubService().registerTool(ENV_VALUES_EDITOR_TOOL);
 
+    const store = getSharedProjectRegistryStore();
     this.context.subscriptions.push(
       vscode.commands.registerCommand('policyStudioTools.openEnvValuesEditor', () =>
         this.openEditor(),
       ),
+      store.onScopeChanged(() => {
+        void this.handleActiveProjectChanged();
+      }),
     );
   }
 
+  private async handleActiveProjectChanged(): Promise<void> {
+    if (!this.panel || !this.model || this.followInFlight) {
+      return;
+    }
+
+    const store = getSharedProjectRegistryStore();
+    const allProjects = store.getProjectRegistry().projects;
+    const candidates = listEnvRootsForProjects(allProjects);
+    const decision = resolveEnvFollowActiveProject(
+      candidates,
+      allProjects,
+      store.getScope(),
+      this.model.envRoot,
+    );
+
+    if (decision.kind === 'noop') {
+      return;
+    }
+
+    if (decision.kind === 'missing') {
+      void vscode.window.showWarningMessage(
+        `No sibling ENV/ with values.yaml found for "${decision.projectDisplayName}". Keeping the current ENV session.`,
+      );
+      return;
+    }
+
+    this.followInFlight = true;
+    try {
+      if (!(await this.confirmDiscardIfDirty())) {
+        return;
+      }
+      this.loadAndShow(decision.candidate.envRoot, formatCandidateLabel(decision.candidate));
+    } finally {
+      this.followInFlight = false;
+    }
+  }
+
   private async openEditor(): Promise<void> {
+    const store = getSharedProjectRegistryStore();
+    const allProjects = store.getProjectRegistry().projects;
+    const candidates = listEnvRootsForProjects(allProjects);
+    const decision = resolveEnvOpenDecision(candidates, store.getScope());
+
+    if (decision.kind === 'open') {
+      if (!(await this.confirmDiscardIfDirty())) {
+        return;
+      }
+      this.loadAndShow(decision.candidate.envRoot, formatCandidateLabel(decision.candidate));
+      return;
+    }
+
     const selection = await this.pickEnvRoot({
       placeHolder: 'Select which ENV values to edit (type to filter)',
       allowCancel: true,
+      forcePicker: true,
+      projects: allProjects,
     });
     if (!selection) {
       return;
@@ -83,25 +143,25 @@ export class EnvValuesEditorService {
   }
 
   /**
-   * Searchable Quick Pick of in-scope projects that have a sibling ENV/,
+   * Searchable Quick Pick of projects that have a sibling ENV/,
    * plus Browse ENV folder….
    */
   private async pickEnvRoot(options: {
     placeHolder: string;
     allowCancel: boolean;
+    /** When true, always show the picker (never auto-select a sole candidate). */
+    forcePicker: boolean;
+    projects: PolicyStudioProject[];
   }): Promise<{ envRoot: string; label: string } | undefined> {
-    const store = getSharedProjectRegistryStore();
-    const projects = store.getProjectsInScope();
-    const candidates = listEnvRootsForProjects(projects);
+    const candidates = listEnvRootsForProjects(options.projects);
 
-    if (candidates.length === 0 && projects.length === 0) {
-      void vscode.window.showErrorMessage('No Policy Studio projects in the current scope.');
+    if (candidates.length === 0 && options.projects.length === 0) {
+      void vscode.window.showErrorMessage('No Policy Studio projects discovered in the workspace.');
       return undefined;
     }
 
-    if (candidates.length === 1) {
+    if (!options.forcePicker && candidates.length === 1) {
       const only = candidates[0];
-      // Still offer browse via explicit toolbar later; open the only match directly.
       return { envRoot: only.envRoot, label: formatCandidateLabel(only) };
     }
 
@@ -122,7 +182,7 @@ export class EnvValuesEditorService {
 
     if (candidates.length === 0) {
       void vscode.window.showWarningMessage(
-        'No sibling ENV/ folders with values.yaml were found for projects in scope. Browse to pick one, or check project scope.',
+        'No sibling ENV/ folders with values.yaml were found for discovered projects. Browse to pick one, or check project discovery.',
       );
     }
 
@@ -292,9 +352,12 @@ export class EnvValuesEditorService {
   }
 
   private async handleSwitchEnv(): Promise<void> {
+    const store = getSharedProjectRegistryStore();
     const selection = await this.pickEnvRoot({
-      placeHolder: 'Switch ENV values set (type to filter)',
+      placeHolder: 'Switch ENV values set (type to filter by policy or path)',
       allowCancel: true,
+      forcePicker: true,
+      projects: store.getProjectRegistry().projects,
     });
     if (!selection) {
       return;

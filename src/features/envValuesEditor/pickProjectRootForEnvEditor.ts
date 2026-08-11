@@ -15,6 +15,16 @@ export function pickProjectRootForEnvEditor(
     }
   }
 
+  if (scope.mode === 'selectedProjects') {
+    const selectedIds = scope.selectedProjectIds ?? [];
+    if (selectedIds.length === 1) {
+      const selected = projects.find((project) => project.id === selectedIds[0]);
+      if (selected) {
+        return selected;
+      }
+    }
+  }
+
   if (projects.length === 1) {
     return projects[0];
   }

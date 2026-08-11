@@ -25,7 +25,13 @@ import { renderEnvValuesEditorHtml } from '../../src/features/envValuesEditor/en
 import { resolveAddKeyPath } from '../../src/features/envValuesEditor/resolveAddKeyPath';
 import { ENV_VALUES_EDITOR_TOOL } from '../../src/features/envValuesEditor/toolDescriptor';
 import { listEnvRootsForProjects } from '../../src/features/envValuesEditor/listEnvRoots';
+import type { EnvRootCandidate } from '../../src/features/envValuesEditor/listEnvRoots';
 import { pickProjectRootForEnvEditor } from '../../src/features/envValuesEditor/pickProjectRootForEnvEditor';
+import {
+  findEnvCandidateForProject,
+  resolveEnvFollowActiveProject,
+  resolveEnvOpenDecision,
+} from '../../src/features/envValuesEditor/resolveEnvSelection';
 import type { PolicyStudioProject } from '../../src/features/projectRegistry/types';
 import type { EnvValuesModel } from '../../src/features/envValuesEditor/types';
 
@@ -704,6 +710,183 @@ describe('pickProjectRootForEnvEditor', () => {
 
   it('returns undefined when there are no projects', () => {
     expect(pickProjectRootForEnvEditor([], { mode: 'allProjects' })).toBeUndefined();
+  });
+
+  it('prefers a sole selected project', () => {
+    const picked = pickProjectRootForEnvEditor([projectA, projectB], {
+      mode: 'selectedProjects',
+      selectedProjectIds: ['a'],
+    });
+    expect(picked).toBe(projectA);
+  });
+});
+
+describe('resolveEnvOpenDecision', () => {
+  const projectA: PolicyStudioProject = {
+    id: 'a',
+    rootPath: '/repo/NAME_ONE/NAME_ONE_YAML',
+    relativePath: 'NAME_ONE/NAME_ONE_YAML',
+    displayName: 'NAME_ONE_YAML',
+    projectType: 'yaml',
+  };
+  const projectB: PolicyStudioProject = {
+    id: 'b',
+    rootPath: '/repo/PAYMENT_API/PAYMENT_API_YAML',
+    relativePath: 'PAYMENT_API/PAYMENT_API_YAML',
+    displayName: 'PAYMENT_API_YAML',
+    projectType: 'yaml',
+  };
+
+  const candidateA: EnvRootCandidate = {
+    envRoot: '/repo/NAME_ONE/ENV',
+    project: projectA,
+    bundleName: 'NAME_ONE',
+    stageIds: ['DEVL', 'TEST'],
+  };
+  const candidateB: EnvRootCandidate = {
+    envRoot: '/repo/PAYMENT_API/ENV',
+    project: projectB,
+    bundleName: 'PAYMENT_API',
+    stageIds: ['DEVL'],
+  };
+
+  it('opens the ENV that belongs to the active policy project', () => {
+    const decision = resolveEnvOpenDecision([candidateA, candidateB], {
+      mode: 'activeProject',
+      activeProjectId: 'b',
+    });
+    expect(decision).toEqual({ kind: 'open', candidate: candidateB });
+  });
+
+  it('opens the sole candidate when there is no active preference', () => {
+    const decision = resolveEnvOpenDecision([candidateA], { mode: 'allProjects' });
+    expect(decision).toEqual({ kind: 'open', candidate: candidateA });
+  });
+
+  it('asks the user to pick when multiple ENVs and no active project', () => {
+    const decision = resolveEnvOpenDecision([candidateA, candidateB], {
+      mode: 'allProjects',
+    });
+    expect(decision).toEqual({ kind: 'pick' });
+  });
+
+  it('returns none when there are no ENV candidates', () => {
+    expect(resolveEnvOpenDecision([], { mode: 'allProjects' })).toEqual({ kind: 'none' });
+  });
+});
+
+describe('findEnvCandidateForProject', () => {
+  it('finds the ENV candidate matching a project id', () => {
+    const projectA: PolicyStudioProject = {
+      id: 'a',
+      rootPath: '/repo/a',
+      relativePath: 'a',
+      displayName: 'A',
+      projectType: 'yaml',
+    };
+    const projectB: PolicyStudioProject = {
+      id: 'b',
+      rootPath: '/repo/b',
+      relativePath: 'b',
+      displayName: 'B',
+      projectType: 'yaml',
+    };
+    const candidates: EnvRootCandidate[] = [
+      {
+        envRoot: '/repo/a/ENV',
+        project: projectA,
+        bundleName: 'a',
+        stageIds: ['DEVL'],
+      },
+      {
+        envRoot: '/repo/b/ENV',
+        project: projectB,
+        bundleName: 'b',
+        stageIds: ['DEVL'],
+      },
+    ];
+    expect(findEnvCandidateForProject(candidates, 'b')?.envRoot).toBe('/repo/b/ENV');
+    expect(findEnvCandidateForProject(candidates, 'missing')).toBeUndefined();
+  });
+});
+
+describe('resolveEnvFollowActiveProject', () => {
+  const projectA: PolicyStudioProject = {
+    id: 'a',
+    rootPath: '/repo/NAME_ONE/NAME_ONE_YAML',
+    relativePath: 'NAME_ONE/NAME_ONE_YAML',
+    displayName: 'NAME_ONE_YAML',
+    projectType: 'yaml',
+  };
+  const projectB: PolicyStudioProject = {
+    id: 'b',
+    rootPath: '/repo/PAYMENT_API/PAYMENT_API_YAML',
+    relativePath: 'PAYMENT_API/PAYMENT_API_YAML',
+    displayName: 'PAYMENT_API_YAML',
+    projectType: 'yaml',
+  };
+  const projectNoEnv: PolicyStudioProject = {
+    id: 'c',
+    rootPath: '/repo/BARE/BARE_YAML',
+    relativePath: 'BARE/BARE_YAML',
+    displayName: 'BARE_YAML',
+    projectType: 'yaml',
+  };
+
+  const candidateA: EnvRootCandidate = {
+    envRoot: '/repo/NAME_ONE/ENV',
+    project: projectA,
+    bundleName: 'NAME_ONE',
+    stageIds: ['DEVL', 'TEST'],
+  };
+  const candidateB: EnvRootCandidate = {
+    envRoot: '/repo/PAYMENT_API/ENV',
+    project: projectB,
+    bundleName: 'PAYMENT_API',
+    stageIds: ['DEVL'],
+  };
+
+  const allProjects = [projectA, projectB, projectNoEnv];
+  const candidates = [candidateA, candidateB];
+
+  it('switches to the ENV of the newly selected active project', () => {
+    const decision = resolveEnvFollowActiveProject(
+      candidates,
+      allProjects,
+      { mode: 'activeProject', activeProjectId: 'b' },
+      candidateA.envRoot,
+    );
+    expect(decision).toEqual({ kind: 'switch', candidate: candidateB });
+  });
+
+  it('is a no-op when the editor already shows that project ENV', () => {
+    const decision = resolveEnvFollowActiveProject(
+      candidates,
+      allProjects,
+      { mode: 'activeProject', activeProjectId: 'a' },
+      candidateA.envRoot,
+    );
+    expect(decision).toEqual({ kind: 'noop' });
+  });
+
+  it('reports missing when the selected project has no sibling ENV', () => {
+    const decision = resolveEnvFollowActiveProject(
+      candidates,
+      allProjects,
+      { mode: 'activeProject', activeProjectId: 'c' },
+      candidateA.envRoot,
+    );
+    expect(decision).toEqual({ kind: 'missing', projectDisplayName: 'BARE_YAML' });
+  });
+
+  it('does not switch when scope has no preferred project', () => {
+    const decision = resolveEnvFollowActiveProject(
+      candidates,
+      allProjects,
+      { mode: 'allProjects' },
+      candidateA.envRoot,
+    );
+    expect(decision).toEqual({ kind: 'noop' });
   });
 });
 
