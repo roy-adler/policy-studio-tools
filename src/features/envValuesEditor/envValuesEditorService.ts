@@ -62,7 +62,6 @@ export class EnvValuesEditorService {
   private followInFlight = false;
   private expandedPaths = new Set<string>();
   private searchQuery = '';
-  private focusSearchOnNextRender = false;
 
   constructor(private readonly context: vscode.ExtensionContext) {}
 
@@ -314,10 +313,8 @@ export class EnvValuesEditorService {
       {
         expandedPaths: this.expandedPaths,
         searchQuery: this.searchQuery,
-        focusSearch: this.focusSearchOnNextRender,
       },
     );
-    this.focusSearchOnNextRender = false;
   }
 
   private async handleMessage(message: IncomingMessage): Promise<void> {
@@ -337,9 +334,8 @@ export class EnvValuesEditorService {
         this.handleToggleExpand(message.path, message.expanded);
         break;
       case 'search':
+        // Filter is applied in the webview; only remember the query for save/reload.
         this.searchQuery = message.query;
-        this.focusSearchOnNextRender = true;
-        this.render();
         break;
       case 'setValue':
         if (!this.model) {
@@ -395,7 +391,7 @@ export class EnvValuesEditorService {
         this.expandedPaths.add(autoPath);
       }
     }
-    this.render();
+    // Do not re-render: the webview already updated the DOM (and singleton expand).
   }
 
   private async handleSwitchEnv(): Promise<void> {

@@ -1020,12 +1020,17 @@ describe('env tree view helpers', () => {
     const model = loadEnvValuesSession(envRoot);
     const html = renderEnvValuesEditorHtml(model, 'B.BA.BAB', 'sample', {
       expandedPaths: new Set(['B', 'B.BA']),
-      searchQuery: '',
+      searchQuery: 'BAB',
     });
     expect(html).toContain('id="tree-search"');
     expect(html).toContain('status-missing');
     expect(html).toContain('missing-highlight');
+    expect(html).toContain('data-search=');
+    // Full tree stays in HTML; filtering is client-side (avoids re-render flicker).
+    expect(html).toContain('data-path="A.AA"');
+    expect(html).toContain('value="BAB"');
     expect(html).toMatch(/details[^>]*data-path="B"[^>]*open|details[^>]*open[^>]*data-path="B"/);
+    expect(html).toContain('applyTreeFilter');
   });
 });
 

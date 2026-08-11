@@ -1,7 +1,6 @@
 import * as crypto from 'crypto';
 import type { EnvScalar, EnvTreeNode, EnvValuesModel } from './types';
 import {
-  filterEnvTree,
   nodeOrDescendantHasMissing,
   resolveExpandedPaths,
 } from './envTreeView';
@@ -21,8 +20,6 @@ function escapeHtml(value: string): string {
 export interface EnvValuesPanelViewState {
   expandedPaths?: Iterable<string>;
   searchQuery?: string;
-  /** Keep focus in the search box after a search-driven re-render. */
-  focusSearch?: boolean;
 }
 
 function getStyles(): string {
@@ -157,6 +154,8 @@ function getStyles(): string {
     }
     li.leaf.status-missing::before { background: var(--env-missing-color); }
     li.leaf.status-conflict::before { background: var(--env-conflict-color); }
+    li.tree-hidden, .tree-empty-filter { display: none; }
+    .tree-empty-filter.visible { display: block; }
     .placeholder { opacity: 0.7; font-size: 12px; }
     h2 { font-size: 14px; margin: 0 0 4px; word-break: break-all; }
     .stage-rows { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
@@ -294,6 +293,20 @@ function renderTree(
   return `<ul class="tree">${nodes.map((node) => renderNode(node, selectedPath, expanded)).join('')}</ul>`;
 }
 
+function leafSearchText(node: EnvTreeNode): string {
+  const parts = [node.path, node.name];
+  for (const cell of Object.values(node.cells ?? {})) {
+    if (cell.kind === 'value') {
+      parts.push(String(cell.value ?? ''));
+    } else if (cell.kind === 'list') {
+      for (const entry of cell.values) {
+        parts.push(String(entry ?? ''));
+      }
+    }
+  }
+  return parts.join(' ').toLowerCase();
+}
+
 function renderNode(
   node: EnvTreeNode,
   selectedPath: string | undefined,
@@ -309,7 +322,7 @@ function renderNode(
     if (missing) {
       classes.push('missing-highlight');
     }
-    return `<li class="${classes.join(' ')}" data-path="${escapeHtml(node.path)}">${escapeHtml(node.name)}</li>`;
+    return `<li class="${classes.join(' ')}" data-path="${escapeHtml(node.path)}" data-search="${escapeHtml(leafSearchText(node))}">${escapeHtml(node.name)}</li>`;
   }
 
   const open =
@@ -464,41 +477,29 @@ export function renderEnvValuesEditorHtml(
   const nonce = createNonce();
   const dirtyCount = Object.values(model.documents).filter((document) => document.dirty).length;
   const searchQuery = viewState.searchQuery ?? '';
-  const filteredTree = filterEnvTree(model.tree, searchQuery);
 
+  // Always render the full tree. Search filtering runs in the webview so typing
+  // does not replace the whole document (which caused flicker / lost focus).
   const userExpanded = new Set(viewState.expandedPaths ?? []);
   if (selectedPath) {
     for (const ancestor of ancestorsOfPath(selectedPath)) {
       userExpanded.add(ancestor);
     }
   }
-  // When filtering, keep all remaining branch paths expanded via singleton rules + ancestors.
-  if (searchQuery.trim()) {
-    const walk = (nodes: EnvTreeNode[]) => {
-      for (const node of nodes) {
-        if (node.children) {
-          userExpanded.add(node.path);
-          walk(node.children);
-        }
-      }
-    };
-    walk(filteredTree);
-  }
 
-  const expanded = resolveExpandedPaths(filteredTree, userExpanded);
+  const expanded = resolveExpandedPaths(model.tree, userExpanded);
   const modelJson = JSON.stringify(model).replace(/</g, '\\u003c');
   const bodyHtml =
     model.stages.length === 0
       ? renderEmptyState(model.envRoot)
       : `<div id="tree-pane">
       <div class="tree-search-wrap">
-        <input id="tree-search" type="search" placeholder="Search keys or values…" value="${escapeHtml(searchQuery)}"${viewState.focusSearch ? ' data-autofocus="1"' : ''} />
+        <input id="tree-search" type="search" placeholder="Search keys or values…" value="${escapeHtml(searchQuery)}" />
       </div>
-      <div id="tree">${
-        filteredTree.length === 0
-          ? `<p class="placeholder">No keys match “${escapeHtml(searchQuery.trim())}”.</p>`
-          : renderTree(filteredTree, selectedPath, expanded)
-      }</div>
+      <div id="tree">
+        <p class="placeholder tree-empty-filter">No keys match the current search.</p>
+        ${renderTree(model.tree, selectedPath, expanded)}
+      </div>
     </div>
     <div id="detail">${renderDetail(model, selectedPath)}</div>`;
 
@@ -520,6 +521,67 @@ export function renderEnvValuesEditorHtml(
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
 
+    function autoExpandSingletons(detailsEl) {
+      let current = detailsEl;
+      while (current) {
+        const tree = Array.from(current.children).find(
+          (child) => child.tagName === 'UL' && child.classList.contains('tree'),
+        );
+        if (!tree) {
+          break;
+        }
+        const items = Array.from(tree.children).filter(
+          (child) => child.tagName === 'LI' && !child.classList.contains('tree-hidden'),
+        );
+        const branches = items.filter((child) => child.classList.contains('branch'));
+        const leaves = items.filter((child) => child.classList.contains('leaf'));
+        if (branches.length === 1 && leaves.length === 0) {
+          const childDetails = branches[0].querySelector('details');
+          if (childDetails && !childDetails.open) {
+            childDetails.open = true;
+            current = childDetails;
+            continue;
+          }
+        }
+        break;
+      }
+    }
+
+    function applyTreeFilter(query) {
+      const needle = (query || '').trim().toLowerCase();
+      const root = document.getElementById('tree');
+      if (!root) {
+        return;
+      }
+      const empty = root.querySelector('.tree-empty-filter');
+      const leaves = Array.from(root.querySelectorAll('li.leaf'));
+      let visibleLeaves = 0;
+
+      leaves.forEach((leaf) => {
+        const haystack = leaf.getAttribute('data-search') || '';
+        const match = !needle || haystack.indexOf(needle) !== -1;
+        leaf.classList.toggle('tree-hidden', !match);
+        if (match) {
+          visibleLeaves += 1;
+        }
+      });
+
+      Array.from(root.querySelectorAll('li.branch')).reverse().forEach((branch) => {
+        const hasVisible = !!branch.querySelector('li.leaf:not(.tree-hidden)');
+        branch.classList.toggle('tree-hidden', !hasVisible);
+        if (hasVisible && needle) {
+          const details = branch.querySelector('details');
+          if (details) {
+            details.open = true;
+          }
+        }
+      });
+
+      if (empty) {
+        empty.classList.toggle('visible', !!needle && visibleLeaves === 0);
+      }
+    }
+
     document.querySelectorAll('#tree .leaf').forEach((el) => {
       el.addEventListener('click', () => {
         vscode.postMessage({ type: 'select', path: el.dataset.path });
@@ -528,6 +590,10 @@ export function renderEnvValuesEditorHtml(
 
     document.querySelectorAll('#tree details').forEach((el) => {
       el.addEventListener('toggle', () => {
+        if (el.open) {
+          autoExpandSingletons(el);
+        }
+        // Persist expand state only — do not ask the host to re-render.
         vscode.postMessage({
           type: 'toggleExpand',
           path: el.dataset.path,
@@ -538,13 +604,10 @@ export function renderEnvValuesEditorHtml(
 
     const search = document.getElementById('tree-search');
     if (search) {
-      if (search.dataset.autofocus === '1') {
-        search.focus();
-        const len = search.value.length;
-        search.setSelectionRange(len, len);
-      }
+      applyTreeFilter(search.value);
       let timer = undefined;
       search.addEventListener('input', () => {
+        applyTreeFilter(search.value);
         clearTimeout(timer);
         timer = setTimeout(() => {
           vscode.postMessage({ type: 'search', query: search.value });
