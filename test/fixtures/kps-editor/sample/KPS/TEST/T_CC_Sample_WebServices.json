@@ -1,0 +1,22 @@
+[
+    {
+        "name": "WebService_One_TEST",
+        "description": "WebService_One_TEST",
+        "type": "WebServices",
+        "version": "1.0.0",
+        "createdBy": "System",
+        "createdAt": "2026-02-11T00:00:00Z",
+        "updatedBy": "System",
+        "updatedAt": "2026-02-11T00:00:00Z"
+    },
+    {
+        "name": "WebService_Two_TEST",
+        "description": "WebService_Two_TEST",
+        "type": "WebServices",
+        "version": "2.3.0",
+        "createdBy": "System",
+        "createdAt": "2026-02-11T00:00:00Z",
+        "updatedBy": "System",
+        "updatedAt": "2026-02-11T00:00:00Z"
+    }
+]
