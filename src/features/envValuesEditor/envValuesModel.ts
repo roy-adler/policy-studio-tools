@@ -154,18 +154,32 @@ export function setValueAtPath(
 export function deleteValueAtPath(data: Record<string, unknown>, path: string): void {
   assertSafePathSegments(path);
   const parts = path.split('.');
+  const stack: Array<{ parent: Record<string, unknown>; key: string }> = [];
   let current: Record<string, unknown> = data;
+
   for (let index = 0; index < parts.length; index++) {
     const part = parts[index];
     if (index === parts.length - 1) {
       delete current[part];
-      return;
+      break;
     }
     const next = current[part];
     if (!isPlainObject(next)) {
       return;
     }
+    stack.push({ parent: current, key: part });
     current = next;
+  }
+
+  // Prune empty ancestor maps so removals do not leave `Key: {}` stubs.
+  for (let index = stack.length - 1; index >= 0; index--) {
+    const { parent, key } = stack[index];
+    const child = parent[key];
+    if (isPlainObject(child) && Object.keys(child).length === 0) {
+      delete parent[key];
+    } else {
+      break;
+    }
   }
 }
 

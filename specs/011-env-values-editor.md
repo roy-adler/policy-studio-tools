@@ -72,7 +72,7 @@ As a Policy Studio developer, I want to see and edit all environment `values.yam
 - Scalar-list leaves: **per-item text inputs** for each stage, with **+** (add item) and **−** (remove item) controls; order is preserved.
 - Missing cells show a warning affordance and **Create missing** (inserts `""` for scalar leaves, or `[]` when any other stage has a list at that path).
 - **Add key:** User supplies a key path (relative to current node or absolute). Key is created in **all** discovered stages (empty string initially).
-- **Remove key:** Confirm, then remove the path from every stage that has it.
+- **Remove key:** Confirm, then remove the path from every stage that has it. Empty parent maps left behind are pruned so the written YAML does not keep `Key: {}` stubs; if a stage document becomes empty, write an empty mapping-free file (preserve a leading `---` when the original had one).
 - Edits mark the model dirty; **Save** persists only dirty stage files.
 - **YAML write fidelity (v1):** When rewriting a stage file, preserve:
   - leading `---` document marker when the original file had one

@@ -84,7 +84,8 @@ export function parseMappingYaml(text: string): {
 export function dumpMappingYaml(data: Record<string, unknown>, style?: EnvYamlStyle): string {
   const effective = style ?? emptyYamlStyle();
   if (Object.keys(data).length === 0) {
-    return effective.documentStart ? '---\n{}\n' : '{}\n';
+    // Prefer a marker-only / empty file over `{}` so removed keys leave no stub.
+    return effective.documentStart ? '---\n' : '';
   }
   const lines: string[] = [];
   if (effective.documentStart) {

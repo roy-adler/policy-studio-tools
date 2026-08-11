@@ -410,6 +410,46 @@ describe('env values mutations', () => {
     expect(next.documents.TEST.dirty).toBe(true);
   });
 
+  it('removeKey prunes empty parent maps so save does not write {} stubs', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'env-prune-'));
+    const pruneEnv = path.join(tmp, 'ENV');
+    fs.mkdirSync(path.join(pruneEnv, 'DEVL'), { recursive: true });
+    fs.writeFileSync(
+      path.join(pruneEnv, 'DEVL', 'values.yaml'),
+      ['---', 'Cassandra_Settings:', '  host: db.local', 'Other: keep', ''].join('\n'),
+    );
+
+    let model = loadEnvValuesSession(pruneEnv);
+    model = removeKey(model, 'Cassandra_Settings.host');
+    expect(model.documents.DEVL.data).toEqual({ Other: 'keep' });
+    expect(model.documents.DEVL.data).not.toHaveProperty('Cassandra_Settings');
+
+    writeDirtyEnvDocuments(model);
+    const written = fs.readFileSync(path.join(pruneEnv, 'DEVL', 'values.yaml'), 'utf8');
+    expect(written).toBe('---\nOther: keep\n');
+    expect(written).not.toContain('{}');
+    expect(written).not.toContain('Cassandra_Settings');
+  });
+
+  it('removeKey clearing the last key writes an empty file without {}', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'env-empty-doc-'));
+    const emptyEnv = path.join(tmp, 'ENV');
+    fs.mkdirSync(path.join(emptyEnv, 'DEVL'), { recursive: true });
+    fs.writeFileSync(
+      path.join(emptyEnv, 'DEVL', 'values.yaml'),
+      '---\nOnly:\n  Key: value\n',
+    );
+
+    let model = loadEnvValuesSession(emptyEnv);
+    model = removeKey(model, 'Only.Key');
+    expect(model.documents.DEVL.data).toEqual({});
+
+    writeDirtyEnvDocuments(model);
+    const written = fs.readFileSync(path.join(emptyEnv, 'DEVL', 'values.yaml'), 'utf8');
+    expect(written).toBe('---\n');
+    expect(written).not.toContain('{}');
+  });
+
   it('setLeafValue refuses when stage has parseError', () => {
     const model = loadEnvValuesSession(createParseErrorEnv());
     const next = setLeafValue(model, 'A.AA', 'TEST', 'changed');
