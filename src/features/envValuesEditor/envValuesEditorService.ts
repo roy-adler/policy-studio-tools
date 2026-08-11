@@ -18,8 +18,9 @@ import { listEnvRootsForProjects, type EnvRootCandidate } from './listEnvRoots';
 import { loadEnvValuesSession } from './loadEnvValuesSession';
 import { resolveAddKeyPath } from './resolveAddKeyPath';
 import { resolveEnvFollowActiveProject, resolveEnvOpenDecision } from './resolveEnvSelection';
+import { collectSingletonExpandPaths } from './envTreeView';
 import { ENV_VALUES_EDITOR_TOOL } from './toolDescriptor';
-import type { EnvValuesModel } from './types';
+import type { EnvTreeNode, EnvValuesModel } from './types';
 import type { PolicyStudioProject } from '../projectRegistry/types';
 
 function createNonce(): string {
@@ -41,7 +42,9 @@ type IncomingMessage =
   | { type: 'addKey' }
   | { type: 'removeKey' }
   | { type: 'pickEnv' }
-  | { type: 'switchEnv' };
+  | { type: 'switchEnv' }
+  | { type: 'toggleExpand'; path: string; expanded: boolean }
+  | { type: 'search'; query: string };
 
 type EnvQuickPickItem = vscode.QuickPickItem & {
   kind?: vscode.QuickPickItemKind;
@@ -57,6 +60,9 @@ export class EnvValuesEditorService {
   private envLabel: string | undefined;
   /** Prevent overlapping follow-project switches while a confirm dialog is open. */
   private followInFlight = false;
+  private expandedPaths = new Set<string>();
+  private searchQuery = '';
+  private focusSearchOnNextRender = false;
 
   constructor(private readonly context: vscode.ExtensionContext) {}
 
@@ -243,10 +249,22 @@ export class EnvValuesEditorService {
   }
 
   private loadAndShow(envRoot: string, label?: string): void {
+    const previousRoot = this.model?.envRoot;
+    const sameEnv =
+      previousRoot !== undefined && path.resolve(previousRoot) === path.resolve(envRoot);
+
     try {
       this.model = loadEnvValuesSession(envRoot);
-      this.selectedPath = undefined;
       this.envLabel = label ?? path.basename(path.dirname(envRoot)) ?? path.basename(envRoot);
+
+      if (!sameEnv) {
+        this.selectedPath = undefined;
+        this.expandedPaths.clear();
+        this.searchQuery = '';
+      } else if (this.selectedPath && !findTreeNode(this.model.tree, this.selectedPath)) {
+        this.selectedPath = undefined;
+      }
+
       this.showPanel();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -293,7 +311,13 @@ export class EnvValuesEditorService {
       this.model,
       this.selectedPath,
       titleLabel,
+      {
+        expandedPaths: this.expandedPaths,
+        searchQuery: this.searchQuery,
+        focusSearch: this.focusSearchOnNextRender,
+      },
     );
+    this.focusSearchOnNextRender = false;
   }
 
   private async handleMessage(message: IncomingMessage): Promise<void> {
@@ -307,6 +331,14 @@ export class EnvValuesEditorService {
         break;
       case 'select':
         this.selectedPath = message.path;
+        this.render();
+        break;
+      case 'toggleExpand':
+        this.handleToggleExpand(message.path, message.expanded);
+        break;
+      case 'search':
+        this.searchQuery = message.query;
+        this.focusSearchOnNextRender = true;
         this.render();
         break;
       case 'setValue':
@@ -349,6 +381,21 @@ export class EnvValuesEditorService {
         await this.handleSwitchEnv();
         break;
     }
+  }
+
+  private handleToggleExpand(path: string, expanded: boolean): void {
+    if (!expanded) {
+      this.expandedPaths.delete(path);
+      return;
+    }
+
+    this.expandedPaths.add(path);
+    if (this.model) {
+      for (const autoPath of collectSingletonExpandPaths(this.model.tree, path)) {
+        this.expandedPaths.add(autoPath);
+      }
+    }
+    this.render();
   }
 
   private async handleSwitchEnv(): Promise<void> {
@@ -488,4 +535,19 @@ function formatCandidateLabel(candidate: EnvRootCandidate): string {
     return `${candidate.bundleName} — ${candidate.project.displayName}`;
   }
   return candidate.project.displayName;
+}
+
+function findTreeNode(nodes: EnvTreeNode[], targetPath: string): EnvTreeNode | undefined {
+  for (const node of nodes) {
+    if (node.path === targetPath) {
+      return node;
+    }
+    if (node.children) {
+      const found = findTreeNode(node.children, targetPath);
+      if (found) {
+        return found;
+      }
+    }
+  }
+  return undefined;
 }

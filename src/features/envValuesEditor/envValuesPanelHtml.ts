@@ -1,5 +1,10 @@
 import * as crypto from 'crypto';
 import type { EnvScalar, EnvTreeNode, EnvValuesModel } from './types';
+import {
+  filterEnvTree,
+  nodeOrDescendantHasMissing,
+  resolveExpandedPaths,
+} from './envTreeView';
 
 function createNonce(): string {
   return crypto.randomBytes(16).toString('hex');
@@ -13,11 +18,19 @@ function escapeHtml(value: string): string {
     .replace(/"/g, '&quot;');
 }
 
+export interface EnvValuesPanelViewState {
+  expandedPaths?: Iterable<string>;
+  searchQuery?: string;
+  /** Keep focus in the search box after a search-driven re-render. */
+  focusSearch?: boolean;
+}
+
 function getStyles(): string {
   return `<style>
     :root {
       --env-ok-color: var(--vscode-charts-green, #2ea043);
-      --env-missing-color: var(--vscode-charts-orange, #bf8700);
+      --env-missing-color: #c9a227;
+      --env-missing-bg: rgba(201, 162, 39, 0.28);
       --env-conflict-color: var(--vscode-charts-red, #d1242f);
     }
     * { box-sizing: border-box; }
@@ -72,12 +85,31 @@ function getStyles(): string {
       display: flex;
       min-height: 0;
     }
-    #tree {
+    #tree-pane {
       flex: 0 0 38%;
       max-width: 38%;
-      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
       border-right: 1px solid var(--vscode-panel-border);
-      padding: 8px;
+    }
+    .tree-search-wrap {
+      flex: none;
+      padding: 8px 8px 4px;
+    }
+    #tree-search {
+      width: 100%;
+      background: var(--vscode-input-background);
+      color: var(--vscode-input-foreground);
+      border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+      border-radius: 3px;
+      padding: 4px 8px;
+      font-size: 12px;
+    }
+    #tree {
+      flex: 1;
+      overflow: auto;
+      padding: 4px 8px 8px;
     }
     #detail {
       flex: 1;
@@ -86,7 +118,16 @@ function getStyles(): string {
     }
     ul.tree, ul.tree ul { list-style: none; margin: 0; padding-left: 14px; }
     ul.tree { padding-left: 0; }
-    li.branch > details > summary { cursor: pointer; padding: 2px 0; font-weight: 500; }
+    li.branch > details > summary {
+      cursor: pointer;
+      padding: 2px 6px;
+      font-weight: 500;
+      border-radius: 3px;
+    }
+    li.branch > details > summary.missing-highlight {
+      background: var(--env-missing-bg);
+      color: var(--vscode-foreground);
+    }
     li.leaf {
       cursor: pointer;
       padding: 2px 6px;
@@ -99,6 +140,12 @@ function getStyles(): string {
     li.leaf.selected {
       background: var(--vscode-list-activeSelectionBackground);
       color: var(--vscode-list-activeSelectionForeground);
+    }
+    li.leaf.missing-highlight:not(.selected) {
+      background: var(--env-missing-bg);
+    }
+    li.leaf.selected.missing-highlight {
+      box-shadow: inset 3px 0 0 var(--env-missing-color);
     }
     li.leaf::before {
       content: '';
@@ -239,24 +286,39 @@ function isAncestorOfSelection(node: EnvTreeNode, selectedPath?: string): boolea
   return selectedPath === node.path || selectedPath.startsWith(`${node.path}.`);
 }
 
-function renderTree(nodes: EnvTreeNode[], selectedPath?: string): string {
-  return `<ul class="tree">${nodes.map((node) => renderNode(node, selectedPath)).join('')}</ul>`;
+function renderTree(
+  nodes: EnvTreeNode[],
+  selectedPath: string | undefined,
+  expanded: Set<string>,
+): string {
+  return `<ul class="tree">${nodes.map((node) => renderNode(node, selectedPath, expanded)).join('')}</ul>`;
 }
 
-function renderNode(node: EnvTreeNode, selectedPath?: string): string {
+function renderNode(
+  node: EnvTreeNode,
+  selectedPath: string | undefined,
+  expanded: Set<string>,
+): string {
+  const missing = nodeOrDescendantHasMissing(node);
+
   if (!node.children) {
     const classes = ['leaf', leafStatusClass(node)];
     if (node.path === selectedPath) {
       classes.push('selected');
     }
+    if (missing) {
+      classes.push('missing-highlight');
+    }
     return `<li class="${classes.join(' ')}" data-path="${escapeHtml(node.path)}">${escapeHtml(node.name)}</li>`;
   }
 
-  const open = isAncestorOfSelection(node, selectedPath) ? ' open' : '';
+  const open =
+    expanded.has(node.path) || isAncestorOfSelection(node, selectedPath) ? ' open' : '';
+  const summaryClass = missing ? ' class="missing-highlight"' : '';
   return `<li class="branch">
-    <details${open}>
-      <summary>${escapeHtml(node.name)}</summary>
-      ${renderTree(node.children, selectedPath)}
+    <details data-path="${escapeHtml(node.path)}"${open}>
+      <summary${summaryClass}>${escapeHtml(node.name)}</summary>
+      ${renderTree(node.children, selectedPath, expanded)}
     </details>
   </li>`;
 }
@@ -384,18 +446,60 @@ function renderBanner(model: EnvValuesModel): string {
   return parts.join('');
 }
 
+function ancestorsOfPath(path: string): string[] {
+  const parts = path.split('.');
+  const ancestors: string[] = [];
+  for (let index = 1; index < parts.length; index++) {
+    ancestors.push(parts.slice(0, index).join('.'));
+  }
+  return ancestors;
+}
+
 export function renderEnvValuesEditorHtml(
   model: EnvValuesModel,
   selectedPath?: string,
   envLabel?: string,
+  viewState: EnvValuesPanelViewState = {},
 ): string {
   const nonce = createNonce();
   const dirtyCount = Object.values(model.documents).filter((document) => document.dirty).length;
+  const searchQuery = viewState.searchQuery ?? '';
+  const filteredTree = filterEnvTree(model.tree, searchQuery);
+
+  const userExpanded = new Set(viewState.expandedPaths ?? []);
+  if (selectedPath) {
+    for (const ancestor of ancestorsOfPath(selectedPath)) {
+      userExpanded.add(ancestor);
+    }
+  }
+  // When filtering, keep all remaining branch paths expanded via singleton rules + ancestors.
+  if (searchQuery.trim()) {
+    const walk = (nodes: EnvTreeNode[]) => {
+      for (const node of nodes) {
+        if (node.children) {
+          userExpanded.add(node.path);
+          walk(node.children);
+        }
+      }
+    };
+    walk(filteredTree);
+  }
+
+  const expanded = resolveExpandedPaths(filteredTree, userExpanded);
   const modelJson = JSON.stringify(model).replace(/</g, '\\u003c');
   const bodyHtml =
     model.stages.length === 0
       ? renderEmptyState(model.envRoot)
-      : `<div id="tree">${renderTree(model.tree, selectedPath)}</div>
+      : `<div id="tree-pane">
+      <div class="tree-search-wrap">
+        <input id="tree-search" type="search" placeholder="Search keys or values…" value="${escapeHtml(searchQuery)}"${viewState.focusSearch ? ' data-autofocus="1"' : ''} />
+      </div>
+      <div id="tree">${
+        filteredTree.length === 0
+          ? `<p class="placeholder">No keys match “${escapeHtml(searchQuery.trim())}”.</p>`
+          : renderTree(filteredTree, selectedPath, expanded)
+      }</div>
+    </div>
     <div id="detail">${renderDetail(model, selectedPath)}</div>`;
 
   return `<!DOCTYPE html>
@@ -421,6 +525,32 @@ export function renderEnvValuesEditorHtml(
         vscode.postMessage({ type: 'select', path: el.dataset.path });
       });
     });
+
+    document.querySelectorAll('#tree details').forEach((el) => {
+      el.addEventListener('toggle', () => {
+        vscode.postMessage({
+          type: 'toggleExpand',
+          path: el.dataset.path,
+          expanded: el.open,
+        });
+      });
+    });
+
+    const search = document.getElementById('tree-search');
+    if (search) {
+      if (search.dataset.autofocus === '1') {
+        search.focus();
+        const len = search.value.length;
+        search.setSelectionRange(len, len);
+      }
+      let timer = undefined;
+      search.addEventListener('input', () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          vscode.postMessage({ type: 'search', query: search.value });
+        }, 150);
+      });
+    }
 
     document.querySelectorAll('.value-input').forEach((el) => {
       el.addEventListener('change', () => {

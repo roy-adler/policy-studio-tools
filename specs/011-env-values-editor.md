@@ -71,6 +71,10 @@ As a Policy Studio developer, I want to see and edit all environment `values.yam
 - Scalar leaves: single-line text input.
 - Scalar-list leaves: **per-item text inputs** for each stage, with **+** (add item) and **−** (remove item) controls; order is preserved.
 - Missing cells show a warning affordance and **Create missing** (inserts `""` for scalar leaves, or `[]` when any other stage has a list at that path).
+- **Missing highlight:** Leaves missing in any stage are marked in **yellow** in the tree; ancestor branches that contain a missing descendant also show a yellow cue.
+- **Tree persistence:** Save, Reload, and in-place re-renders keep the **selected leaf** and **expanded branch paths**. Expansion resets only when switching to a different ENV root.
+- **Search/filter:** A search box above the tree filters to leaves whose **key path** (variable / segment / filename-like segment) **or** any stage **value** (scalar or list item) matches the query (case-insensitive substring). Matching leaves and their ancestors remain; clear query restores the full tree.
+- **Smart auto-expand:** When a branch is opened (or the filtered tree leaves a single chain), keep expanding while a node has **exactly one child**, until a **leaf** or a node with **2+ children**.
 - **Add key:** User supplies a key path (relative to current node or absolute). Key is created in **all** discovered stages (empty string initially).
 - **Remove key:** Confirm, then remove the path from every stage that has it. Empty parent maps left behind are pruned so the written YAML does not keep `Key: {}` stubs; if a stage document becomes empty, write an empty mapping-free file (preserve a leading `---` when the original had one).
 - Edits mark the model dirty; **Save** persists only dirty stage files.
@@ -78,7 +82,7 @@ As a Policy Studio developer, I want to see and edit all environment `values.yam
   - leading `---` document marker when the original file had one
   - **compact list indentation** when the original used it (`key:` then `- item` at the same indent as `key`)
   - **single-quoted** scalars when the original used `'…'` (double-quoted / plain left as such; new values may use plain or double when quoting is required)
-- **Reload** re-reads from disk; if dirty, confirm discard.
+- **Reload** re-reads from disk; if dirty, confirm discard. Keep selection and expansion.
 
 ### Integration
 
@@ -104,7 +108,8 @@ As a Policy Studio developer, I want to see and edit all environment `values.yam
 - [ ] Stages are auto-discovered from `ENV/<stage>/values.yaml`.
 - [ ] Split-pane UI: key tree left, per-stage values right for the selected path.
 - [ ] Empty leaf values do not produce missing-key warnings.
-- [ ] Missing keys show a warning and support Create missing.
+- [ ] Missing keys show a yellow tree highlight and support Create missing.
+- [ ] Save/Reload keep selected key and expanded branches; search filters the tree by key or value.
 - [ ] User can edit scalar values and scalar lists (e.g. `sslTrustedCerts`), add keys, and remove keys; Save writes changed `values.yaml` files.
 - [ ] Optional folder picker works when sibling `ENV/` is absent or overridden.
 - [ ] Invalid YAML in one stage does not block loading other stages.

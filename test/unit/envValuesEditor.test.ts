@@ -32,6 +32,13 @@ import {
   resolveEnvFollowActiveProject,
   resolveEnvOpenDecision,
 } from '../../src/features/envValuesEditor/resolveEnvSelection';
+import {
+  collectSingletonExpandPaths,
+  filterEnvTree,
+  nodeOrDescendantHasMissing,
+  resolveExpandedPaths,
+} from '../../src/features/envValuesEditor/envTreeView';
+import type { EnvTreeNode } from '../../src/features/envValuesEditor/types';
 import type { PolicyStudioProject } from '../../src/features/projectRegistry/types';
 import type { EnvValuesModel } from '../../src/features/envValuesEditor/types';
 
@@ -927,6 +934,98 @@ describe('resolveEnvFollowActiveProject', () => {
       candidateA.envRoot,
     );
     expect(decision).toEqual({ kind: 'noop' });
+  });
+});
+
+describe('env tree view helpers', () => {
+  const tree: EnvTreeNode[] = [
+    {
+      name: 'Cassandra_Settings',
+      path: 'Cassandra_Settings',
+      children: [
+        {
+          name: 'sslTrustedCerts',
+          path: 'Cassandra_Settings.sslTrustedCerts',
+          cells: {
+            DEVL: { kind: 'list', values: ['/certs/a.pem'] },
+            TEST: { kind: 'missing' },
+          },
+        },
+        {
+          name: 'host',
+          path: 'Cassandra_Settings.host',
+          cells: {
+            DEVL: { kind: 'value', value: 'db.local' },
+            TEST: { kind: 'value', value: 'db.test' },
+          },
+        },
+      ],
+    },
+    {
+      name: 'Solo',
+      path: 'Solo',
+      children: [
+        {
+          name: 'Only',
+          path: 'Solo.Only',
+          children: [
+            {
+              name: 'Leaf',
+              path: 'Solo.Only.Leaf',
+              cells: {
+                DEVL: { kind: 'value', value: 'one' },
+                TEST: { kind: 'value', value: 'one' },
+              },
+            },
+          ],
+        },
+      ],
+    },
+  ];
+
+  it('marks missing on the leaf and ancestors', () => {
+    expect(nodeOrDescendantHasMissing(tree[0].children![0])).toBe(true);
+    expect(nodeOrDescendantHasMissing(tree[0])).toBe(true);
+    expect(nodeOrDescendantHasMissing(tree[0].children![1])).toBe(false);
+  });
+
+  it('filters by key path and by value content', () => {
+    const byKey = filterEnvTree(tree, 'sslTrusted');
+    expect(byKey).toHaveLength(1);
+    expect(byKey[0].children?.map((child) => child.path)).toEqual([
+      'Cassandra_Settings.sslTrustedCerts',
+    ]);
+
+    const byValue = filterEnvTree(tree, 'a.pem');
+    expect(byValue[0].children?.[0].path).toBe('Cassandra_Settings.sslTrustedCerts');
+
+    const byHost = filterEnvTree(tree, 'db.test');
+    expect(byHost[0].children?.[0].path).toBe('Cassandra_Settings.host');
+  });
+
+  it('auto-expands singleton chains from a opened branch', () => {
+    const soloOnly = [tree[1]];
+    expect(collectSingletonExpandPaths(soloOnly)).toEqual(['Solo', 'Solo.Only']);
+    expect(collectSingletonExpandPaths(tree, 'Solo')).toEqual(['Solo', 'Solo.Only']);
+  });
+
+  it('resolveExpandedPaths merges user opens with singleton auto-expand', () => {
+    const expanded = resolveExpandedPaths(tree, ['Cassandra_Settings']);
+    expect(expanded.has('Cassandra_Settings')).toBe(true);
+    // Cassandra_Settings has two children — do not auto-descend further.
+    expect(expanded.has('Cassandra_Settings.sslTrustedCerts')).toBe(false);
+  });
+
+  it('renders missing leaves with yellow class and keeps a search box', () => {
+    const model = loadEnvValuesSession(envRoot);
+    const html = renderEnvValuesEditorHtml(model, 'B.BA.BAB', 'sample', {
+      expandedPaths: new Set(['B', 'B.BA']),
+      searchQuery: '',
+    });
+    expect(html).toContain('id="tree-search"');
+    expect(html).toContain('status-missing');
+    expect(html).toContain('missing-highlight');
+    expect(html).toMatch(/details[^>]*data-path="B"[^>]*open|details[^>]*open[^>]*data-path="B"/);
   });
 });
 
