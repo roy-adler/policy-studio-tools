@@ -76,6 +76,7 @@ Analyze
   $(type-hierarchy) Circuit graph    → showCircuitGraph
   $(diff)   Compare policies         → comparePolicies
   $(symbol-field) ENV values editor  → openEnvValuesEditor
+  $(table)  KPS editor               → openKpsEditor
 Validate
   $(warning) Validate path templates → validatePathTemplates
 Export
@@ -229,6 +230,7 @@ When implementing or updating feature specs, align UI entry points with this hub
 | `007-export-documentation` | Register Export tool; export options may stay quick pick / save dialog. |
 | `008-visual-circuit-graph` | Register Analyze tool; graph renders in editor-area webview panel launched from hub. |
 | `011-env-values-editor` | Register Analyze tool; split-pane editor renders in editor-area webview panel launched from hub. |
+| `012-kps-editor` | Register Analyze tool; dual-tab datatable editor renders in editor-area webview panel launched from hub. |
 
 ### UI placement principles (for all specs)
 

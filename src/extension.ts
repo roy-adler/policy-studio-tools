@@ -3,6 +3,7 @@ import { CircuitGraphService } from './features/circuitGraph/circuitGraphService
 import { CircuitNavigationService } from './features/circuitNavigation/circuitNavigationService';
 import { CircuitSearchService } from './features/circuitSearch/circuitSearchService';
 import { EnvValuesEditorService } from './features/envValuesEditor/envValuesEditorService';
+import { KpsEditorService } from './features/kpsEditor/kpsEditorService';
 import { ExportDocumentationService } from './features/exportDocumentation/exportDocumentationService';
 import { PathTemplateValidatorService } from './features/pathTemplateValidator/pathTemplateValidatorService';
 import { PolicyDiffService } from './features/policyDiff/policyDiffService';
@@ -41,6 +42,9 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const envValuesEditor = new EnvValuesEditorService(context);
   envValuesEditor.activate();
+
+  const kpsEditor = new KpsEditorService(context);
+  kpsEditor.activate();
 
   const traceViewer = new TraceViewerService(context);
   traceViewer.activate();

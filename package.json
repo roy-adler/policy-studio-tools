@@ -172,6 +172,11 @@
         "command": "policyStudioTools.openEnvValuesEditor",
         "title": "Open ENV Values Editor",
         "category": "Policy Studio"
+      },
+      {
+        "command": "policyStudioTools.openKpsEditor",
+        "title": "Open KPS Editor",
+        "category": "Policy Studio"
       }
     ],
     "customEditors": [
@@ -222,6 +227,10 @@
         },
         {
           "command": "policyStudioTools.openEnvValuesEditor",
+          "when": "policyStudio.projectDetected"
+        },
+        {
+          "command": "policyStudioTools.openKpsEditor",
           "when": "policyStudio.projectDetected"
         },
         {
