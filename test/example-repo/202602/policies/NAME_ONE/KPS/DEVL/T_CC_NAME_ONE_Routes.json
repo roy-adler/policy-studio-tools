@@ -7,6 +7,6 @@
     {
         "name": "a",
         "path": "s",
-        "enabled": "d"
+        "enabled": false
     }
 ]

@@ -1,0 +1,8 @@
+---
+type: KPSPackage
+fields:
+  name: JWT_Collection
+  description: JWT Collection
+  alias: ""
+  dataSource: ./Data Sources/Cassandra Storage
+  cache: /null

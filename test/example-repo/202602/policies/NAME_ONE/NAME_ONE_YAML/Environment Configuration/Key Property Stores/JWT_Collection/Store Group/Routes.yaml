@@ -1,0 +1,10 @@
+---
+type: KPSReadWriteStore
+fields:
+  name: Routes
+  description: ""
+  aliases: T_CC_NAME_ONE_Routes
+  type: /Environment Configuration/Key Property Stores/JWT_Collection/Type Group/Routes
+  dataSorce: /null
+  readKey: ""
+  key: routes
