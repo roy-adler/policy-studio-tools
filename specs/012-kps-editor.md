@@ -37,7 +37,7 @@ As a Policy Studio developer, I want to see and edit all stage copies of a KPS d
   - **Stage tabs:** One tab per discovered stage for the selected table.
   - **Grid:** Columns = field names; rows = entries of the active stage; inline editable scalar cells.
   - **Warnings:** Stage file missing; invalid JSON; nested non-scalar fields.
-  - **Actions:** Save, Reload, Add row, Remove row, Create missing (per stage), Switch KPS…, Open KPS folder….
+  - **Actions:** Save, Reload, Add row, Remove row, Create missing (per stage), Switch KPS…, Open KPS folder…, **Open JSON**, **Open Store Group**, **Open Type Group** (current table; JSON is the active stage file).
 - On Save: write updated JSON only to stage files that changed.
 
 ## Behaviour
@@ -84,6 +84,7 @@ As a Policy Studio developer, I want to see and edit all stage copies of a KPS d
 - On load and Save, coerce compatible existing cells to the schema type so booleans/integers are written as JSON booleans/numbers, not strings.
 - **Remove row:** Removes that row from the **active stage only** (confirm optional; confirm for v1).
 - **Create missing:** Creates `[]` for that stage’s file path for the selected table basename, then allows editing.
+- **Open JSON / Store Group / Type Group:** Open the current table’s active-stage JSON, Store Group YAML, and Type Group YAML in the editor. If a path is unknown or the file is missing, show a warning instead of failing silently.
 - Edits mark the corresponding stage file dirty; **Save** persists only dirty stage files (pretty-printed JSON with 4-space indent). Do **not** add a trailing newline or blank line after the closing `]`. Preserve each row’s original JSON key order; newly added keys (missing Type Group properties filled in on save, extra keys) are appended after existing keys.
 - **Reload** re-reads from disk; if dirty, confirm discard.
 
@@ -119,7 +120,7 @@ As a Policy Studio developer, I want to see and edit all stage copies of a KPS d
 - [ ] Nested non-scalar values are warned and not silently overwritten as scalars.
 - [ ] Invalid JSON in one stage does not block loading other stages.
 - [ ] Unit tests cover discovery, column union, mutations, and write-back using fixtures under `test/fixtures/kps-editor/`.
-- [ ] Tool appears in the Tools sidebar and uses project scope APIs from `000`.
+- [ ] Toolbar/source actions can open the current table’s JSON (active stage), Store Group YAML, and Type Group YAML.
 
 ## Non-goals
 

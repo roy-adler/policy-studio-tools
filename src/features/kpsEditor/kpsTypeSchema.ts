@@ -9,6 +9,7 @@ const KEY_PROPERTY_STORES = path.join('Environment Configuration', 'Key Property
 export interface KpsTypeSchemaLoad {
   columnTypesByTable: Record<string, Record<string, KpsColumnType>>;
   schemaColumnsByTable: Record<string, string[]>;
+  schemaFilesByTable: Record<string, { storeGroupPath: string; typeGroupPath: string }>;
   warnings: string[];
 }
 
@@ -225,6 +226,7 @@ export function loadKpsTypeSchemas(projectRoot: string): KpsTypeSchemaLoad {
   const warnings: string[] = [];
   const columnTypesByTable: Record<string, Record<string, KpsColumnType>> = {};
   const schemaColumnsByTable: Record<string, string[]> = {};
+  const schemaFilesByTable: Record<string, { storeGroupPath: string; typeGroupPath: string }> = {};
   const storesRoot = path.join(projectRoot, KEY_PROPERTY_STORES);
   const yamlFiles: string[] = [];
   collectYamlFiles(storesRoot, yamlFiles);
@@ -244,7 +246,8 @@ export function loadKpsTypeSchemas(projectRoot: string): KpsTypeSchemaLoad {
     const parsedType = parseTypeGroupProperties(typeGroupPath, warnings);
     columnTypesByTable[tableName] = parsedType.columnTypes;
     schemaColumnsByTable[tableName] = parsedType.columns;
+    schemaFilesByTable[tableName] = { storeGroupPath: filePath, typeGroupPath };
   }
 
-  return { columnTypesByTable, schemaColumnsByTable, warnings };
+  return { columnTypesByTable, schemaColumnsByTable, schemaFilesByTable, warnings };
 }

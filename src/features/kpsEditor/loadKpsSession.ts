@@ -10,7 +10,7 @@ export function loadKpsSession(kpsRoot: string): KpsSession {
   const projectRoot = resolveSiblingPolicyProject(discovery.kpsRoot);
   const schema = projectRoot
     ? loadKpsTypeSchemas(projectRoot)
-    : { columnTypesByTable: {}, schemaColumnsByTable: {}, warnings: [] as string[] };
+    : { columnTypesByTable: {}, schemaColumnsByTable: {}, schemaFilesByTable: {}, warnings: [] as string[] };
 
   const tableNames = [
     ...new Set([...discovery.tableNames, ...Object.keys(schema.columnTypesByTable)]),
@@ -35,6 +35,7 @@ export function loadKpsSession(kpsRoot: string): KpsSession {
     fileContents,
     schema.columnTypesByTable,
     schema.schemaColumnsByTable,
+    schema.schemaFilesByTable,
   );
   session.warnings.push(...schema.warnings);
   for (const tableName of tableNames) {

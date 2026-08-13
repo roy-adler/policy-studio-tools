@@ -44,6 +44,8 @@ export interface KpsTableModel {
   columns: string[];
   schemaColumns: string[];
   columnTypes: Record<string, KpsColumnType>;
+  storeGroupPath?: string;
+  typeGroupPath?: string;
   stages: Record<string, KpsStageTable>;
 }
 

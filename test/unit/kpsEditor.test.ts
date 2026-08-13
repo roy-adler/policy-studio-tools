@@ -394,6 +394,9 @@ describe('kps panel html', () => {
     expect(html).toContain('<th>name</th>');
     expect(html).toContain('Add row');
     expect(html).toContain('Switch KPS');
+    expect(html).toContain('>JSON<');
+    expect(html).toContain('>Store Group<');
+    expect(html).toContain('>Type Group<');
   });
 });
 
@@ -408,6 +411,14 @@ describe('kps type schema', () => {
       priority: 'integer',
     });
     expect(session.tables['T_CC_Sample_WebServices.json'].columnTypes).toEqual({});
+  });
+
+  it('records Store Group and Type Group file paths for the current table', () => {
+    const session = loadKpsSession(kpsRoot);
+    const routes = session.tables['T_CC_Sample_Routes.json'];
+    expect(routes.storeGroupPath).toMatch(/Store Group[/\\]Routes\.yaml$/);
+    expect(routes.typeGroupPath).toMatch(/Type Group[/\\]Routes\.yaml$/);
+    expect(routes.stages.DEVL.filePath).toMatch(/DEVL[/\\]T_CC_Sample_Routes\.json$/);
   });
 
   it('coerces boolean and integer edits from the Type Group', () => {

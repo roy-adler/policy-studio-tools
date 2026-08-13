@@ -67,7 +67,10 @@ function getStyles(): string {
       cursor: pointer;
       font-size: 12px;
     }
-    .toolbar button:hover, .tabs button:hover { border-color: var(--vscode-focusBorder); }
+    .toolbar button:disabled, .tabs button:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
     .banner {
       flex: none;
       padding: 6px 12px;
@@ -374,6 +377,12 @@ export function renderKpsEditorHtml(
   <div id="main">
     <div class="tabs"><span class="label">Tables</span>${tableTabs}</div>
     <div class="tabs"><span class="label">Stages</span>${stageTabs}</div>
+    <div class="tabs">
+      <span class="label">Open</span>
+      <button id="openJson"${stage.status === 'missing' ? ' disabled' : ''}>JSON</button>
+      <button id="openStoreGroup"${table.storeGroupPath ? '' : ' disabled'}>Store Group</button>
+      <button id="openTypeGroup"${table.typeGroupPath ? '' : ' disabled'}>Type Group</button>
+    </div>
     ${renderStageBody(stage, table, tableName, stageId)}
   </div>
   <script nonce="${nonce}">
@@ -385,6 +394,15 @@ export function renderKpsEditorHtml(
     document.getElementById('reload')?.addEventListener('click', () => vscode.postMessage({ type: 'reload' }));
     document.getElementById('switchKps')?.addEventListener('click', () => vscode.postMessage({ type: 'switchKps' }));
     document.getElementById('pickKps')?.addEventListener('click', () => vscode.postMessage({ type: 'pickKps' }));
+    document.getElementById('openJson')?.addEventListener('click', () => {
+      vscode.postMessage({ type: 'openSource', source: 'json', tableName, stageId });
+    });
+    document.getElementById('openStoreGroup')?.addEventListener('click', () => {
+      vscode.postMessage({ type: 'openSource', source: 'storeGroup', tableName, stageId });
+    });
+    document.getElementById('openTypeGroup')?.addEventListener('click', () => {
+      vscode.postMessage({ type: 'openSource', source: 'typeGroup', tableName, stageId });
+    });
     document.getElementById('addRow')?.addEventListener('click', () => {
       vscode.postMessage({ type: 'addRow', tableName, stageId });
     });

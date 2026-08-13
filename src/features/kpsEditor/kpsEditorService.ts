@@ -45,7 +45,8 @@ type IncomingMessage =
   | { type: 'save' }
   | { type: 'reload' }
   | { type: 'pickKps' }
-  | { type: 'switchKps' };
+  | { type: 'switchKps' }
+  | { type: 'openSource'; source: 'json' | 'storeGroup' | 'typeGroup'; tableName: string; stageId: string };
 
 type KpsQuickPickItem = vscode.QuickPickItem & {
   kind?: vscode.QuickPickItemKind;
@@ -373,6 +374,49 @@ export class KpsEditorService {
       case 'switchKps':
         await this.handleSwitchKps();
         break;
+      case 'openSource':
+        await this.handleOpenSource(message.source, message.tableName, message.stageId);
+        break;
+    }
+  }
+
+  private async handleOpenSource(
+    source: 'json' | 'storeGroup' | 'typeGroup',
+    tableName: string,
+    stageId: string,
+  ): Promise<void> {
+    if (!this.session) {
+      return;
+    }
+
+    const table = this.session.tables[tableName];
+    if (!table) {
+      void vscode.window.showWarningMessage(`Unknown table "${tableName}".`);
+      return;
+    }
+
+    let filePath: string | undefined;
+    if (source === 'json') {
+      filePath = table.stages[stageId]?.filePath;
+    } else if (source === 'storeGroup') {
+      filePath = table.storeGroupPath;
+    } else {
+      filePath = table.typeGroupPath;
+    }
+
+    if (!filePath) {
+      const label =
+        source === 'json' ? 'JSON' : source === 'storeGroup' ? 'Store Group' : 'Type Group';
+      void vscode.window.showWarningMessage(`No ${label} file is linked for this table.`);
+      return;
+    }
+
+    try {
+      const document = await vscode.workspace.openTextDocument(vscode.Uri.file(filePath));
+      await vscode.window.showTextDocument(document, { preview: false, viewColumn: vscode.ViewColumn.Beside });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      void vscode.window.showErrorMessage(`Could not open ${filePath}: ${message}`);
     }
   }
 

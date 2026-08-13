@@ -152,6 +152,7 @@ export function buildKpsSession(
   fileContents: Record<string, string | null>,
   columnTypesByTable: Record<string, Record<string, KpsColumnType>> = {},
   schemaColumnsByTable: Record<string, string[]> = {},
+  schemaFilesByTable: Record<string, { storeGroupPath: string; typeGroupPath: string }> = {},
 ): KpsSession {
   const warnings: string[] = [];
   const stageIds = discovery.stages.map((stage) => stage.id);
@@ -236,7 +237,15 @@ export function buildKpsSession(
       }
     }
 
-    tables[tableName] = { tableName, columns, schemaColumns, columnTypes, stages: stageTables };
+    tables[tableName] = {
+      tableName,
+      columns,
+      schemaColumns,
+      columnTypes,
+      storeGroupPath: schemaFilesByTable[tableName]?.storeGroupPath,
+      typeGroupPath: schemaFilesByTable[tableName]?.typeGroupPath,
+      stages: stageTables,
+    };
   }
 
   return {
