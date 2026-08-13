@@ -7,20 +7,37 @@ function rowToObject(
   columns: string[],
   schemaColumns: string[],
 ): Record<string, unknown> {
-  const obj: Record<string, unknown> = { ...row.extra };
+  const obj: Record<string, unknown> = {};
   const schemaSet = new Set(schemaColumns);
+  const seen = new Set<string>();
 
-  for (const column of columns) {
-    const cell = row.cells[column];
+  const writeKey = (key: string) => {
+    if (seen.has(key)) {
+      return;
+    }
+    if (key in row.extra) {
+      obj[key] = row.extra[key];
+      seen.add(key);
+      return;
+    }
+    const cell = row.cells[key];
     if (!cell || !cell.editable) {
-      continue;
+      return;
     }
-    const isSchema = schemaSet.size === 0 || schemaSet.has(column);
+    const isSchema = schemaSet.size === 0 || schemaSet.has(key);
     if (!isSchema && (cell.value === '' || cell.value === undefined)) {
-      delete obj[column];
-      continue;
+      seen.add(key);
+      return;
     }
-    obj[column] = cell.value ?? '';
+    obj[key] = cell.value ?? '';
+    seen.add(key);
+  };
+
+  for (const key of row.keyOrder) {
+    writeKey(key);
+  }
+  for (const column of columns) {
+    writeKey(column);
   }
   return obj;
 }
@@ -38,7 +55,7 @@ export function writeDirtyKpsTables(session: KpsSession): { written: string[] } 
       const payload = stage.rows.map((row) =>
         rowToObject(row, table.columns, table.schemaColumns),
       );
-      const text = `${JSON.stringify(payload, null, 4)}\n`;
+      const text = JSON.stringify(payload, null, 4);
       fs.writeFileSync(stage.filePath, text, 'utf8');
       stage.dirty = false;
       written.push(stage.filePath);

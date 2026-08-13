@@ -80,8 +80,10 @@ As a Policy Studio developer, I want to see and edit all environment `values.yam
 - Edits mark the model dirty; **Save** persists only dirty stage files.
 - **YAML write fidelity (v1):** When rewriting a stage file, preserve:
   - leading `---` document marker when the original file had one
+  - **existing mapping key order** (new keys are appended after existing keys in that map; do not sort)
   - **compact list indentation** when the original used it (`key:` then `- item` at the same indent as `key`)
   - **single-quoted** scalars when the original used `'…'` (double-quoted / plain left as such; new values may use plain or double when quoting is required)
+  - no trailing blank line / extra newline after the last entry (indentation may be normalized to 2 spaces)
 - **Reload** re-reads from disk; if dirty, confirm discard. Keep selection and expansion.
 
 ### Integration

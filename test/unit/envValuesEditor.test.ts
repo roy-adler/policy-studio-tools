@@ -433,7 +433,7 @@ describe('env values mutations', () => {
 
     writeDirtyEnvDocuments(model);
     const written = fs.readFileSync(path.join(pruneEnv, 'DEVL', 'values.yaml'), 'utf8');
-    expect(written).toBe('---\nOther: keep\n');
+    expect(written).toBe('---\nOther: keep');
     expect(written).not.toContain('{}');
     expect(written).not.toContain('Cassandra_Settings');
   });
@@ -453,7 +453,7 @@ describe('env values mutations', () => {
 
     writeDirtyEnvDocuments(model);
     const written = fs.readFileSync(path.join(emptyEnv, 'DEVL', 'values.yaml'), 'utf8');
-    expect(written).toBe('---\n');
+    expect(written).toBe('---');
     expect(written).not.toContain('{}');
   });
 
@@ -708,6 +708,25 @@ describe('env values writer', () => {
     expect(written).toContain("host: 'db2.example.local'");
     expect(written).toContain('  sslTrustedCerts:\n  - /Environment Configuration');
     expect(written).not.toMatch(/sslTrustedCerts:\n {4}- /);
+    expect(written.endsWith('\n')).toBe(false);
+  });
+
+  it('preserves existing mapping key order and appends new keys', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'env-key-order-'));
+    const writeEnv = path.join(tmp, 'ENV');
+    fs.mkdirSync(path.join(writeEnv, 'DEVL'), { recursive: true });
+    fs.writeFileSync(
+      path.join(writeEnv, 'DEVL', 'values.yaml'),
+      ['---', 'Zebra: 1', 'Alpha:', '  inner: old', ''].join('\n'),
+    );
+
+    let model = loadEnvValuesSession(writeEnv);
+    model = setLeafValue(model, 'Alpha.inner', 'DEVL', 'new');
+    model = addKey(model, 'Alpha.added');
+    writeDirtyEnvDocuments(model);
+
+    const written = fs.readFileSync(path.join(writeEnv, 'DEVL', 'values.yaml'), 'utf8');
+    expect(written).toBe('---\nZebra: 1\nAlpha:\n  inner: new\n  added: ""');
   });
 });
 

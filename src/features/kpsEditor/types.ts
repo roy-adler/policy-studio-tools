@@ -24,6 +24,8 @@ export interface KpsRow {
   cells: Record<string, KpsCell>;
   /** Non-scalar / unknown keys preserved for write-back. */
   extra: Record<string, unknown>;
+  /** Original JSON key order; new keys are appended on write. */
+  keyOrder: string[];
 }
 
 export type KpsStageTableStatus = 'present' | 'missing' | 'error';

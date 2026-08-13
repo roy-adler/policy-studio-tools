@@ -41,7 +41,7 @@ function parseRow(obj: Record<string, unknown>): KpsRow {
     }
   }
 
-  return { cells, extra };
+  return { cells, extra, keyOrder: Object.keys(obj) };
 }
 
 function collectColumns(

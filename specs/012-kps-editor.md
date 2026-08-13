@@ -84,7 +84,7 @@ As a Policy Studio developer, I want to see and edit all stage copies of a KPS d
 - On load and Save, coerce compatible existing cells to the schema type so booleans/integers are written as JSON booleans/numbers, not strings.
 - **Remove row:** Removes that row from the **active stage only** (confirm optional; confirm for v1).
 - **Create missing:** Creates `[]` for that stage’s file path for the selected table basename, then allows editing.
-- Edits mark the corresponding stage file dirty; **Save** persists only dirty stage files (pretty-printed JSON with 4-space indent, trailing newline).
+- Edits mark the corresponding stage file dirty; **Save** persists only dirty stage files (pretty-printed JSON with 4-space indent). Do **not** add a trailing newline or blank line after the closing `]`. Preserve each row’s original JSON key order; newly added keys (missing Type Group properties filled in on save, extra keys) are appended after existing keys.
 - **Reload** re-reads from disk; if dirty, confirm discard.
 
 ### Integration

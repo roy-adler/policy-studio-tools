@@ -85,14 +85,14 @@ export function dumpMappingYaml(data: Record<string, unknown>, style?: EnvYamlSt
   const effective = style ?? emptyYamlStyle();
   if (Object.keys(data).length === 0) {
     // Prefer a marker-only / empty file over `{}` so removed keys leave no stub.
-    return effective.documentStart ? '---\n' : '';
+    return effective.documentStart ? '---' : '';
   }
   const lines: string[] = [];
   if (effective.documentStart) {
     lines.push('---');
   }
   serializeMapping(data as Record<string, YamlValue>, 0, lines, '', effective);
-  return `${lines.join('\n')}\n`;
+  return lines.join('\n');
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

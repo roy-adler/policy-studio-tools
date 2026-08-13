@@ -182,8 +182,76 @@ describe('kps mutations and writer', () => {
     expect(written[0].version).toBe('9.9.9');
     expect(session.tables[table].stages.DEVL.dirty).toBe(false);
     const raw = fs.readFileSync(session.tables[table].stages.DEVL.filePath, 'utf8');
-    expect(raw.endsWith('\n')).toBe(true);
+    expect(raw.endsWith(']')).toBe(true);
+    expect(raw.endsWith('\n')).toBe(false);
     expect(raw).toContain('\n    {');
+  });
+
+  it('preserves original JSON key order and appends new schema keys', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kps-key-order-'));
+    fs.cpSync(sampleRoot, tmp, { recursive: true });
+    const filePath = path.join(tmp, 'KPS', 'DEVL', 'T_CC_Sample_Routes.json');
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify(
+        [
+          {
+            enabled: true,
+            extraField: 'keep-me',
+            name: 'Route_A_DEVL',
+            path: '/api/a',
+          },
+        ],
+        null,
+        4,
+      ),
+    );
+
+    const session = loadKpsSession(path.join(tmp, 'KPS'));
+    setCell(session, 'T_CC_Sample_Routes.json', 'DEVL', 0, 'name', 'renamed');
+    writeDirtyKpsTables(session);
+
+    const written = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    expect(Object.keys(written[0])).toEqual([
+      'enabled',
+      'extraField',
+      'name',
+      'path',
+      'priority',
+    ]);
+    expect(written[0].name).toBe('renamed');
+    expect(written[0].extraField).toBe('keep-me');
+    expect(written[0].priority).toBe(0);
+  });
+
+  it('keeps nested extra keys in their original position', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kps-nested-order-'));
+    fs.cpSync(sampleRoot, tmp, { recursive: true });
+    const filePath = path.join(tmp, 'KPS', 'DEVL', 'T_CC_Sample_Routes.json');
+    fs.writeFileSync(
+      filePath,
+      JSON.stringify(
+        [
+          {
+            name: 'Route_A_DEVL',
+            meta: { nested: true },
+            path: '/api/a',
+            enabled: true,
+            priority: 1,
+          },
+        ],
+        null,
+        4,
+      ),
+    );
+
+    const session = loadKpsSession(path.join(tmp, 'KPS'));
+    setCell(session, 'T_CC_Sample_Routes.json', 'DEVL', 0, 'path', '/api/b');
+    writeDirtyKpsTables(session);
+
+    const written = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    expect(Object.keys(written[0])).toEqual(['name', 'meta', 'path', 'enabled', 'priority']);
+    expect(written[0].meta).toEqual({ nested: true });
   });
 });
 

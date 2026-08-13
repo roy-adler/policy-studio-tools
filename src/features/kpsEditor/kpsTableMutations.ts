@@ -85,7 +85,7 @@ function emptyRow(columns: string[], columnTypes: Record<string, KpsColumnType>)
   for (const column of columns) {
     cells[column] = { editable: true, value: defaultValueForColumnType(columnTypes[column]) };
   }
-  return { cells, extra: {} };
+  return { cells, extra: {}, keyOrder: [...columns] };
 }
 
 export function addRow(session: KpsSession, tableName: string, stageId: string): void {

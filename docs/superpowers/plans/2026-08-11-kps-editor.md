@@ -18,7 +18,7 @@
 - Project scope via `getSharedProjectRegistryStore().getProjectsInScope()` — never assume workspace root is the project.
 - Cell types: string | number | boolean | null only; nested non-scalars warned, not editable.
 - Row add/remove applies to the **active stage only**.
-- Create missing writes `[]`. Save writes only dirty stage files (pretty JSON, 4-space indent, trailing newline).
+- Create missing writes `[]`. Save writes only dirty stage files (pretty JSON, 4-space indent, no trailing newline; preserve original key order).
 - Layout B: table tabs + stage tabs + full-width grid.
 - No cross-stage row sync, column schema edits, nested cell editors, or live file-watch in v1.
 
@@ -150,7 +150,7 @@ describe('kps discovery', () => {
 - `removeRow(session, tableName, stageId, rowIndex): void`
 - `createMissing(session, tableName, stageId): void` — status present, rows `[]`, dirty
 - `isSessionDirty(session): boolean`
-- `writeDirtyKpsTables(session): { written: string[] }` — only dirty present stages; `JSON.stringify(rowsAsObjects, null, 4) + '\n'`
+- `writeDirtyKpsTables(session): { written: string[] }` — only dirty present stages; `JSON.stringify(rowsAsObjects, null, 4)` with original key order and no trailing newline
 
 **Row serialization:** for each column, if cell editable, include key with coerced value; skip non-editable nested keys unchanged from original storage — store `rawObjects: Record<string, unknown>[]` on stage table for round-trip of nested keys, OR rebuild from cells only for editable columns and copy unknown nested keys from a `original` map on the row.
 
