@@ -1,4 +1,5 @@
-import type { KpsRow, KpsScalar, KpsSession, KpsStageTable } from './types';
+import type { KpsColumnType, KpsRow, KpsScalar, KpsSession, KpsStageTable } from './types';
+import { coerceByColumnType, defaultValueForColumnType } from './kpsTypeSchema';
 
 function requirePresentStage(
   session: KpsSession,
@@ -58,6 +59,20 @@ export function setCell(
     throw new Error(`Cell "${column}" is not editable`);
   }
   const previous = existing?.value;
+  const columnType = session.tables[tableName].columnTypes[column];
+  if (columnType) {
+    const coerced = coerceByColumnType(text, columnType);
+    if (!coerced.ok) {
+      session.editWarning = `Could not set "${column}" to "${text}" as ${columnType}`;
+      return;
+    }
+    session.editWarning = undefined;
+    row.cells[column] = { editable: true, value: coerced.value };
+    stage.dirty = true;
+    return;
+  }
+
+  session.editWarning = undefined;
   row.cells[column] = {
     editable: true,
     value: coerceCellValue(previous, text),
@@ -65,10 +80,10 @@ export function setCell(
   stage.dirty = true;
 }
 
-function emptyRow(columns: string[]): KpsRow {
+function emptyRow(columns: string[], columnTypes: Record<string, KpsColumnType>): KpsRow {
   const cells: KpsRow['cells'] = {};
   for (const column of columns) {
-    cells[column] = { editable: true, value: '' };
+    cells[column] = { editable: true, value: defaultValueForColumnType(columnTypes[column]) };
   }
   return { cells, extra: {} };
 }
@@ -79,7 +94,7 @@ export function addRow(session: KpsSession, tableName: string, stageId: string):
     throw new Error(`Unknown table: ${tableName}`);
   }
   const stage = requirePresentStage(session, tableName, stageId);
-  stage.rows.push(emptyRow(table.columns));
+  stage.rows.push(emptyRow(table.columns, table.columnTypes));
   stage.dirty = true;
 }
 

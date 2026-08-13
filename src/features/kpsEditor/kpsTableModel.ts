@@ -2,12 +2,14 @@ import * as path from 'path';
 import type { KpsStageDiscovery } from './types';
 import type {
   KpsCell,
+  KpsColumnType,
   KpsRow,
   KpsScalar,
   KpsSession,
   KpsStageTable,
   KpsTableModel,
 } from './types';
+import { coerceLoadedScalar, defaultValueForColumnType } from './kpsTypeSchema';
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -43,12 +45,12 @@ function parseRow(obj: Record<string, unknown>): KpsRow {
 }
 
 function collectColumns(
+  schemaColumns: string[],
   stageIds: string[],
-  tableName: string,
   stageTables: Record<string, KpsStageTable>,
 ): string[] {
-  const columns: string[] = [];
-  const seen = new Set<string>();
+  const columns = [...schemaColumns];
+  const seen = new Set(columns);
 
   for (const stageId of stageIds) {
     const stageTable = stageTables[stageId];
@@ -65,15 +67,77 @@ function collectColumns(
     }
   }
 
-  // Ensure columns appear even when only referenced later — already covered.
-  void tableName;
   return columns;
 }
 
-function ensureRowCellsHaveColumns(row: KpsRow, columns: string[]): void {
+function applyColumnTypes(
+  rows: KpsRow[],
+  columnTypes: Record<string, KpsColumnType>,
+  tableName: string,
+  stageId: string,
+  warnings: string[],
+): void {
+  for (const row of rows) {
+    for (const [column, columnType] of Object.entries(columnTypes)) {
+      const cell = row.cells[column];
+      if (!cell?.editable || cell.value === undefined) {
+        continue;
+      }
+      const coerced = coerceLoadedScalar(cell.value, columnType);
+      if (coerced === undefined) {
+        cell.warning = cell.warning ?? `Value is not a valid ${columnType}`;
+        warnings.push(
+          `Could not coerce ${tableName} ${stageId} column "${column}" to ${columnType}`,
+        );
+        continue;
+      }
+      cell.value = coerced;
+    }
+  }
+}
+
+function ensureRowCellsHaveColumns(
+  row: KpsRow,
+  columns: string[],
+  columnTypes: Record<string, KpsColumnType>,
+  schemaColumns: string[],
+  tableName: string,
+  stageId: string,
+  warnings: string[],
+  warned: Set<string>,
+): void {
+  const schemaSet = new Set(schemaColumns);
+
   for (const column of columns) {
     if (!(column in row.cells)) {
-      row.cells[column] = { editable: true, value: '' };
+      const missingSchema = schemaSet.has(column);
+      row.cells[column] = {
+        editable: true,
+        value: defaultValueForColumnType(columnTypes[column]),
+        warning: missingSchema ? 'Missing from JSON' : undefined,
+      };
+      if (missingSchema) {
+        const key = `${tableName}:${stageId}:missing:${column}`;
+        if (!warned.has(key)) {
+          warned.add(key);
+          warnings.push(
+            `${tableName} in ${stageId} is missing Type Group property "${column}"`,
+          );
+        }
+      }
+      continue;
+    }
+
+    if (schemaSet.size > 0 && !schemaSet.has(column)) {
+      const cell = row.cells[column];
+      cell.warning = cell.warning ?? 'Not in Type Group';
+      const key = `${tableName}:${stageId}:extra:${column}`;
+      if (!warned.has(key)) {
+        warned.add(key);
+        warnings.push(
+          `${tableName} in ${stageId} has unexpected property "${column}" not in Type Group`,
+        );
+      }
     }
   }
 }
@@ -86,6 +150,8 @@ export function buildKpsSession(
   kpsRoot: string,
   discovery: KpsStageDiscovery,
   fileContents: Record<string, string | null>,
+  columnTypesByTable: Record<string, Record<string, KpsColumnType>> = {},
+  schemaColumnsByTable: Record<string, string[]> = {},
 ): KpsSession {
   const warnings: string[] = [];
   const stageIds = discovery.stages.map((stage) => stage.id);
@@ -93,6 +159,8 @@ export function buildKpsSession(
 
   for (const tableName of discovery.tableNames) {
     const stageTables: Record<string, KpsStageTable> = {};
+    const columnTypes = columnTypesByTable[tableName] ?? {};
+    const schemaColumns = schemaColumnsByTable[tableName] ?? [];
 
     for (const stage of discovery.stages) {
       const key = `${stage.id}/${tableName}`;
@@ -125,6 +193,8 @@ export function buildKpsSession(
           rows.push(parseRow(item));
         }
 
+        applyColumnTypes(rows, columnTypes, tableName, stage.id, warnings);
+
         stageTables[stage.id] = {
           stageId: stage.id,
           filePath,
@@ -146,17 +216,27 @@ export function buildKpsSession(
       }
     }
 
-    const columns = collectColumns(stageIds, tableName, stageTables);
+    const columns = collectColumns(schemaColumns, stageIds, stageTables);
+    const warned = new Set<string>();
     for (const stageId of stageIds) {
       const stageTable = stageTables[stageId];
       if (stageTable?.status === 'present') {
         for (const row of stageTable.rows) {
-          ensureRowCellsHaveColumns(row, columns);
+          ensureRowCellsHaveColumns(
+            row,
+            columns,
+            columnTypes,
+            schemaColumns,
+            tableName,
+            stageId,
+            warnings,
+            warned,
+          );
         }
       }
     }
 
-    tables[tableName] = { tableName, columns, stages: stageTables };
+    tables[tableName] = { tableName, columns, schemaColumns, columnTypes, stages: stageTables };
   }
 
   return {

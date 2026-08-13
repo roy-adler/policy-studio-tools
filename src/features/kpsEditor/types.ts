@@ -1,3 +1,4 @@
+export type KpsColumnType = 'string' | 'boolean' | 'integer' | 'number';
 export type KpsScalar = string | number | boolean | null;
 
 export interface KpsStage {
@@ -39,6 +40,8 @@ export interface KpsStageTable {
 export interface KpsTableModel {
   tableName: string;
   columns: string[];
+  schemaColumns: string[];
+  columnTypes: Record<string, KpsColumnType>;
   stages: Record<string, KpsStageTable>;
 }
 
@@ -48,4 +51,5 @@ export interface KpsSession {
   tableNames: string[];
   tables: Record<string, KpsTableModel>;
   warnings: string[];
+  editWarning?: string;
 }

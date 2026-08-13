@@ -15,6 +15,7 @@ import {
   removeRow,
   setCell,
 } from '../../src/features/kpsEditor/kpsTableMutations';
+import { loadKpsTypeSchemas } from '../../src/features/kpsEditor/kpsTypeSchema';
 import { writeDirtyKpsTables } from '../../src/features/kpsEditor/kpsTableWriter';
 import { listKpsRootsForProjects } from '../../src/features/kpsEditor/listKpsRoots';
 import type { KpsRootCandidate } from '../../src/features/kpsEditor/listKpsRoots';
@@ -325,5 +326,126 @@ describe('kps panel html', () => {
     expect(html).toContain('<th>name</th>');
     expect(html).toContain('Add row');
     expect(html).toContain('Switch KPS');
+  });
+});
+
+describe('kps type schema', () => {
+  it('loads Store/Type Group types for tables matched by aliases', () => {
+    const session = loadKpsSession(kpsRoot);
+    const routes = session.tables['T_CC_Sample_Routes.json'];
+    expect(routes.columnTypes).toEqual({
+      name: 'string',
+      path: 'string',
+      enabled: 'boolean',
+      priority: 'integer',
+    });
+    expect(session.tables['T_CC_Sample_WebServices.json'].columnTypes).toEqual({});
+  });
+
+  it('coerces boolean and integer edits from the Type Group', () => {
+    const session = loadKpsSession(kpsRoot);
+    const table = 'T_CC_Sample_Routes.json';
+    setCell(session, table, 'DEVL', 0, 'enabled', 'false');
+    expect(session.tables[table].stages.DEVL.rows[0].cells.enabled?.value).toBe(false);
+    setCell(session, table, 'DEVL', 0, 'priority', '10');
+    expect(session.tables[table].stages.DEVL.rows[0].cells.priority?.value).toBe(10);
+  });
+
+  it('keeps the previous value and warns when schema coercion fails', () => {
+    const session = loadKpsSession(kpsRoot);
+    const table = 'T_CC_Sample_Routes.json';
+    const before = session.tables[table].stages.DEVL.rows[0].cells.enabled?.value;
+    expect(before).toBe(true);
+    setCell(session, table, 'DEVL', 0, 'enabled', 'maybe');
+    expect(session.tables[table].stages.DEVL.rows[0].cells.enabled?.value).toBe(true);
+    expect(session.tables[table].stages.DEVL.dirty).toBe(false);
+    expect(session.editWarning).toMatch(/enabled/i);
+  });
+
+  it('adds typed default values for schema columns', () => {
+    const session = loadKpsSession(kpsRoot);
+    const table = 'T_CC_Sample_Routes.json';
+    addRow(session, table, 'DEVL');
+    const row = session.tables[table].stages.DEVL.rows[1];
+    expect(row.cells.name?.value).toBe('');
+    expect(row.cells.enabled?.value).toBe(false);
+    expect(row.cells.priority?.value).toBe(0);
+  });
+
+  it('writes booleans and integers as JSON types', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kps-types-'));
+    fs.cpSync(sampleRoot, tmp, { recursive: true });
+    const session = loadKpsSession(path.join(tmp, 'KPS'));
+    const table = 'T_CC_Sample_Routes.json';
+    setCell(session, table, 'DEVL', 0, 'enabled', 'false');
+    setCell(session, table, 'DEVL', 0, 'priority', '7');
+    writeDirtyKpsTables(session);
+    const written = JSON.parse(
+      fs.readFileSync(session.tables[table].stages.DEVL.filePath, 'utf8'),
+    );
+    expect(written[0].enabled).toBe(false);
+    expect(written[0].priority).toBe(7);
+    expect(typeof written[0].enabled).toBe('boolean');
+    expect(typeof written[0].priority).toBe('number');
+  });
+
+  it('uses Type Group properties as columns and warns when JSON does not match', () => {
+    const discovery = discoverKpsStages(kpsRoot);
+    const schema = loadKpsTypeSchemas(policyRoot);
+    const contents: Record<string, string | null> = {
+      'DEVL/T_CC_Sample_Routes.json': JSON.stringify([
+        { name: 'only-name', extraField: 'unexpected' },
+      ]),
+      'TEST/T_CC_Sample_Routes.json': null,
+      'HUTL/T_CC_Sample_Routes.json': null,
+    };
+    const session = buildKpsSession(
+      path.resolve(kpsRoot),
+      { ...discovery, tableNames: ['T_CC_Sample_Routes.json'] },
+      contents,
+      schema.columnTypesByTable,
+      schema.schemaColumnsByTable,
+    );
+    const routes = session.tables['T_CC_Sample_Routes.json'];
+    expect(routes.columns).toEqual(['name', 'path', 'enabled', 'priority', 'extraField']);
+    expect(routes.schemaColumns).toEqual(['name', 'path', 'enabled', 'priority']);
+    const row = routes.stages.DEVL.rows[0];
+    expect(row.cells.path?.warning).toMatch(/missing/i);
+    expect(row.cells.extraField?.warning).toMatch(/not in Type Group/i);
+    expect(session.warnings.some((warning) => /path/i.test(warning))).toBe(true);
+    expect(session.warnings.some((warning) => /extraField/i.test(warning))).toBe(true);
+    setCell(session, 'T_CC_Sample_Routes.json', 'DEVL', 0, 'path', '/fixed');
+    expect(row.cells.path?.value).toBe('/fixed');
+  });
+
+  it('lists a Store Group table even when no JSON file exists', () => {
+    const discovery = discoverKpsStages(kpsRoot);
+    const schema = loadKpsTypeSchemas(policyRoot);
+    const session = buildKpsSession(
+      path.resolve(kpsRoot),
+      {
+        ...discovery,
+        tableNames: [...discovery.tableNames, 'T_CC_Sample_Missing.json'],
+      },
+      {
+        'DEVL/T_CC_Sample_Missing.json': null,
+        'TEST/T_CC_Sample_Missing.json': null,
+        'HUTL/T_CC_Sample_Missing.json': null,
+      },
+      {
+        ...schema.columnTypesByTable,
+        'T_CC_Sample_Missing.json': { name: 'string', count: 'integer' },
+      },
+      {
+        ...schema.schemaColumnsByTable,
+        'T_CC_Sample_Missing.json': ['name', 'count'],
+      },
+    );
+    const table = session.tables['T_CC_Sample_Missing.json'];
+    expect(table.columns).toEqual(['name', 'count']);
+    expect(table.stages.DEVL.status).toBe('missing');
+    expect(session.warnings.some((warning) => warning.includes('T_CC_Sample_Missing.json'))).toBe(
+      true,
+    );
   });
 });

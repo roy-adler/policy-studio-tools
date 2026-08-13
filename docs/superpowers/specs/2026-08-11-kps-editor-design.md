@@ -17,6 +17,7 @@ Let Policy Studio developers view and edit KPS datatable JSON files across stage
 7. **Editing (v1):** Edit scalar cells; add/remove rows on the **active stage only**. No add/remove columns in v1.
 8. **Cell types:** string / number / boolean / null only. Nested objects/arrays → warning, not editable.
 9. **Save:** Explicit Save writes only dirty stage files (pretty-printed JSON, 4-space indent). Reload re-reads from disk (confirm if dirty). No live file-watch in v1.
+10. **Type Groups:** Load Store Group + Type Group YAML from the sibling Policy Studio project with the KPS session. `fields.aliases` matches the JSON basename; `fields.type` points at the Type Group. Schema types win on coerce; unknown columns use previous JSON type; invalid input keeps the previous value and warns.
 
 ## Non-goals (v1)
 
@@ -48,7 +49,8 @@ Feature root: `src/features/kpsEditor/`
 |------|----------------|
 | `discoverKpsStages` | Resolve sibling `KPS/`; list stages with `*.json` |
 | `listKpsRoots` | Projects whose sibling KPS has at least one stage |
-| `kpsTableModel` | Parse arrays; merge column union; per-stage rows; missing vs present |
+| `kpsTypeSchema` | Find sibling policy project; scan Store/Type Group YAML; map Java types; coerce values |
+| `kpsTableModel` | Parse arrays; merge column union; per-stage rows; missing vs present; apply schema types |
 | `kpsTableMutations` | Set cell, add/remove row, create missing; mark dirty |
 | `kpsTableWriter` | Serialize arrays back to JSON files |
 | `kpsEditorService` | VS Code command, webview host, Save / Reload / picker |
@@ -67,9 +69,10 @@ Depends on `projectRegistry` for active/in-scope projects (`getProjectsInScope()
 
 ### Column / cell rules
 
-- Columns = ordered union of object keys across all rows in all stages for the selected table (stable order: first-seen across stages in discovery order, then rows).
-- Missing key on a row → empty editable cell; saving a typed value writes that key on the object.
-- Empty string is a valid scalar value and is written as `""`.
+- Columns = Type Group property names in YAML order when a schema exists; extra JSON keys are appended so mismatches can be edited. Without a schema, columns = ordered union of JSON keys.
+- Type Group types apply on load, edit, and save. Extra/unknown columns keep previous-type coercion.
+- Missing Type Group properties on a row → typed default cell + warning (still editable). Extra JSON keys → warning on that column.
+- Empty string is a valid **string** value and is written as `""`. Empty/invalid text for boolean/integer/number keeps the previous value.
 - Structural issues (file not an array, non-object items, nested non-scalars) produce warnings; keep other stages/tables usable.
 
 ## UI & behaviour

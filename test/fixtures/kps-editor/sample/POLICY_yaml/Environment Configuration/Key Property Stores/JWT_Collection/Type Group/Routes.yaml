@@ -1,0 +1,29 @@
+---
+type: KPSType
+fields:
+  name: Routes
+children:
+- type: KPSTypeProperty
+  fields:
+    name: name
+    type: java.lang.String
+    key: ""
+    value: ""
+- type: KPSTypeProperty
+  fields:
+    name: path
+    type: java.lang.String
+    key: ""
+    value: ""
+- type: KPSTypeProperty
+  fields:
+    name: enabled
+    type: Boolean
+    key: ""
+    value: ""
+- type: KPSTypeProperty
+  fields:
+    name: priority
+    type: java.lang.Integer
+    key: ""
+    value: ""

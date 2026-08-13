@@ -136,9 +136,11 @@ function getStyles(): string {
       padding: 3px 6px;
       font-size: 12px;
     }
-    table.grid .locked {
-      opacity: 0.7;
-      font-style: italic;
+    table.grid th.unexpected {
+      color: var(--vscode-charts-orange, #bf8700);
+    }
+    table.grid td.warn input {
+      border-color: var(--vscode-charts-orange, #bf8700);
     }
     .footer-actions { display: flex; gap: 8px; align-items: center; }
     .empty-state {
@@ -159,14 +161,14 @@ function getStyles(): string {
 
 function renderStageBody(
   stage: KpsStageTable,
-  columns: string[],
+  table: { columns: string[]; schemaColumns: string[] },
   tableName: string,
   stageId: string,
 ): string {
   if (stage.status === 'missing') {
     return `<div class="empty-state">
       <h2>Missing in ${escapeHtml(stageId)}</h2>
-      <p><code>${escapeHtml(tableName)}</code> is not present in this stage.</p>
+      <p><code>${escapeHtml(tableName)}</code> is not present in this stage. The Type Group still defines the columns; create the file to edit rows.</p>
       <button id="createMissing" data-table="${escapeHtml(tableName)}" data-stage="${escapeHtml(stageId)}">Create missing</button>
     </div>`;
   }
@@ -178,10 +180,19 @@ function renderStageBody(
     </div>`;
   }
 
-  const header = columns.map((column) => `<th>${escapeHtml(column)}</th>`).join('') + '<th></th>';
+  const schemaSet = new Set(table.schemaColumns);
+  const header =
+    table.columns
+      .map((column) => {
+        const unexpected = schemaSet.size > 0 && !schemaSet.has(column);
+        const cls = unexpected ? ' class="unexpected"' : '';
+        const title = unexpected ? ' title="Not in Type Group"' : '';
+        return `<th${cls}${title}>${escapeHtml(column)}</th>`;
+      })
+      .join('') + '<th></th>';
   const rows = stage.rows
     .map((row, rowIndex) => {
-      const cells = columns
+      const cells = table.columns
         .map((column) => {
           const cell = row.cells[column];
           if (!cell || !cell.editable) {
@@ -191,7 +202,9 @@ function renderStageBody(
                 : scalarToInputValue(cell?.value);
             return `<td class="locked" title="${escapeHtml(cell?.warning ?? 'Non-editable')}">${escapeHtml(preview)}</td>`;
           }
-          return `<td><input data-row="${rowIndex}" data-column="${escapeHtml(column)}" value="${escapeHtml(scalarToInputValue(cell.value))}" /></td>`;
+          const warnClass = cell.warning ? ' class="warn"' : '';
+          const title = cell.warning ? ` title="${escapeHtml(cell.warning)}"` : '';
+          return `<td${warnClass}${title}><input data-row="${rowIndex}" data-column="${escapeHtml(column)}" value="${escapeHtml(scalarToInputValue(cell.value))}" /></td>`;
         })
         .join('');
       return `<tr>${cells}<td class="row-actions"><button class="remove-row" data-row="${rowIndex}">−</button></td></tr>`;
@@ -327,6 +340,14 @@ export function renderKpsEditorHtml(
   if (isSessionDirty(session)) {
     banners.push(`<div class="banner">${dirtyCount} dirty stage file(s)</div>`);
   }
+  if (session.editWarning) {
+    banners.push(`<div class="banner">${escapeHtml(session.editWarning)}</div>`);
+  }
+  for (const warning of session.warnings) {
+    if (warning.includes(tableName)) {
+      banners.push(`<div class="banner">${escapeHtml(warning)}</div>`);
+    }
+  }
   if (stage.status === 'error') {
     banners.push(`<div class="banner error">${escapeHtml(stage.parseError ?? 'Parse error')}</div>`);
   }
@@ -353,7 +374,7 @@ export function renderKpsEditorHtml(
   <div id="main">
     <div class="tabs"><span class="label">Tables</span>${tableTabs}</div>
     <div class="tabs"><span class="label">Stages</span>${stageTabs}</div>
-    ${renderStageBody(stage, table.columns, tableName, stageId)}
+    ${renderStageBody(stage, table, tableName, stageId)}
   </div>
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();

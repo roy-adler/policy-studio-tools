@@ -2,6 +2,7 @@
     {
         "name": "Route_A_DEVL",
         "path": "/api/a",
-        "enabled": true
+        "enabled": true,
+        "priority": 1
     }
 ]

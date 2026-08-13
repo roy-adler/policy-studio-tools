@@ -26,6 +26,7 @@ As a Policy Studio developer, I want to see and edit all stage copies of a KPS d
 - **Stage folders:** Every immediate child directory of `KPS/` that contains at least one `*.json`.
 - **Table files:** Union of `*.json` basenames across stages. Each file is a single JSON array of objects (datatable).
 - **JSON shape (v1):** Array of objects with scalar leaf values (string/number/boolean/null). Nested objects/arrays are non-editable (warned).
+- **Type schema:** Sibling Policy Studio project `Environment Configuration/Key Property Stores/**/*.yaml` Store Group (`type: KPSReadWriteStore`) + Type Group (`KPSType` / `KPSTypeProperty`). Match `fields.aliases` to the JSON basename without `.json`; follow `fields.type` to the Type Group file.
 - VS Code command: `policyStudioTools.openKpsEditor`.
 - Tools sidebar registration via `ToolsHubService.registerTool` (`009-tools-sidebar.md`).
 
@@ -58,20 +59,29 @@ As a Policy Studio developer, I want to see and edit all stage copies of a KPS d
 ### Model
 
 1. Parse each stage’s file for the selected table basename as a JSON array of objects.
-2. Build **column list**: ordered union of object keys across all rows in all stages (first-seen order: stages in discovery order, then row order).
-3. For each stage:
+2. **Column list (schema first):** When a Type Group is found, columns are the Type Group `KPSTypeProperty` names **in YAML order**. Extra JSON keys not in the Type Group are appended as additional columns so they can be inspected and corrected. When no Type Group exists, columns remain the ordered union of JSON keys (previous behaviour).
+3. Table tabs include Store Group aliases even when no JSON file exists yet (all stages **missing**).
+4. For each stage:
    - **present** — file exists and parsed; rows are the array entries
-   - **missing** — basename not present in that stage → warning + **Create missing**
+   - **missing** — basename not present in that stage → warning + **Create missing** (then the grid uses Type Group columns)
    - **error** — invalid JSON or not an array → stage error; other stages remain usable
-4. Cells that are nested objects/arrays are marked non-editable with a warning; scalar cells (including empty string / null) are editable.
-5. Row lists are **independent per stage** (different lengths and values are allowed).
+5. Schema mismatch (still editable):
+   - Type Group property missing from a JSON row → warning; cell filled with the typed default so it can be corrected
+   - JSON key not in the Type Group → warning on that extra column
+   - Value not coercible to the Type Group type → warning; keep the loaded value so it can be edited
+6. Cells that are nested objects/arrays are marked non-editable with a warning; scalar cells (including empty string / null) are editable.
+7. Row lists are **independent per stage** (different lengths and values are allowed).
 
 ### Editor UI (layout B)
 
 - Dual tabs: table basename tabs + stage tabs; full-width editable grid for the active stage.
 - Switching table keeps in-session dirty state for other tables until Save or Reload of the session (or discard on Switch KPS / follow-project).
-- Scalar cells: single-line text input showing the value’s string form. On cell commit, preserve the prior JSON type when compatible: previous `number` + parseable numeric text → number; previous `boolean` + `true`/`false` → boolean; previous `null` + empty text → null; otherwise store a string (including `""`).
-- **Add row:** Appends a row to the **active stage only**; all columns initialized to `""`.
+- Scalar cells: single-line text input showing the value’s string form. On cell commit:
+  - If the column has a Type Group type, coerce to that JSON type (`java.lang.String`/`String` → string; `Boolean`/`java.lang.Boolean` → boolean; `Integer`/`Long`/`Short`/`Byte` and `java.lang.*` of those → integer number; `Double`/`Float`/`Number` and `java.lang.Double`/`Float` → number). Other Java types → string plus a session warning.
+  - Else preserve the prior JSON type when compatible: previous `number` + parseable numeric text → number; previous `boolean` + `true`/`false` → boolean; previous `null` + empty text → null; otherwise store a string (including `""`).
+  - Invalid schema/previous-type input **keeps the previous cell value**, does not mark dirty, and shows a warning in the banner.
+- **Add row:** Appends a row to the **active stage only**. Columns with a schema default to `""` (string), `false` (boolean), or `0` (integer/number); columns without a schema default to `""`.
+- On load and Save, coerce compatible existing cells to the schema type so booleans/integers are written as JSON booleans/numbers, not strings.
 - **Remove row:** Removes that row from the **active stage only** (confirm optional; confirm for v1).
 - **Create missing:** Creates `[]` for that stage’s file path for the selected table basename, then allows editing.
 - Edits mark the corresponding stage file dirty; **Save** persists only dirty stage files (pretty-printed JSON with 4-space indent, trailing newline).
@@ -93,6 +103,9 @@ As a Policy Studio developer, I want to see and edit all stage copies of a KPS d
 - **User-picked KPS unrelated to project:** Allowed; discovery runs on the picked folder.
 - **Concurrent external edits:** No live watch in v1; Reload picks up disk changes.
 - **Table missing in some stages:** Create missing available; do not hide those stage tabs.
+- **No Type Group for a table:** Fall back to JSON key union and previous-JSON-type coercion; warn once if Store/Type Group YAML is missing or unreadable.
+- **JSON missing or not matching Type Group:** Warn (missing file, missing properties, extra keys, type mismatch). Keep the grid editable so the user can correct and Save.
+- **Invalid typed edit:** Keep previous value; banner warning; do not write a wrong JSON type.
 
 ## Acceptance Criteria
 
@@ -102,6 +115,7 @@ As a Policy Studio developer, I want to see and edit all stage copies of a KPS d
 - [ ] Layout B UI: table tabs + stage tabs + editable grid with shared columns.
 - [ ] Missing stage files show a warning and support Create missing (`[]`).
 - [ ] User can edit scalar cells, add/remove rows on the active stage; Save writes changed JSON files.
+- [ ] Type Group properties define grid columns and JSON types; mismatched or missing JSON shows a warning and remains editable so it can be corrected; extra JSON keys are shown as unexpected columns. Unknown tables without a Type Group keep JSON-key union and previous-type fallback.
 - [ ] Nested non-scalar values are warned and not silently overwritten as scalars.
 - [ ] Invalid JSON in one stage does not block loading other stages.
 - [ ] Unit tests cover discovery, column union, mutations, and write-back using fixtures under `test/fixtures/kps-editor/`.
