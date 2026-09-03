@@ -258,16 +258,18 @@ function scanXmlUsages(
   return usages;
 }
 
-function isCacheManagerParentYaml(filePath: string): boolean {
-  if (path.basename(filePath).toLowerCase() !== '_parent.yaml') {
+function isCacheManagerParentYaml(projectRootPath: string, filePath: string): boolean {
+  const relativePath = path.relative(projectRootPath, filePath);
+  if (relativePath.startsWith('..')) {
     return false;
   }
-  const segments = filePath.split(/[/\\]/);
-  const librariesIndex = segments.findIndex((segment) => segment.toLowerCase() === 'libraries');
-  if (librariesIndex < 0 || librariesIndex + 1 >= segments.length) {
-    return false;
-  }
-  return segments[librariesIndex + 1].toLowerCase() === 'cache manager';
+  const segments = relativePath.split(/[/\\]/);
+  return (
+    segments.length === 3 &&
+    segments[0].toLowerCase() === 'libraries' &&
+    segments[1].toLowerCase() === 'cache manager' &&
+    segments[2].toLowerCase() === '_parent.yaml'
+  );
 }
 
 export function findCacheUsages(
@@ -280,7 +282,10 @@ export function findCacheUsages(
   const resolvedSkipPaths = new Set([...skipPaths].map((filePath) => path.resolve(filePath)));
 
   for (const filePath of listFiles(project.rootPath, ['.yaml', '.yml', '.xml'])) {
-    if (resolvedSkipPaths.has(path.resolve(filePath)) || isCacheManagerParentYaml(filePath)) {
+    if (
+      resolvedSkipPaths.has(path.resolve(filePath)) ||
+      isCacheManagerParentYaml(project.rootPath, filePath)
+    ) {
       continue;
     }
 

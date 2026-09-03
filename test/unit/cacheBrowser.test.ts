@@ -312,6 +312,40 @@ describe('findCacheUsages', () => {
     expect(usages.every((usage) => usage.circuitName === 'Commented Circuit')).toBe(true);
   });
 
+  it('records _parent.yaml at project root when nested under ancestor Cache Manager', () => {
+    const parent = path.join(os.tmpdir(), 'Libraries', 'Cache Manager');
+    fs.mkdirSync(parent, { recursive: true });
+    const tmp = fs.mkdtempSync(path.join(parent, 'nested-project-'));
+    fs.writeFileSync(path.join(tmp, 'values.yaml'), 'Policies: {}\n');
+    fs.mkdirSync(path.join(tmp, 'Libraries', 'Cache Manager'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmp, 'Libraries', 'Cache Manager', 'CORS Profiles.yaml'),
+      '---\ntype: Cache\nfields:\n  name: CORS Profiles\n',
+    );
+    fs.writeFileSync(
+      path.join(tmp, '_parent.yaml'),
+      '---\ntype: OAuthStore\ncache: /Libraries/Cache Manager/CORS Profiles\n',
+    );
+
+    const project = yamlProject(tmp);
+    const discovered = discoverCaches(project);
+    const { usages, warnings } = findCacheUsages(
+      project,
+      discovered.caches,
+      new Set(discovered.inventoryPaths),
+    );
+
+    expect(warnings).toEqual([]);
+    expect(
+      usages.some(
+        (u) =>
+          u.filePath.endsWith('_parent.yaml') &&
+          u.cacheName === 'CORS Profiles' &&
+          u.usageKind === 'cache-field',
+      ),
+    ).toBe(true);
+  });
+
   it('scans _parent.yaml outside Cache Manager for cache refs', () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cache-parent-usage-'));
     fs.writeFileSync(path.join(tmp, 'values.yaml'), 'Policies: {}\n');
