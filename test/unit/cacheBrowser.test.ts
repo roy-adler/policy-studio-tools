@@ -14,6 +14,7 @@ import { discoverCaches } from '../../src/features/cacheBrowser/discoverCaches';
 import { findCacheUsages } from '../../src/features/cacheBrowser/findCacheUsages';
 import { loadCacheSession } from '../../src/features/cacheBrowser/loadCacheSession';
 import { renderCacheBrowserHtml } from '../../src/features/cacheBrowser/cachePanelHtml';
+import { shouldRevealCacheBrowserPanel } from '../../src/features/cacheBrowser/panelShowMode';
 import { resolveCacheRef } from '../../src/features/cacheBrowser/resolveCacheRef';
 import { searchCaches } from '../../src/features/cacheBrowser/searchCaches';
 import { parseCacheXml } from '../../src/features/cacheBrowser/parseCacheXml';
@@ -52,6 +53,11 @@ describe('cache browser tool', () => {
     expect(CACHE_BROWSER_TOOL.command).toBe('policyStudioTools.openCacheBrowser');
     expect(CACHE_BROWSER_TOOL.label).toBe('Caches');
     expect(CACHE_BROWSER_TOOL.order).toBe(4);
+  });
+
+  it('reveals the panel only when opening, not on reload', () => {
+    expect(shouldRevealCacheBrowserPanel('open')).toBe(true);
+    expect(shouldRevealCacheBrowserPanel('reload')).toBe(false);
   });
 });
 

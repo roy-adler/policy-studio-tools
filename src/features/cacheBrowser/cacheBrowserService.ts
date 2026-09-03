@@ -6,6 +6,7 @@ import { getSharedToolsHubService } from '../toolsSidebar/toolsHubService';
 import { cacheId } from './cacheIdentity';
 import { renderCacheBrowserHtml } from './cachePanelHtml';
 import { loadCacheSession } from './loadCacheSession';
+import { shouldRevealCacheBrowserPanel } from './panelShowMode';
 import { CACHE_BROWSER_TOOL } from './toolDescriptor';
 import type { CacheSession } from './types';
 
@@ -38,7 +39,7 @@ export class CacheBrowserService {
       ),
       store.onScopeChanged(() => {
         if (this.panel) {
-          this.loadAndShow(store.getProjectsInScope());
+          this.reloadSession(store.getProjectsInScope());
         }
       }),
     );
@@ -51,10 +52,11 @@ export class CacheBrowserService {
       return;
     }
 
-    this.loadAndShow(projects);
+    this.ensurePanel('open');
+    this.reloadSession(projects);
   }
 
-  private loadAndShow(projects: PolicyStudioProject[]): void {
+  private reloadSession(projects: PolicyStudioProject[]): void {
     this.session = loadCacheSession(projects);
     if (
       this.selectedId &&
@@ -63,17 +65,14 @@ export class CacheBrowserService {
       this.selectedId = undefined;
     }
 
-    this.showPanel();
+    this.render();
   }
 
-  private showPanel(): void {
-    if (!this.session) {
-      return;
-    }
-
+  private ensurePanel(mode: 'open' | 'reload'): void {
     if (this.panel) {
-      this.panel.reveal();
-      this.render();
+      if (shouldRevealCacheBrowserPanel(mode)) {
+        this.panel.reveal();
+      }
       return;
     }
 
@@ -94,7 +93,6 @@ export class CacheBrowserService {
       this.query = '';
       this.nonce = '';
     });
-    this.render();
   }
 
   private render(): void {
@@ -127,7 +125,7 @@ export class CacheBrowserService {
         this.render();
         break;
       case 'refresh':
-        this.loadAndShow(getSharedProjectRegistryStore().getProjectsInScope());
+        this.reloadSession(getSharedProjectRegistryStore().getProjectsInScope());
         break;
       case 'openCache': {
         const selected = this.session.caches.find(
