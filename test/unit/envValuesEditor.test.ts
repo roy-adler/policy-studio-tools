@@ -281,7 +281,7 @@ describe('env values model', () => {
     });
   });
 
-  it('loads sslTrustedCerts lists from the example-repo fixture', () => {
+  it('loads sslTrustedCerts lists from the example-repo fixture', (ctx) => {
     const exampleEnv = path.join(
       __dirname,
       '..',
@@ -291,6 +291,11 @@ describe('env values model', () => {
       'NAME_ONE',
       'ENV',
     );
+    const sample = path.join(exampleEnv, 'DEVL', 'values.yaml');
+    if (isGitCryptLocked(sample)) {
+      ctx.skip();
+      return;
+    }
     const model = loadEnvValuesSession(exampleEnv);
     expect(model.documents.DEVL?.parseError).toBeUndefined();
     const certs = findLeaf(model.tree, 'Cassandra_Settings.sslTrustedCerts');
@@ -1103,4 +1108,18 @@ function findLeaf(
     current = node.children ?? [];
   }
   return node;
+}
+
+function isGitCryptLocked(filePath: string): boolean {
+  if (!fs.existsSync(filePath)) {
+    return false;
+  }
+  const fd = fs.openSync(filePath, 'r');
+  try {
+    const buf = Buffer.alloc(9);
+    const n = fs.readSync(fd, buf, 0, 9, 0);
+    return n >= 9 && buf[0] === 0 && buf.subarray(1, 9).toString('utf8') === 'GITCRYPT';
+  } finally {
+    fs.closeSync(fd);
+  }
 }

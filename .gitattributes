@@ -1,0 +1,5 @@
+# Encrypt the example Policy Studio repo; working copy stays plaintext when unlocked.
+test/example-repo/** filter=git-crypt diff=git-crypt
+
+# Never encrypt the attributes file itself.
+.gitattributes !filter !diff
