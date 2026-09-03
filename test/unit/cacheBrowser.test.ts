@@ -13,12 +13,13 @@ import {
 import { discoverCaches } from '../../src/features/cacheBrowser/discoverCaches';
 import { findCacheUsages } from '../../src/features/cacheBrowser/findCacheUsages';
 import { loadCacheSession } from '../../src/features/cacheBrowser/loadCacheSession';
+import { renderCacheBrowserHtml } from '../../src/features/cacheBrowser/cachePanelHtml';
 import { resolveCacheRef } from '../../src/features/cacheBrowser/resolveCacheRef';
 import { searchCaches } from '../../src/features/cacheBrowser/searchCaches';
 import { parseCacheXml } from '../../src/features/cacheBrowser/parseCacheXml';
 import { parseCacheYaml } from '../../src/features/cacheBrowser/parseCacheYaml';
 import type { PolicyStudioProject } from '../../src/features/projectRegistry/types';
-import type { ParsedCache } from '../../src/features/cacheBrowser/types';
+import type { CacheSession, ParsedCache } from '../../src/features/cacheBrowser/types';
 
 const yamlRoot = path.join(__dirname, '..', 'fixtures', 'cache-browser', 'yaml-project');
 const xmlRoot = path.join(__dirname, '..', 'fixtures', 'cache-browser', 'xml-project');
@@ -491,5 +492,54 @@ describe('loadCacheSession', () => {
     const session = loadCacheSession([yamlProject(tmp)]);
     expect(session.caches).toEqual([]);
     expect(session.usages).toEqual([]);
+  });
+});
+
+const htmlOpts = { nonce: 'testnonce', cspSource: 'https://example', query: '' };
+
+describe('cache panel html', () => {
+  it('renders grouped inventory, unused copy, and usage rows', () => {
+    const session = loadCacheSession([yamlProject()]);
+    const cors = session.caches.find((c) => c.name === 'CORS Profiles')!;
+    const html = renderCacheBrowserHtml(session, { ...htmlOpts, selectedId: cacheId(cors) });
+    expect(html).toContain('Caches');
+    expect(html).toContain('Local');
+    expect(html).toContain('Distributed');
+    expect(html).toContain('Other');
+    expect(html).toContain('CORS Profiles');
+    expect(html).toContain('Cron Expression Library');
+    expect(html).toContain('Custom Store');
+    expect(html).toContain('Open YAML');
+    expect(html).toContain('Refresh');
+    expect(html).toMatch(/0 uses/);
+    expect(html).toContain('Cache Attribute');
+    expect(html).toContain('Authz Code Store');
+  });
+
+  it('shows unused message for Custom Store', () => {
+    const session = loadCacheSession([yamlProject()]);
+    const custom = session.caches.find((c) => c.name === 'Custom Store')!;
+    const html = renderCacheBrowserHtml(session, { ...htmlOpts, selectedId: cacheId(custom) });
+    expect(html).toContain('No policies or caching filters reference this cache yet.');
+  });
+
+  it('shows empty inventory and no-match copy', () => {
+    const empty: CacheSession = { caches: [], usages: [], warnings: [], projectLabel: 'x' };
+    expect(renderCacheBrowserHtml(empty, htmlOpts)).toContain(
+      'No caches under Libraries/Cache Manager.',
+    );
+    const session = loadCacheSession([yamlProject()]);
+    expect(renderCacheBrowserHtml(session, { ...htmlOpts, query: 'zzz-no-such' })).toContain(
+      'No caches match.',
+    );
+  });
+
+  it('shows warning banner and project names when multiple projects', () => {
+    const session = loadCacheSession([yamlProject(), xmlProject()]);
+    const html = renderCacheBrowserHtml(session, htmlOpts);
+    expect(html).toContain('2 projects');
+    expect(html).toContain('yaml-project');
+    expect(html).toContain('xml-project');
+    expect(html).toMatch(/empty/i);
   });
 });
