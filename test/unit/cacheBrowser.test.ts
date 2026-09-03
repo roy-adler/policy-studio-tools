@@ -11,6 +11,7 @@ import {
   toYamlPk,
 } from '../../src/features/cacheBrowser/cacheIdentity';
 import { discoverCaches } from '../../src/features/cacheBrowser/discoverCaches';
+import { searchCaches } from '../../src/features/cacheBrowser/searchCaches';
 import { parseCacheXml } from '../../src/features/cacheBrowser/parseCacheXml';
 import { parseCacheYaml } from '../../src/features/cacheBrowser/parseCacheYaml';
 import type { PolicyStudioProject } from '../../src/features/projectRegistry/types';
@@ -177,5 +178,25 @@ describe('discoverCaches XML', () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cache-xml-none-'));
     fs.writeFileSync(path.join(tmp, 'PrimaryStore.xml'), '<entityStore></entityStore>\n');
     expect(discoverCaches(xmlProject(tmp)).caches).toEqual([]);
+  });
+});
+
+describe('searchCaches', () => {
+  const caches = discoverCaches(yamlProject()).caches;
+
+  it('returns all caches for empty query', () => {
+    expect(searchCaches(caches, '  ').map((c) => c.name)).toEqual(caches.map((c) => c.name));
+  });
+
+  it('matches name, kind, type, and field values', () => {
+    expect(searchCaches(caches, 'cors').map((c) => c.name)).toEqual(['CORS Profiles']);
+    expect(searchCaches(caches, 'local').map((c) => c.name)).toEqual(['CORS Profiles']);
+    expect(searchCaches(caches, 'WidgetCache').map((c) => c.name)).toEqual(['Custom Store']);
+    expect(searchCaches(caches, '600').map((c) => c.name)).toEqual(['Cron Expression Library']);
+  });
+
+  it('does not match usage circuit text', () => {
+    expect(searchCaches(caches, 'Uses CORS')).toEqual([]);
+    expect(searchCaches(caches, 'Authz Code Store')).toEqual([]);
   });
 });
