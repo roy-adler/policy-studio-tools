@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { CACHE_BROWSER_TOOL } from '../../src/features/cacheBrowser/toolDescriptor';
 import { CIRCUIT_GRAPH_TOOL } from '../../src/features/circuitGraph/toolDescriptor';
 import { JUMP_TO_CIRCUIT_TOOL } from '../../src/features/circuitNavigation/toolDescriptor';
 import { ENV_VALUES_EDITOR_TOOL } from '../../src/features/envValuesEditor/toolDescriptor';
@@ -18,6 +19,7 @@ const ALL_TOOLS = [
   POLICY_DIFF_TOOL,
   ENV_VALUES_EDITOR_TOOL,
   KPS_EDITOR_TOOL,
+  CACHE_BROWSER_TOOL,
   PATH_TEMPLATE_VALIDATOR_TOOL,
   EXPORT_DOCUMENTATION_TOOL,
   TRACE_VIEWER_TOOL,
@@ -38,6 +40,7 @@ describe('sidebar tool registrations', () => {
     expect(POLICY_DIFF_TOOL.group).toBe('analyze');
     expect(ENV_VALUES_EDITOR_TOOL.group).toBe('analyze');
     expect(KPS_EDITOR_TOOL.group).toBe('analyze');
+    expect(CACHE_BROWSER_TOOL.group).toBe('analyze');
     expect(PATH_TEMPLATE_VALIDATOR_TOOL.group).toBe('validate');
     expect(EXPORT_DOCUMENTATION_TOOL.group).toBe('export');
     expect(TRACE_VIEWER_TOOL.group).toBe('traces');

@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { CacheBrowserService } from './features/cacheBrowser/cacheBrowserService';
 import { CircuitGraphService } from './features/circuitGraph/circuitGraphService';
 import { CircuitNavigationService } from './features/circuitNavigation/circuitNavigationService';
 import { CircuitSearchService } from './features/circuitSearch/circuitSearchService';
@@ -45,6 +46,9 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const kpsEditor = new KpsEditorService(context);
   kpsEditor.activate();
+
+  const cacheBrowser = new CacheBrowserService(context);
+  cacheBrowser.activate();
 
   const traceViewer = new TraceViewerService(context);
   traceViewer.activate();

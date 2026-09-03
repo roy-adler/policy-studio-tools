@@ -18,6 +18,7 @@ import { resolveCacheRef } from '../../src/features/cacheBrowser/resolveCacheRef
 import { searchCaches } from '../../src/features/cacheBrowser/searchCaches';
 import { parseCacheXml } from '../../src/features/cacheBrowser/parseCacheXml';
 import { parseCacheYaml } from '../../src/features/cacheBrowser/parseCacheYaml';
+import { CACHE_BROWSER_TOOL } from '../../src/features/cacheBrowser/toolDescriptor';
 import type { PolicyStudioProject } from '../../src/features/projectRegistry/types';
 import type { CacheSession, ParsedCache } from '../../src/features/cacheBrowser/types';
 
@@ -45,6 +46,14 @@ function xmlProject(root = xmlRoot): PolicyStudioProject {
     projectType: 'xml',
   };
 }
+
+describe('cache browser tool', () => {
+  it('registers the Caches command in Analyze order 4', () => {
+    expect(CACHE_BROWSER_TOOL.command).toBe('policyStudioTools.openCacheBrowser');
+    expect(CACHE_BROWSER_TOOL.label).toBe('Caches');
+    expect(CACHE_BROWSER_TOOL.order).toBe(4);
+  });
+});
 
 describe('cache identity', () => {
   it('classifies Cache, DistributedCache, and other case-insensitively', () => {

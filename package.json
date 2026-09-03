@@ -177,6 +177,11 @@
         "command": "policyStudioTools.openKpsEditor",
         "title": "Open KPS Editor",
         "category": "Policy Studio"
+      },
+      {
+        "command": "policyStudioTools.openCacheBrowser",
+        "title": "Open Cache Browser",
+        "category": "Policy Studio"
       }
     ],
     "customEditors": [
@@ -231,6 +236,10 @@
         },
         {
           "command": "policyStudioTools.openKpsEditor",
+          "when": "policyStudio.projectDetected"
+        },
+        {
+          "command": "policyStudioTools.openCacheBrowser",
           "when": "policyStudio.projectDetected"
         },
         {
