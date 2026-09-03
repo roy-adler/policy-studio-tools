@@ -258,6 +258,18 @@ function scanXmlUsages(
   return usages;
 }
 
+function isCacheManagerParentYaml(filePath: string): boolean {
+  if (path.basename(filePath).toLowerCase() !== '_parent.yaml') {
+    return false;
+  }
+  const segments = filePath.split(/[/\\]/);
+  const librariesIndex = segments.findIndex((segment) => segment.toLowerCase() === 'libraries');
+  if (librariesIndex < 0 || librariesIndex + 1 >= segments.length) {
+    return false;
+  }
+  return segments[librariesIndex + 1].toLowerCase() === 'cache manager';
+}
+
 export function findCacheUsages(
   project: PolicyStudioProject,
   caches: ParsedCache[],
@@ -268,10 +280,7 @@ export function findCacheUsages(
   const resolvedSkipPaths = new Set([...skipPaths].map((filePath) => path.resolve(filePath)));
 
   for (const filePath of listFiles(project.rootPath, ['.yaml', '.yml', '.xml'])) {
-    if (
-      resolvedSkipPaths.has(path.resolve(filePath)) ||
-      path.basename(filePath).toLowerCase() === '_parent.yaml'
-    ) {
+    if (resolvedSkipPaths.has(path.resolve(filePath)) || isCacheManagerParentYaml(filePath)) {
       continue;
     }
 
