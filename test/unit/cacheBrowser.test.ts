@@ -11,6 +11,8 @@ import {
   toYamlPk,
 } from '../../src/features/cacheBrowser/cacheIdentity';
 import { discoverCaches } from '../../src/features/cacheBrowser/discoverCaches';
+import { findCacheUsages } from '../../src/features/cacheBrowser/findCacheUsages';
+import { resolveCacheRef } from '../../src/features/cacheBrowser/resolveCacheRef';
 import { searchCaches } from '../../src/features/cacheBrowser/searchCaches';
 import { parseCacheXml } from '../../src/features/cacheBrowser/parseCacheXml';
 import { parseCacheYaml } from '../../src/features/cacheBrowser/parseCacheYaml';
@@ -198,5 +200,95 @@ describe('searchCaches', () => {
   it('does not match usage circuit text', () => {
     expect(searchCaches(caches, 'Uses CORS')).toEqual([]);
     expect(searchCaches(caches, 'Authz Code Store')).toEqual([]);
+  });
+});
+
+describe('resolveCacheRef', () => {
+  const caches = discoverCaches(yamlProject()).caches;
+
+  it('matches exact YamlPK, relative last segment, and unique bare name', () => {
+    expect(resolveCacheRef('/Libraries/Cache Manager/CORS Profiles', caches)?.name).toBe(
+      'CORS Profiles',
+    );
+    expect(resolveCacheRef('./CORS Profiles', caches)?.name).toBe('CORS Profiles');
+    expect(resolveCacheRef('CORS Profiles', caches)?.name).toBe('CORS Profiles');
+  });
+
+  it('does not match ambiguous bare names', () => {
+    const dupA: ParsedCache = { ...caches[0], name: 'Shared', filePath: 'a.yaml', startOffset: 1 };
+    const dupB: ParsedCache = {
+      ...caches[0],
+      name: 'Shared',
+      yamlPk: '/Libraries/Cache Manager/Other',
+      filePath: 'b.yaml',
+      startOffset: 2,
+    };
+    expect(resolveCacheRef('Shared', [dupA, dupB])).toBeUndefined();
+    expect(resolveCacheRef('/Libraries/Cache Manager/CORS Profiles', [dupA, dupB])?.filePath).toBe(
+      'a.yaml',
+    );
+  });
+});
+
+describe('findCacheUsages', () => {
+  it('finds cache-field and known-filter usages including Environment Configuration', () => {
+    const discovered = discoverCaches(yamlProject());
+    const skip = new Set(discovered.inventoryPaths);
+    const { usages, warnings } = findCacheUsages(yamlProject(), discovered.caches, skip);
+    expect(warnings).toEqual([]);
+    const cors = usages.filter((u) => u.cacheName === 'CORS Profiles');
+    expect(cors.some((u) => u.usageKind === 'caching-filter' && u.filterType === 'CacheAttribute')).toBe(
+      true,
+    );
+    expect(cors.some((u) => u.fieldName === 'cacheToUse')).toBe(true);
+    expect(cors.some((u) => u.filePath.includes('OAuth Store.yaml') && u.usageKind === 'cache-field')).toBe(
+      true,
+    );
+    const cron = usages.filter((u) => u.cacheName === 'Cron Expression Library');
+    expect(cron.some((u) => u.filterType === 'RemoveCachedAttribute' && u.fieldName === 'other')).toBe(
+      true,
+    );
+    expect(usages.some((u) => u.cacheName === 'Custom Store')).toBe(false);
+  });
+
+  it('skips YAML inventory files so cache definitions are not usages', () => {
+    const discovered = discoverCaches(yamlProject());
+    const { usages } = findCacheUsages(
+      yamlProject(),
+      discovered.caches,
+      new Set(discovered.inventoryPaths),
+    );
+    expect(usages.every((u) => !u.filePath.includes(`${path.sep}Cache Manager${path.sep}`))).toBe(
+      true,
+    );
+  });
+
+  it('records XML CacheAttribute usage in the same file as cache definitions', () => {
+    const discovered = discoverCaches(xmlProject());
+    const { usages } = findCacheUsages(xmlProject(), discovered.caches, new Set());
+    expect(usages.some((u) => u.cacheName === 'HTTP Sessions' && u.filterType === 'CacheAttribute')).toBe(
+      true,
+    );
+  });
+
+  it('warns and continues when a usage file is invalid', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cache-bad-usage-'));
+    fs.writeFileSync(path.join(tmp, 'values.yaml'), 'Policies: {}\n');
+    fs.mkdirSync(path.join(tmp, 'Policies'));
+    fs.mkdirSync(path.join(tmp, 'Libraries', 'Cache Manager'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmp, 'Libraries', 'Cache Manager', 'One.yaml'),
+      '---\ntype: Cache\nfields:\n  name: One\n',
+    );
+    fs.writeFileSync(path.join(tmp, 'Policies', 'Broken.xml'), '<entity>');
+    const project = yamlProject(tmp);
+    const discovered = discoverCaches(project);
+    const { usages, warnings } = findCacheUsages(
+      project,
+      discovered.caches,
+      new Set(discovered.inventoryPaths),
+    );
+    expect(usages).toEqual([]);
+    expect(warnings.some((w) => /Broken.xml/i.test(w))).toBe(true);
   });
 });
