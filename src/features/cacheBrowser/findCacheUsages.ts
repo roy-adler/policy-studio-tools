@@ -33,8 +33,39 @@ export function offsetAtLine(content: string, lineIndex: number): number {
   return offset;
 }
 
+function stripYamlInlineComment(value: string): string {
+  let quote: '"' | "'" | undefined;
+
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
+    if (quote === '"') {
+      if (character === '\\') {
+        index += 1;
+      } else if (character === '"') {
+        quote = undefined;
+      }
+      continue;
+    }
+    if (quote === "'") {
+      if (character === "'" && value[index + 1] === "'") {
+        index += 1;
+      } else if (character === "'") {
+        quote = undefined;
+      }
+      continue;
+    }
+    if (character === '"' || character === "'") {
+      quote = character;
+    } else if (character === '#' && (index === 0 || /\s/.test(value[index - 1]))) {
+      return value.slice(0, index).trimEnd();
+    }
+  }
+
+  return value;
+}
+
 function unquote(value: string): string {
-  const trimmed = value.trim();
+  const trimmed = stripYamlInlineComment(value).trim();
   if (
     (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
     (trimmed.startsWith("'") && trimmed.endsWith("'"))

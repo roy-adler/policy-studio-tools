@@ -251,6 +251,67 @@ describe('findCacheUsages', () => {
     expect(usages.some((u) => u.cacheName === 'Custom Store')).toBe(false);
   });
 
+  it('finds quoted and unquoted cache refs with trailing YAML comments', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cache-commented-usage-'));
+    fs.writeFileSync(path.join(tmp, 'values.yaml'), 'Policies: {}\n');
+    fs.mkdirSync(path.join(tmp, 'Policies'));
+    fs.mkdirSync(path.join(tmp, 'Libraries', 'Cache Manager'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmp, 'Libraries', 'Cache Manager', 'CORS Profiles.yaml'),
+      '---\ntype: Cache\nfields:\n  name: CORS Profiles\n',
+    );
+    fs.writeFileSync(
+      path.join(tmp, 'Libraries', 'Cache Manager', 'Hash Cache.yaml'),
+      '---\ntype: Cache\nfields:\n  name: "Hash # Cache"\n',
+    );
+    fs.writeFileSync(
+      path.join(tmp, 'Policies', 'Commented.yaml'),
+      [
+        'type: FilterCircuit # circuit type',
+        'name: Commented Circuit # circuit name',
+        'children:',
+        '  - type: CacheAttribute # filter type',
+        '    name: Unquoted Filter # filter name',
+        '    cache: CORS Profiles # selected cache',
+        '  - type: CacheAttribute # filter type',
+        '    name: Quoted Filter # filter name',
+        '    cacheToUse: "CORS Profiles" # selected cache',
+        '  - type: CacheAttribute # filter type',
+        '    name: Hash Filter # filter name',
+        '    cache: "Hash # Cache" # selected cache',
+        '',
+      ].join('\n'),
+    );
+
+    const project = yamlProject(tmp);
+    const discovered = discoverCaches(project);
+    const { usages, warnings } = findCacheUsages(
+      project,
+      discovered.caches,
+      new Set(discovered.inventoryPaths),
+    );
+
+    expect(warnings).toEqual([]);
+    expect(usages).toHaveLength(3);
+    expect(usages.map((usage) => usage.fieldName)).toEqual(['cache', 'cacheToUse', 'cache']);
+    expect(usages.map((usage) => usage.filterType)).toEqual([
+      'CacheAttribute',
+      'CacheAttribute',
+      'CacheAttribute',
+    ]);
+    expect(usages.map((usage) => usage.filterName)).toEqual([
+      'Unquoted Filter',
+      'Quoted Filter',
+      'Hash Filter',
+    ]);
+    expect(usages.map((usage) => usage.cacheName)).toEqual([
+      'CORS Profiles',
+      'CORS Profiles',
+      'Hash # Cache',
+    ]);
+    expect(usages.every((usage) => usage.circuitName === 'Commented Circuit')).toBe(true);
+  });
+
   it('skips YAML inventory files so cache definitions are not usages', () => {
     const discovered = discoverCaches(yamlProject());
     const { usages } = findCacheUsages(
