@@ -1,3 +1,5 @@
+import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { describe, expect, it } from 'vitest';
 import {
@@ -8,6 +10,7 @@ import {
   isKnownCachingFilterType,
   toYamlPk,
 } from '../../src/features/cacheBrowser/cacheIdentity';
+import { discoverCaches } from '../../src/features/cacheBrowser/discoverCaches';
 import { parseCacheYaml } from '../../src/features/cacheBrowser/parseCacheYaml';
 import type { PolicyStudioProject } from '../../src/features/projectRegistry/types';
 import type { ParsedCache } from '../../src/features/cacheBrowser/types';
@@ -98,5 +101,28 @@ describe('parseCacheYaml', () => {
     expect(parseCacheYaml('   \n', filePath, project).warning).toMatch(/empty/i);
     expect(parseCacheYaml('::::', filePath, project).warning).toMatch(/invalid/i);
     expect(parseCacheYaml('::::', filePath, project).cache).toBeUndefined();
+  });
+});
+
+describe('discoverCaches YAML', () => {
+  it('finds local, distributed, and other caches and skips _parent.yaml', () => {
+    const { caches, warnings, inventoryPaths } = discoverCaches(yamlProject());
+    const names = caches.map((c) => c.name).sort();
+    expect(names).toEqual(['CORS Profiles', 'Cron Expression Library', 'Custom Store']);
+    expect(caches.find((c) => c.name === 'CORS Profiles')?.kind).toBe('local');
+    expect(caches.find((c) => c.name === 'Cron Expression Library')?.kind).toBe('distributed');
+    expect(caches.find((c) => c.name === 'Custom Store')?.kind).toBe('other');
+    expect(caches.some((c) => c.filePath.endsWith('_parent.yaml'))).toBe(false);
+    expect(warnings.some((w) => /empty/i.test(w))).toBe(true);
+    expect(inventoryPaths).toHaveLength(3);
+  });
+
+  it('returns empty caches when Cache Manager is missing', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cache-none-'));
+    fs.writeFileSync(path.join(tmp, 'values.yaml'), 'Policies: {}\n');
+    fs.mkdirSync(path.join(tmp, 'Policies'));
+    const result = discoverCaches(yamlProject(tmp));
+    expect(result.caches).toEqual([]);
+    expect(result.warnings).toEqual([]);
   });
 });
