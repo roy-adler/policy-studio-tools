@@ -107,17 +107,27 @@ function scanYamlUsages(
   const typeStack: StackEntry[] = [];
   const nameStack: StackEntry[] = [];
   let circuitName: string | undefined;
+  let fieldsIndent: number | undefined;
   const lines = content.split(/\r\n|\r|\n/);
 
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
     const line = lines[lineIndex];
+    const indent = line.match(/^\s*/)?.[0].length ?? 0;
+    if (line.trim() && fieldsIndent !== undefined && indent <= fieldsIndent) {
+      fieldsIndent = undefined;
+    }
+    const fieldsMatch = /^(\s*)(?:-\s*)?fields\s*:\s*(?:#.*)?$/.exec(line);
+    if (fieldsMatch) {
+      fieldsIndent = fieldsMatch[1].length;
+    }
+
     const typeMatch = /^(\s*)(?:-\s*)?type\s*:\s*(.+?)\s*$/.exec(line);
-    if (typeMatch) {
-      const indent = typeMatch[1].length;
-      while (typeStack.at(-1)?.indent !== undefined && typeStack.at(-1)!.indent >= indent) {
+    if (typeMatch && !(fieldsIndent !== undefined && typeMatch[1].length > fieldsIndent)) {
+      const typeIndent = typeMatch[1].length;
+      while (typeStack.at(-1)?.indent !== undefined && typeStack.at(-1)!.indent >= typeIndent) {
         typeStack.pop();
       }
-      typeStack.push({ indent, value: unquote(typeMatch[2]) });
+      typeStack.push({ indent: typeIndent, value: unquote(typeMatch[2]) });
     }
 
     const nameMatch = /^(\s*)(?:-\s*)?name\s*:\s*(.+?)\s*$/.exec(line);
@@ -317,7 +327,6 @@ export function findCacheUsages(
     const parsed = parseMappingYaml(content);
     if (parsed.error) {
       warnings.push(`Invalid YAML in ${filePath}: ${parsed.error}`);
-      continue;
     }
     usages.push(...scanYamlUsages(content, filePath, project, caches));
   }

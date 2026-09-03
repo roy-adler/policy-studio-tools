@@ -158,6 +158,8 @@ function styles(): string {
     .toolbar-button { padding: 4px 10px; }
     .banner {
       padding: 6px 12px;
+      max-height: 120px;
+      overflow: auto;
       border-bottom: 1px solid var(--vscode-panel-border);
       background: var(--vscode-inputValidation-warningBackground);
     }
@@ -203,6 +205,10 @@ export function renderCacheBrowserHtml(
     cspSource: string;
     selectedId?: string;
     query: string;
+    searchSelectionStart?: number;
+    searchSelectionEnd?: number;
+    inventoryScrollTop?: number;
+    restoreSearchFocus?: boolean;
   },
 ): string {
   const filtered = searchCaches(session.caches, options.query);
@@ -221,6 +227,23 @@ export function renderCacheBrowserHtml(
   const banner = session.warnings.length
     ? `<div class="banner">${escapeHtml(session.warnings.join(' · '))}</div>`
     : '';
+  const selectionStart =
+    typeof options.searchSelectionStart === 'number' &&
+    Number.isFinite(options.searchSelectionStart)
+      ? Math.max(0, Math.trunc(options.searchSelectionStart))
+      : options.query.length;
+  const selectionEnd =
+    typeof options.searchSelectionEnd === 'number' && Number.isFinite(options.searchSelectionEnd)
+      ? Math.max(selectionStart, Math.trunc(options.searchSelectionEnd))
+      : selectionStart;
+  const restoreSearch = options.restoreSearchFocus
+    ? `search.focus();
+    search.setSelectionRange(${selectionStart}, ${selectionEnd});`
+    : '';
+  const restoreInventory =
+    typeof options.inventoryScrollTop === 'number' && Number.isFinite(options.inventoryScrollTop)
+      ? `inventory.scrollTop = ${Math.max(0, Math.trunc(options.inventoryScrollTop))};`
+      : '';
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -246,20 +269,34 @@ export function renderCacheBrowserHtml(
   <script nonce="${escapeHtml(options.nonce)}">
     const vscode = acquireVsCodeApi();
     const selectedCacheId = document.querySelector('main')?.getAttribute('data-selected-id') ?? '';
+    const search = document.getElementById('search');
+    const inventory = document.querySelector('.inventory');
+    ${restoreSearch}
+    ${restoreInventory}
     let searchTimer;
-    document.getElementById('search')?.addEventListener('input', (event) => {
+    search?.addEventListener('input', () => {
       clearTimeout(searchTimer);
       searchTimer = setTimeout(() => {
-        vscode.postMessage({ type: 'search', query: event.target.value });
+        vscode.postMessage({
+          type: 'search',
+          query: search.value,
+          selectionStart: search.selectionStart,
+          selectionEnd: search.selectionEnd,
+          inventoryScrollTop: inventory?.scrollTop ?? 0,
+        });
       }, 300);
     });
     document.querySelectorAll('.cache-row').forEach((row) => {
       row.addEventListener('click', () => {
-        vscode.postMessage({ type: 'select', cacheId: row.getAttribute('data-id') });
+        vscode.postMessage({
+          type: 'select',
+          cacheId: row.getAttribute('data-id'),
+          inventoryScrollTop: inventory?.scrollTop ?? 0,
+        });
       });
     });
     document.getElementById('refresh')?.addEventListener('click', () => {
-      vscode.postMessage({ type: 'refresh' });
+      vscode.postMessage({ type: 'refresh', inventoryScrollTop: inventory?.scrollTop ?? 0 });
     });
     document.getElementById('openCache')?.addEventListener('click', () => {
       vscode.postMessage({ type: 'openCache', cacheId: selectedCacheId });

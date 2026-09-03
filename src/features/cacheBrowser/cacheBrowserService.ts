@@ -12,9 +12,15 @@ import type { CacheSession } from './types';
 
 type IncomingMessage =
   | { type: 'ready' }
-  | { type: 'search'; query: string }
-  | { type: 'select'; cacheId: string }
-  | { type: 'refresh' }
+  | {
+      type: 'search';
+      query: string;
+      selectionStart: number | null;
+      selectionEnd: number | null;
+      inventoryScrollTop: number;
+    }
+  | { type: 'select'; cacheId: string; inventoryScrollTop: number }
+  | { type: 'refresh'; inventoryScrollTop: number }
   | { type: 'openCache'; cacheId: string }
   | { type: 'openUsage'; cacheId: string; usageIndex: number };
 
@@ -25,6 +31,9 @@ export class CacheBrowserService {
   private session: CacheSession | undefined;
   private selectedId: string | undefined;
   private query = '';
+  private searchSelectionStart: number | undefined;
+  private searchSelectionEnd: number | undefined;
+  private inventoryScrollTop = 0;
   private nonce = '';
 
   constructor(private readonly context: vscode.ExtensionContext) {}
@@ -91,11 +100,14 @@ export class CacheBrowserService {
       this.session = undefined;
       this.selectedId = undefined;
       this.query = '';
+      this.searchSelectionStart = undefined;
+      this.searchSelectionEnd = undefined;
+      this.inventoryScrollTop = 0;
       this.nonce = '';
     });
   }
 
-  private render(): void {
+  private render(restoreSearchFocus = false): void {
     if (!this.panel || !this.session) {
       return;
     }
@@ -105,6 +117,10 @@ export class CacheBrowserService {
       cspSource: this.panel.webview.cspSource,
       selectedId: this.selectedId,
       query: this.query,
+      searchSelectionStart: this.searchSelectionStart,
+      searchSelectionEnd: this.searchSelectionEnd,
+      inventoryScrollTop: this.inventoryScrollTop,
+      restoreSearchFocus,
     });
   }
 
@@ -118,13 +134,18 @@ export class CacheBrowserService {
         break;
       case 'search':
         this.query = message.query;
-        this.render();
+        this.searchSelectionStart = message.selectionStart ?? message.query.length;
+        this.searchSelectionEnd = message.selectionEnd ?? message.query.length;
+        this.inventoryScrollTop = message.inventoryScrollTop;
+        this.render(true);
         break;
       case 'select':
         this.selectedId = message.cacheId;
+        this.inventoryScrollTop = message.inventoryScrollTop;
         this.render();
         break;
       case 'refresh':
+        this.inventoryScrollTop = message.inventoryScrollTop;
         this.reloadSession(getSharedProjectRegistryStore().getProjectsInScope());
         break;
       case 'openCache': {
@@ -150,12 +171,18 @@ export class CacheBrowserService {
   }
 
   private async openAtOffset(filePath: string, offset: number): Promise<void> {
-    const document = await vscode.workspace.openTextDocument(vscode.Uri.file(filePath));
-    const position = document.positionAt(offset);
-    const selection = new vscode.Selection(position, position);
-    await vscode.window.showTextDocument(document, {
-      selection,
-      viewColumn: vscode.ViewColumn.Beside,
-    });
+    try {
+      const document = await vscode.workspace.openTextDocument(vscode.Uri.file(filePath));
+      const position = document.positionAt(offset);
+      const selection = new vscode.Selection(position, position);
+      await vscode.window.showTextDocument(document, {
+        selection,
+        viewColumn: vscode.ViewColumn.Beside,
+      });
+    } catch {
+      await vscode.window.showErrorMessage(
+        `Could not open ${filePath}. The file may have changed; Refresh the Cache Browser and try again.`,
+      );
+    }
   }
 }

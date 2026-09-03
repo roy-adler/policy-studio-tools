@@ -68,6 +68,9 @@ export function discoverXmlCaches(project: PolicyStudioProject): {
 } {
   const caches: ParsedCache[] = [];
   const warnings: string[] = [];
+  if (project.projectType !== 'xml') {
+    return { caches, warnings, inventoryPaths: [] };
+  }
 
   for (const filePath of listFiles(project.rootPath, ['.xml'])) {
     let content: string;
@@ -75,7 +78,7 @@ export function discoverXmlCaches(project: PolicyStudioProject): {
       content = fs.readFileSync(filePath, 'utf8');
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      warnings.push(`Unreadable cache file ${filePath}: ${message}`);
+      warnings.push(`Unreadable XML entity-store file ${filePath}: ${message}`);
       continue;
     }
     const parsed = parseCacheXml(content, filePath, project);

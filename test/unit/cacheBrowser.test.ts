@@ -158,6 +158,21 @@ describe('discoverCaches YAML', () => {
     expect(result.caches).toEqual([]);
     expect(result.warnings).toEqual([]);
   });
+
+  it('does not discover cache entities from XML files in YAML projects', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cache-yaml-xml-noise-'));
+    fs.writeFileSync(path.join(tmp, 'values.yaml'), 'Policies: {}\n');
+    fs.mkdirSync(path.join(tmp, 'Policies'));
+    fs.writeFileSync(
+      path.join(tmp, 'Policies', 'Unrelated.xml'),
+      '<entity type="Cache"><fval name="name"><value>Noise</value></fval></entity>\n',
+    );
+
+    const result = discoverCaches(yamlProject(tmp));
+
+    expect(result.caches).toEqual([]);
+    expect(result.warnings).toEqual([]);
+  });
 });
 
 describe('parseCacheXml', () => {
@@ -327,6 +342,90 @@ describe('findCacheUsages', () => {
       'Hash # Cache',
     ]);
     expect(usages.every((usage) => usage.circuitName === 'Commented Circuit')).toBe(true);
+  });
+
+  it('keeps the filter entity type when fields.type appears before a cache reference', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cache-fields-type-usage-'));
+    fs.writeFileSync(path.join(tmp, 'values.yaml'), 'Policies: {}\n');
+    fs.mkdirSync(path.join(tmp, 'Policies'));
+    fs.mkdirSync(path.join(tmp, 'Libraries', 'Cache Manager'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmp, 'Libraries', 'Cache Manager', 'One.yaml'),
+      '---\ntype: Cache\nfields:\n  name: One\n',
+    );
+    fs.writeFileSync(
+      path.join(tmp, 'Policies', 'FieldsType.yaml'),
+      [
+        'type: FilterCircuit',
+        'fields:',
+        '  name: Fields Type Circuit',
+        'children:',
+        '- type: RemoveCachedAttribute',
+        '  fields:',
+        '    name: Remove One',
+        '    type: java.lang.String',
+        '    cacheValue: One',
+        '',
+      ].join('\n'),
+    );
+
+    const project = yamlProject(tmp);
+    const discovered = discoverCaches(project);
+    const { usages, warnings } = findCacheUsages(
+      project,
+      discovered.caches,
+      new Set(discovered.inventoryPaths),
+    );
+
+    expect(warnings).toEqual([]);
+    expect(usages).toHaveLength(1);
+    expect(usages[0]).toMatchObject({
+      cacheName: 'One',
+      usageKind: 'caching-filter',
+      filterType: 'RemoveCachedAttribute',
+      fieldName: 'cacheValue',
+    });
+  });
+
+  it('scans cache usages even when the mapping YAML parser rejects the file', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cache-invalid-yaml-usage-'));
+    fs.writeFileSync(path.join(tmp, 'values.yaml'), 'Policies: {}\n');
+    fs.mkdirSync(path.join(tmp, 'Policies'));
+    fs.mkdirSync(path.join(tmp, 'Libraries', 'Cache Manager'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmp, 'Libraries', 'Cache Manager', 'One.yaml'),
+      '---\ntype: Cache\nfields:\n  name: One\n',
+    );
+    const usagePath = path.join(tmp, 'Policies', 'Unsupported.yaml');
+    fs.writeFileSync(
+      usagePath,
+      [
+        'type: FilterCircuit',
+        'children:',
+        '- type: CacheAttribute',
+        '  fields:',
+        '    name: Unsupported YAML Filter',
+        '    unsupported: &shared value',
+        '    cache: One',
+        '',
+      ].join('\n'),
+    );
+
+    const project = yamlProject(tmp);
+    const discovered = discoverCaches(project);
+    const { usages, warnings } = findCacheUsages(
+      project,
+      discovered.caches,
+      new Set(discovered.inventoryPaths),
+    );
+
+    expect(warnings.some((warning) => warning.includes(usagePath))).toBe(true);
+    expect(usages).toHaveLength(1);
+    expect(usages[0]).toMatchObject({
+      cacheName: 'One',
+      filterType: 'CacheAttribute',
+      fieldName: 'cache',
+    });
   });
 
   it('records _parent.yaml at project root when nested under ancestor Cache Manager', () => {
@@ -556,5 +655,32 @@ describe('cache panel html', () => {
     expect(html).toContain('yaml-project');
     expect(html).toContain('xml-project');
     expect(html).toMatch(/empty/i);
+  });
+
+  it('posts and restores search caret and inventory scroll across host renders', () => {
+    const session = loadCacheSession([yamlProject()]);
+    const html = renderCacheBrowserHtml(session, {
+      ...htmlOpts,
+      query: 'cors',
+      searchSelectionStart: 2,
+      searchSelectionEnd: 4,
+      inventoryScrollTop: 37,
+      restoreSearchFocus: true,
+    });
+
+    expect(html).toContain('selectionStart: search.selectionStart');
+    expect(html).toContain('selectionEnd: search.selectionEnd');
+    expect(html).toContain('inventoryScrollTop: inventory?.scrollTop ?? 0');
+    expect(html).toContain('search.focus()');
+    expect(html).toContain('search.setSelectionRange(2, 4)');
+    expect(html).toContain('inventory.scrollTop = 37');
+  });
+
+  it('caps overflowing warning banners', () => {
+    const session = loadCacheSession([yamlProject()]);
+    const html = renderCacheBrowserHtml(session, htmlOpts);
+
+    expect(html).toMatch(/\.banner\s*\{[^}]*max-height:\s*\d+px;/s);
+    expect(html).toMatch(/\.banner\s*\{[^}]*overflow:\s*auto;/s);
   });
 });
