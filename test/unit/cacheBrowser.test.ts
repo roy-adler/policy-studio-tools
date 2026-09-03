@@ -12,6 +12,7 @@ import {
 } from '../../src/features/cacheBrowser/cacheIdentity';
 import { discoverCaches } from '../../src/features/cacheBrowser/discoverCaches';
 import { findCacheUsages } from '../../src/features/cacheBrowser/findCacheUsages';
+import { loadCacheSession } from '../../src/features/cacheBrowser/loadCacheSession';
 import { resolveCacheRef } from '../../src/features/cacheBrowser/resolveCacheRef';
 import { searchCaches } from '../../src/features/cacheBrowser/searchCaches';
 import { parseCacheXml } from '../../src/features/cacheBrowser/parseCacheXml';
@@ -450,5 +451,45 @@ describe('findCacheUsages', () => {
     );
     expect(usages).toEqual([]);
     expect(warnings.some((w) => /Broken.xml/i.test(w))).toBe(true);
+  });
+});
+
+describe('loadCacheSession', () => {
+  it('loads yaml caches, usages, empty-file warning, and project label', () => {
+    const session = loadCacheSession([yamlProject()]);
+    expect(session.projectLabel).toBe('yaml-project');
+    expect(session.caches.map((c) => c.name).sort()).toEqual([
+      'CORS Profiles',
+      'Cron Expression Library',
+      'Custom Store',
+    ]);
+    expect(session.warnings.some((w) => /empty/i.test(w))).toBe(true);
+    const cors = session.caches.find((c) => c.name === 'CORS Profiles');
+    const corsUsages = session.usages.filter((u) => u.cacheId === cacheId(cors!));
+    expect(corsUsages.length).toBeGreaterThanOrEqual(3);
+    const custom = session.caches.find((c) => c.name === 'Custom Store');
+    expect(session.usages.filter((u) => u.cacheId === cacheId(custom!))).toHaveLength(0);
+  });
+
+  it('labels multiple projects and does not resolve refs across projects', () => {
+    const session = loadCacheSession([yamlProject(), xmlProject()]);
+    expect(session.projectLabel).toBe('2 projects');
+    expect(session.caches.some((c) => c.projectId === 'yaml-1')).toBe(true);
+    expect(session.caches.some((c) => c.projectId === 'xml-1')).toBe(true);
+    const cors = session.caches.find((c) => c.name === 'CORS Profiles');
+    expect(
+      session.usages
+        .filter((u) => u.cacheId === cacheId(cors!))
+        .every((u) => u.projectId === 'yaml-1'),
+    ).toBe(true);
+  });
+
+  it('returns empty inventory for a project with no caches', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cache-empty-proj-'));
+    fs.writeFileSync(path.join(tmp, 'values.yaml'), 'Policies: {}\n');
+    fs.mkdirSync(path.join(tmp, 'Policies'));
+    const session = loadCacheSession([yamlProject(tmp)]);
+    expect(session.caches).toEqual([]);
+    expect(session.usages).toEqual([]);
   });
 });
