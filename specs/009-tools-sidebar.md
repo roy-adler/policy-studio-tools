@@ -30,6 +30,7 @@ As a Policy Studio developer, I want to click the Policy Studio icon in the VS C
 | Analyze | `policyStudioTools.showCircuitGraph` | `008` |
 | Analyze | `policyStudioTools.comparePolicies` | `006` |
 | Analyze | `policyStudioTools.openEnvValuesEditor` | `011` |
+| Analyze | `policyStudioTools.openCacheBrowser` | `013` |
 | Validate | `policyStudioTools.validatePathTemplates` | `005` |
 | Export | `policyStudioTools.exportDocumentation` | `007` |
 | Traces | *(open `.trc` via custom editor; sidebar lists recent traces)* | `004` |
@@ -77,6 +78,7 @@ Analyze
   $(diff)   Compare policies         → comparePolicies
   $(symbol-field) ENV values editor  → openEnvValuesEditor
   $(table)  KPS editor               → openKpsEditor
+  $(database) Caches                 → openCacheBrowser
 Validate
   $(warning) Validate path templates → validatePathTemplates
 Export
