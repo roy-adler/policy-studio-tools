@@ -1,0 +1,18 @@
+---
+type: FilterCircuit
+fields:
+  name: Uses CORS
+  start: ./Cache Attribute
+children:
+- type: CacheAttribute
+  fields:
+    name: Cache Attribute
+    cache: /Libraries/Cache Manager/CORS Profiles
+- type: IsCached
+  fields:
+    name: Is Cached?
+    cacheToUse: ./CORS Profiles
+- type: RemoveCachedAttribute
+  fields:
+    name: Remove Cron
+    other: /Libraries/Cache Manager/Cron Expression Library

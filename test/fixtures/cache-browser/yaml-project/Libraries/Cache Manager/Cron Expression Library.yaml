@@ -1,0 +1,9 @@
+---
+type: DistributedCache
+fields:
+  name: Cron Expression Library
+  maxElementsInMemory: 10000
+  maxElementsOnDisk: 10001
+  overflowToDisk: true
+  timeToLiveSeconds: 600
+  timeToIdleSeconds: 300

@@ -1,0 +1,5 @@
+---
+type: AuthzCodePersist
+fields:
+  name: Authz Code Store
+  cache: /Libraries/Cache Manager/CORS Profiles

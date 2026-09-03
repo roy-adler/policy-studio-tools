@@ -1,0 +1,5 @@
+---
+type: Cache
+fields:
+  name: CORS Profiles
+  eternal: true

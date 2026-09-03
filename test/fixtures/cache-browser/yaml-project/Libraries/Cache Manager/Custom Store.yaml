@@ -1,0 +1,5 @@
+---
+type: WidgetCache
+fields:
+  name: Custom Store
+  maxSize: 42
