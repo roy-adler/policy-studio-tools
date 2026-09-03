@@ -1,7 +1,8 @@
 import * as path from 'path';
 import { cacheId, cacheListHint } from './cacheIdentity';
+import { shouldShowProjectNames } from './resolveCacheBrowserProjects';
 import { searchCaches } from './searchCaches';
-import type { CacheSession, CacheUsage, ParsedCache } from './types';
+import type { CacheInventoryScope, CacheSession, CacheUsage, ParsedCache } from './types';
 
 function escapeHtml(value: string): string {
   return value
@@ -56,7 +57,7 @@ function renderGroups(
   selectedId: string,
 ): string {
   const groups = groupedCaches(caches);
-  const showProject = new Set(session.caches.map((cache) => cache.projectId)).size > 1;
+  const showProject = shouldShowProjectNames(session);
   return (
     [
       ['Local', groups.local],
@@ -137,6 +138,14 @@ function styles(): string {
     }
     .title { font-weight: 600; }
     .project-label { opacity: 0.75; }
+    .scope-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+      opacity: 0.85;
+      white-space: nowrap;
+    }
     #search {
       flex: 1;
       min-width: 120px;
@@ -209,6 +218,7 @@ export function renderCacheBrowserHtml(
     searchSelectionEnd?: number;
     inventoryScrollTop?: number;
     restoreSearchFocus?: boolean;
+    inventoryScope?: CacheInventoryScope;
   },
 ): string {
   const filtered = searchCaches(session.caches, options.query);
@@ -245,6 +255,9 @@ export function renderCacheBrowserHtml(
       ? `inventory.scrollTop = ${Math.max(0, Math.trunc(options.inventoryScrollTop))};`
       : '';
 
+  const inventoryScope = options.inventoryScope ?? session.inventoryScope;
+  const allProjectsChecked = inventoryScope === 'allProjects' ? ' checked' : '';
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -257,6 +270,7 @@ export function renderCacheBrowserHtml(
   <header>
     <span class="title">Caches</span>
     <span class="project-label">${escapeHtml(session.projectLabel)}</span>
+    <label class="scope-toggle"><input id="allProjects" type="checkbox"${allProjectsChecked} /> All projects</label>
     <input id="search" type="search" aria-label="Search caches" placeholder="Search caches" value="${escapeHtml(options.query)}" />
     <button id="refresh" class="toolbar-button">Refresh</button>
     <button id="openCache" class="toolbar-button"${selected ? '' : ' disabled'}>Open YAML</button>
@@ -297,6 +311,14 @@ export function renderCacheBrowserHtml(
     });
     document.getElementById('refresh')?.addEventListener('click', () => {
       vscode.postMessage({ type: 'refresh', inventoryScrollTop: inventory?.scrollTop ?? 0 });
+    });
+    document.getElementById('allProjects')?.addEventListener('change', (event) => {
+      const target = event.target;
+      vscode.postMessage({
+        type: 'setInventoryScope',
+        scope: target instanceof HTMLInputElement && target.checked ? 'allProjects' : 'inScope',
+        inventoryScrollTop: inventory?.scrollTop ?? 0,
+      });
     });
     document.getElementById('openCache')?.addEventListener('click', () => {
       vscode.postMessage({ type: 'openCache', cacheId: selectedCacheId });

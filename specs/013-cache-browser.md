@@ -10,7 +10,7 @@ As a Policy Studio developer, I want to browse local and distributed caches (and
 
 ## Inputs
 
-- **Project scope:** `getProjectsInScope()` from `000-multi-project-monorepo.md`. Follow the active/selected project while the panel is open.
+- **Project scope:** `getProjectsInScope()` from `000-multi-project-monorepo.md` for the default inventory. The panel also offers an **All projects** toggle that loads caches from every discovered Policy Studio project in the registry (`getProjectRegistry().projects`), independent of the sidebar scope picker.
 - **YAML caches (primary):** `Libraries/Cache Manager/**/*.yaml` and `*.yml` inside a detected YAML project. Skip `_parent.yaml`.
 - **XML caches (legacy):** entity-store entities with `type="Cache"` or `type="DistributedCache"`.
 - **Usage scan:** all `.yaml`/`.yml`/`.xml` under the same project roots, excluding cache inventory files (and `_parent.yaml` under Cache Manager). Includes Policies, APIs, Environment Configuration, and other library entities that may hold a `cache:` field (for example an OAuth store).
@@ -20,10 +20,10 @@ As a Policy Studio developer, I want to browse local and distributed caches (and
 ## Outputs
 
 - Webview panel **Caches** (master–detail):
-  - **Toolbar:** project label, search box, Refresh, Open YAML (selected cache file).
+  - **Toolbar:** project label, **All projects** toggle, search box, Refresh, Open YAML (selected cache file).
   - **Left:** caches grouped by kind (Local, Distributed, Other). Each row shows name, usage count, and a short hint (`eternal` or TTL when present). Multi-project rows include `projectDisplayName`.
   - **Right:** selected cache settings (scalar fields) and usage list.
-  - **Warnings:** skipped empty/invalid cache files; unreadable policy files during usage scan.
+  - **Warnings:** skipped empty/invalid **cache inventory** files; unreadable policy files during usage scan. Do **not** warn about invalid YAML in policy/usage files when the line-oriented usage scan still runs.
 - Click usage → open that file and reveal the match range.
 - Empty inventory and empty search states as described below.
 
@@ -71,7 +71,7 @@ Usage kind is `cache-field` or `caching-filter`. Unused caches stay in the inven
 - **Open YAML** opens the selected cache file at its recorded range (XML projects open the entity-store file at the entity range).
 - Clicking a usage row opens that policy file at the match.
 - Refresh rebuilds discovery, parse, and usage from disk. No live file watcher in v1.
-- Follow active project: rebuild the session for the newly selected project.
+- Follow active project: when inventory scope is **current scope**, rebuild the session for the newly selected scope. When **All projects** is enabled, scope changes do not shrink the inventory.
 
 ### Empty and error states
 

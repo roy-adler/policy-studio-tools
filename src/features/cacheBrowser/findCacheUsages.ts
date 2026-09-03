@@ -1,7 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { isWellFormedXml } from '../circuitSearch/xmlPolicyParser';
-import { parseMappingYaml } from '../envValuesEditor/yamlMaps';
 import type { PolicyStudioProject } from '../projectRegistry/types';
 import { cacheId, isCacheFieldName, isKnownCachingFilterType } from './cacheIdentity';
 import { listFiles } from './discoverCaches';
@@ -323,10 +322,6 @@ export function findCacheUsages(
     // contain no usage candidates, so do not duplicate that warning here.
     if (!content.trim()) {
       continue;
-    }
-    const parsed = parseMappingYaml(content);
-    if (parsed.error) {
-      warnings.push(`Invalid YAML in ${filePath}: ${parsed.error}`);
     }
     usages.push(...scanYamlUsages(content, filePath, project, caches));
   }

@@ -13,6 +13,11 @@ import {
 import { discoverCaches } from '../../src/features/cacheBrowser/discoverCaches';
 import { findCacheUsages } from '../../src/features/cacheBrowser/findCacheUsages';
 import { loadCacheSession } from '../../src/features/cacheBrowser/loadCacheSession';
+import {
+  cacheSessionProjectLabel,
+  resolveCacheBrowserProjects,
+  shouldShowProjectNames,
+} from '../../src/features/cacheBrowser/resolveCacheBrowserProjects';
 import { renderCacheBrowserHtml } from '../../src/features/cacheBrowser/cachePanelHtml';
 import { shouldRevealCacheBrowserPanel } from '../../src/features/cacheBrowser/panelShowMode';
 import { resolveCacheRef } from '../../src/features/cacheBrowser/resolveCacheRef';
@@ -419,7 +424,7 @@ describe('findCacheUsages', () => {
       new Set(discovered.inventoryPaths),
     );
 
-    expect(warnings.some((warning) => warning.includes(usagePath))).toBe(true);
+    expect(warnings.some((warning) => warning.includes(usagePath))).toBe(false);
     expect(usages).toHaveLength(1);
     expect(usages[0]).toMatchObject({
       cacheName: 'One',
@@ -607,6 +612,46 @@ describe('loadCacheSession', () => {
     expect(session.caches).toEqual([]);
     expect(session.usages).toEqual([]);
   });
+
+  it('labels all-projects inventory scope', () => {
+    const session = loadCacheSession([yamlProject(), xmlProject()], {
+      inventoryScope: 'allProjects',
+    });
+    expect(session.projectLabel).toBe('All projects (2)');
+    expect(session.inventoryScope).toBe('allProjects');
+    expect(session.loadedProjectCount).toBe(2);
+  });
+});
+
+describe('resolveCacheBrowserProjects', () => {
+  it('returns in-scope or registry projects based on inventory scope', () => {
+    const projects = [yamlProject(), xmlProject()];
+    const store = {
+      getProjectsInScope: () => [projects[0]],
+      getProjectRegistry: () => ({ projects }),
+    };
+
+    expect(resolveCacheBrowserProjects(store, 'inScope')).toEqual([projects[0]]);
+    expect(resolveCacheBrowserProjects(store, 'allProjects')).toEqual(projects);
+  });
+
+  it('builds project labels for inventory scope modes', () => {
+    expect(cacheSessionProjectLabel([yamlProject()], 'inScope')).toBe('yaml-project');
+    expect(cacheSessionProjectLabel([yamlProject(), xmlProject()], 'inScope')).toBe('2 projects');
+    expect(cacheSessionProjectLabel([yamlProject()], 'allProjects')).toBe(
+      'All projects · yaml-project',
+    );
+    expect(cacheSessionProjectLabel([yamlProject(), xmlProject()], 'allProjects')).toBe(
+      'All projects (2)',
+    );
+  });
+
+  it('shows project names when browsing all projects even if caches come from one project', () => {
+    const session = loadCacheSession([yamlProject(), xmlProject()], {
+      inventoryScope: 'allProjects',
+    });
+    expect(shouldShowProjectNames(session)).toBe(true);
+  });
 });
 
 const htmlOpts = { nonce: 'testnonce', cspSource: 'https://example', query: '' };
@@ -638,7 +683,14 @@ describe('cache panel html', () => {
   });
 
   it('shows empty inventory and no-match copy', () => {
-    const empty: CacheSession = { caches: [], usages: [], warnings: [], projectLabel: 'x' };
+    const empty: CacheSession = {
+      caches: [],
+      usages: [],
+      warnings: [],
+      projectLabel: 'x',
+      inventoryScope: 'inScope',
+      loadedProjectCount: 1,
+    };
     expect(renderCacheBrowserHtml(empty, htmlOpts)).toContain(
       'No caches under Libraries/Cache Manager.',
     );
@@ -655,6 +707,20 @@ describe('cache panel html', () => {
     expect(html).toContain('yaml-project');
     expect(html).toContain('xml-project');
     expect(html).toMatch(/empty/i);
+  });
+
+  it('renders the all-projects toggle and checked state', () => {
+    const session = loadCacheSession([yamlProject(), xmlProject()], {
+      inventoryScope: 'allProjects',
+    });
+    const html = renderCacheBrowserHtml(session, {
+      ...htmlOpts,
+      inventoryScope: 'allProjects',
+    });
+    expect(html).toContain('All projects');
+    expect(html).toContain('id="allProjects" type="checkbox" checked');
+    expect(html).toContain('setInventoryScope');
+    expect(html).toContain('All projects (2)');
   });
 
   it('posts and restores search caret and inventory scroll across host renders', () => {

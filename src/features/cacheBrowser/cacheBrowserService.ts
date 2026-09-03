@@ -1,14 +1,14 @@
 import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 import { getSharedProjectRegistryStore } from '../projectRegistry/projectRegistryService';
-import type { PolicyStudioProject } from '../projectRegistry/types';
-import { getSharedToolsHubService } from '../toolsSidebar/toolsHubService';
-import { cacheId } from './cacheIdentity';
 import { renderCacheBrowserHtml } from './cachePanelHtml';
 import { loadCacheSession } from './loadCacheSession';
 import { shouldRevealCacheBrowserPanel } from './panelShowMode';
+import { resolveCacheBrowserProjects } from './resolveCacheBrowserProjects';
 import { CACHE_BROWSER_TOOL } from './toolDescriptor';
-import type { CacheSession } from './types';
+import type { CacheInventoryScope, CacheSession } from './types';
+import { getSharedToolsHubService } from '../toolsSidebar/toolsHubService';
+import { cacheId } from './cacheIdentity';
 
 type IncomingMessage =
   | { type: 'ready' }
@@ -21,6 +21,11 @@ type IncomingMessage =
     }
   | { type: 'select'; cacheId: string; inventoryScrollTop: number }
   | { type: 'refresh'; inventoryScrollTop: number }
+  | {
+      type: 'setInventoryScope';
+      scope: CacheInventoryScope;
+      inventoryScrollTop: number;
+    }
   | { type: 'openCache'; cacheId: string }
   | { type: 'openUsage'; cacheId: string; usageIndex: number };
 
@@ -30,6 +35,7 @@ export class CacheBrowserService {
   private panel: vscode.WebviewPanel | undefined;
   private session: CacheSession | undefined;
   private selectedId: string | undefined;
+  private inventoryScope: CacheInventoryScope = 'inScope';
   private query = '';
   private searchSelectionStart: number | undefined;
   private searchSelectionEnd: number | undefined;
@@ -48,25 +54,28 @@ export class CacheBrowserService {
       ),
       store.onScopeChanged(() => {
         if (this.panel) {
-          this.reloadSession(store.getProjectsInScope());
+          this.reloadSession();
         }
       }),
     );
   }
 
   private async openBrowser(): Promise<void> {
-    const projects = getSharedProjectRegistryStore().getProjectsInScope();
+    const store = getSharedProjectRegistryStore();
+    const projects = resolveCacheBrowserProjects(store, this.inventoryScope);
     if (projects.length === 0) {
       await vscode.window.showWarningMessage(NO_PROJECTS_MESSAGE);
       return;
     }
 
     this.ensurePanel('open');
-    this.reloadSession(projects);
+    this.reloadSession();
   }
 
-  private reloadSession(projects: PolicyStudioProject[]): void {
-    this.session = loadCacheSession(projects);
+  private reloadSession(): void {
+    const store = getSharedProjectRegistryStore();
+    const projects = resolveCacheBrowserProjects(store, this.inventoryScope);
+    this.session = loadCacheSession(projects, { inventoryScope: this.inventoryScope });
     if (
       this.selectedId &&
       !this.session.caches.some((cache) => cacheId(cache) === this.selectedId)
@@ -99,6 +108,7 @@ export class CacheBrowserService {
       this.panel = undefined;
       this.session = undefined;
       this.selectedId = undefined;
+      this.inventoryScope = 'inScope';
       this.query = '';
       this.searchSelectionStart = undefined;
       this.searchSelectionEnd = undefined;
@@ -121,6 +131,7 @@ export class CacheBrowserService {
       searchSelectionEnd: this.searchSelectionEnd,
       inventoryScrollTop: this.inventoryScrollTop,
       restoreSearchFocus,
+      inventoryScope: this.inventoryScope,
     });
   }
 
@@ -146,7 +157,12 @@ export class CacheBrowserService {
         break;
       case 'refresh':
         this.inventoryScrollTop = message.inventoryScrollTop;
-        this.reloadSession(getSharedProjectRegistryStore().getProjectsInScope());
+        this.reloadSession();
+        break;
+      case 'setInventoryScope':
+        this.inventoryScope = message.scope;
+        this.inventoryScrollTop = message.inventoryScrollTop;
+        this.reloadSession();
         break;
       case 'openCache': {
         const selected = this.session.caches.find(

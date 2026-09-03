@@ -1,15 +1,21 @@
 import type { PolicyStudioProject } from '../projectRegistry/types';
 import { discoverCaches } from './discoverCaches';
 import { findCacheUsages } from './findCacheUsages';
-import type { CacheSession } from './types';
+import { cacheSessionProjectLabel } from './resolveCacheBrowserProjects';
+import type { CacheInventoryScope, CacheSession } from './types';
 
-export function loadCacheSession(projects: PolicyStudioProject[]): CacheSession {
+export function loadCacheSession(
+  projects: PolicyStudioProject[],
+  options?: { inventoryScope?: CacheInventoryScope },
+): CacheSession {
+  const inventoryScope = options?.inventoryScope ?? 'inScope';
   const session: CacheSession = {
     caches: [],
     usages: [],
     warnings: [],
-    projectLabel:
-      projects.length === 0 ? '' : projects.length === 1 ? projects[0].displayName : `${projects.length} projects`,
+    projectLabel: cacheSessionProjectLabel(projects, inventoryScope),
+    inventoryScope,
+    loadedProjectCount: projects.length,
   };
 
   for (const project of projects) {

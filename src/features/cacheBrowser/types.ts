@@ -1,3 +1,5 @@
+export type CacheInventoryScope = 'inScope' | 'allProjects';
+
 export type CacheKind = 'local' | 'distributed' | 'other';
 
 export type CacheUsageKind = 'cache-field' | 'caching-filter';
@@ -35,4 +37,6 @@ export interface CacheSession {
   usages: CacheUsage[];
   warnings: string[];
   projectLabel: string;
+  inventoryScope: CacheInventoryScope;
+  loadedProjectCount: number;
 }
