@@ -264,11 +264,12 @@ function isCacheManagerParentYaml(projectRootPath: string, filePath: string): bo
     return false;
   }
   const segments = relativePath.split(/[/\\]/);
+  const basename = segments[segments.length - 1];
   return (
-    segments.length === 3 &&
+    segments.length >= 3 &&
     segments[0].toLowerCase() === 'libraries' &&
     segments[1].toLowerCase() === 'cache manager' &&
-    segments[2].toLowerCase() === '_parent.yaml'
+    basename.toLowerCase() === '_parent.yaml'
   );
 }
 
