@@ -11,11 +11,13 @@ import {
   toYamlPk,
 } from '../../src/features/cacheBrowser/cacheIdentity';
 import { discoverCaches } from '../../src/features/cacheBrowser/discoverCaches';
+import { parseCacheXml } from '../../src/features/cacheBrowser/parseCacheXml';
 import { parseCacheYaml } from '../../src/features/cacheBrowser/parseCacheYaml';
 import type { PolicyStudioProject } from '../../src/features/projectRegistry/types';
 import type { ParsedCache } from '../../src/features/cacheBrowser/types';
 
 const yamlRoot = path.join(__dirname, '..', 'fixtures', 'cache-browser', 'yaml-project');
+const xmlRoot = path.join(__dirname, '..', 'fixtures', 'cache-browser', 'xml-project');
 
 function yamlProject(root = yamlRoot): PolicyStudioProject {
   return {
@@ -25,6 +27,17 @@ function yamlProject(root = yamlRoot): PolicyStudioProject {
     relativePath: 'yaml-project',
     displayName: 'yaml-project',
     projectType: 'yaml',
+  };
+}
+
+function xmlProject(root = xmlRoot): PolicyStudioProject {
+  return {
+    id: 'xml-1',
+    rootPath: root,
+    workspaceFolder: root,
+    relativePath: 'xml-project',
+    displayName: 'xml-project',
+    projectType: 'xml',
   };
 }
 
@@ -124,5 +137,45 @@ describe('discoverCaches YAML', () => {
     const result = discoverCaches(yamlProject(tmp));
     expect(result.caches).toEqual([]);
     expect(result.warnings).toEqual([]);
+  });
+});
+
+describe('parseCacheXml', () => {
+  it('parses nested Cache and DistributedCache into the same model and ignores other types', () => {
+    const filePath = path.join(xmlRoot, 'PrimaryStore.xml');
+    const content = fs.readFileSync(filePath, 'utf8');
+    const { caches, warning } = parseCacheXml(content, filePath, xmlProject());
+    expect(warning).toBeUndefined();
+    expect(caches.map((c) => c.name).sort()).toEqual(['HTTP Sessions', 'OAuth Tokens']);
+    expect(caches.find((c) => c.name === 'HTTP Sessions')?.kind).toBe('local');
+    expect(caches.find((c) => c.name === 'OAuth Tokens')?.kind).toBe('distributed');
+    expect(caches.find((c) => c.name === 'HTTP Sessions')?.yamlPk).toBe(
+      '/Libraries/Cache Manager/HTTP Sessions',
+    );
+    expect(caches.some((c) => c.name === 'Not A Cache' || c.name === 'Lookup')).toBe(false);
+  });
+
+  it('warns on invalid XML and returns no caches', () => {
+    const { caches, warning } = parseCacheXml(
+      '<entity>',
+      path.join(xmlRoot, 'broken.xml'),
+      xmlProject(),
+    );
+    expect(caches).toEqual([]);
+    expect(warning).toMatch(/invalid xml/i);
+  });
+});
+
+describe('discoverCaches XML', () => {
+  it('finds XML cache entities from PrimaryStore.xml', () => {
+    const { caches, inventoryPaths } = discoverCaches(xmlProject());
+    expect(caches.map((c) => c.name).sort()).toEqual(['HTTP Sessions', 'OAuth Tokens']);
+    expect(inventoryPaths).toEqual([]);
+  });
+
+  it('returns an empty inventory for XML with no Cache entities', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cache-xml-none-'));
+    fs.writeFileSync(path.join(tmp, 'PrimaryStore.xml'), '<entityStore></entityStore>\n');
+    expect(discoverCaches(xmlProject(tmp)).caches).toEqual([]);
   });
 });

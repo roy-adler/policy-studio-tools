@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import type { PolicyStudioProject } from '../projectRegistry/types';
+import { parseCacheXml } from './parseCacheXml';
 import { parseCacheYaml } from './parseCacheYaml';
 import type { ParsedCache } from './types';
 
@@ -17,6 +18,7 @@ export function discoverCaches(project: PolicyStudioProject): {
   return {
     caches: [...yaml.caches, ...xml.caches],
     warnings: [...yaml.warnings, ...xml.warnings],
+    // YAML cache definition files only. XML definitions and usages share entity-store files.
     inventoryPaths: [...yaml.inventoryPaths, ...xml.inventoryPaths],
   };
 }
@@ -59,12 +61,31 @@ function discoverYamlCaches(project: PolicyStudioProject): {
   return { caches, warnings, inventoryPaths };
 }
 
-export function discoverXmlCaches(_project: PolicyStudioProject): {
+export function discoverXmlCaches(project: PolicyStudioProject): {
   caches: ParsedCache[];
   warnings: string[];
   inventoryPaths: string[];
 } {
-  return { caches: [], warnings: [], inventoryPaths: [] };
+  const caches: ParsedCache[] = [];
+  const warnings: string[] = [];
+
+  for (const filePath of listFiles(project.rootPath, ['.xml'])) {
+    let content: string;
+    try {
+      content = fs.readFileSync(filePath, 'utf8');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      warnings.push(`Unreadable cache file ${filePath}: ${message}`);
+      continue;
+    }
+    const parsed = parseCacheXml(content, filePath, project);
+    caches.push(...parsed.caches);
+    if (parsed.warning) {
+      warnings.push(parsed.warning);
+    }
+  }
+
+  return { caches, warnings, inventoryPaths: [] };
 }
 
 export function listFiles(dir: string, extensions: string[]): string[] {
