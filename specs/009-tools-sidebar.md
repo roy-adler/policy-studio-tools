@@ -54,13 +54,20 @@ Three views under the container, top to bottom:
 
 #### 1. `policyStudio.projects` — Projects (TreeView)
 
-Shows discovery and scope at a glance.
+Shows discovery and scope at a glance. Supports two **view modes** (see `docs/superpowers/specs/2026-09-07-projects-path-tree-design.md`):
+
+- **Tree (default):** projects nested under compact path folders derived from each project’s `relativePath` (single-child folder chains collapsed; a folder with only one project child collapses into a project leaf labeled `folder/displayName`). Multi-root workspaces wrap each tree under a workspace-folder node.
+- **List:** flat project rows (original behaviour).
+
+Toggle via Projects view title-bar command `policyStudioTools.toggleProjectsViewMode`. Mode is persisted in workspace state (`policyStudio.projects.viewMode`: `tree` | `list`), not a user setting. Context key `policyStudio.projects.viewMode` drives the toolbar icon.
 
 | Node | Content | Action |
 |------|---------|--------|
 | Scope summary (root) | e.g. `Active: gateway-a`, `All projects (3)`, `Selected: 2 projects` | Click → `selectProjectScope` |
 | Refresh | `$(refresh) Refresh projects` | → `refreshProjects` |
-| Per-project children | `displayName`, type badge (`yaml` / `xml` — YAML is the primary format, XML legacy), `relativePath` | Click → set `activeProject` scope to that project |
+| Workspace folder (tree, multi-root only) | Workspace folder basename | Expand/collapse only |
+| Folder (tree) | Compact path segment(s), e.g. `policies/AUTH_GATEWAY` | Expand/collapse only |
+| Per-project (list: flat; tree: leaf) | `displayName`, type badge (`yaml` / `xml` — YAML is the primary format, XML legacy), `relativePath` | Click → set `activeProject` scope to that project |
 | Warnings | Discovery warnings from registry (truncated scan, unreadable paths) | Informational |
 
 Empty state (no projects): message *“No Policy Studio projects found”* with link to run **Refresh** and hint to check workspace folder / markers (`001`).
@@ -152,9 +159,11 @@ Each feature module calls `registerTool` during activation when its command exis
 
 ### Projects view
 
-- Refresh tree on `onProjectsChanged`, `onScopeChanged`, and after `refreshProjects`.
+- Refresh tree on `onProjectsChanged`, `onScopeChanged`, view-mode toggle, and after `refreshProjects`.
 - Highlight the project matching `activeProjectId` when scope mode is `activeProject`.
 - When scope is `allProjects` or `selectedProjects`, show a distinct scope icon on the root node.
+- Tree mode: build a path trie from `relativePath`, compact single-child folder chains, omit workspace-folder wrappers when only one workspace folder is present; projects with empty `relativePath` sit as leaves at that tree’s root.
+- List mode: preserve the flat project list used before path-tree support.
 
 ### Tools view
 
@@ -183,7 +192,8 @@ Each feature module calls `registerTool` during activation when its command exis
 ## Edge Cases
 
 - **Multi-root workspace:** Projects tree lists all discovered projects with `workspaceFolder` hint when the same `displayName` appears twice.
-- **Large monorepo (many projects):** Projects tree collapses to scope summary + searchable project list when `projectCount > 20` (virtualized filter box at top of view).
+- **Large monorepo (many projects):** Projects tree collapses to scope summary + searchable project list when `projectCount > 20` (virtualized filter box at top of view). Path-tree compact folders remain available under tree mode independently of that future filter.
+- **Sibling path segments:** Compact folders only merge when a folder has exactly one folder child and no project leaves at that node; siblings stay separate.
 - **Feature not yet implemented:** Tool entry absent from Tools view; command palette entries for that feature also use `when` clauses defined by each spec.
 - **Webview restored after reload:** Search query and results are not restored (fresh state); scope and projects restore from registry.
 - **User hides sidebar views:** Standard VS Code view visibility; no forced re-show except `showOnActivate` once per session.
@@ -193,7 +203,9 @@ Each feature module calls `registerTool` during activation when its command exis
 
 - [ ] Activity Bar shows a Policy Studio icon; clicking it opens the sidebar container.
 - [ ] **Projects** view lists discovered projects, current scope, and discovery warnings.
-- [ ] Clicking a project in the tree sets scope to `activeProject` for that project.
+- [ ] **Projects** view defaults to a compact path tree; toolbar toggles list ↔ tree and persists mode in workspace state.
+- [ ] Multi-root workspaces show workspace-folder parent nodes in tree mode; single-root does not.
+- [ ] Clicking a project in the tree sets scope to `activeProject` for that project; folder nodes do not change scope.
 - [ ] **Tools** view lists implemented tools in groups and runs the correct command on click.
 - [ ] Unimplemented tools (`003`–`008` until shipped) do not appear as dead entries.
 - [ ] **Circuit search** webview provides input, debounced results, and navigation consistent with `002`.
