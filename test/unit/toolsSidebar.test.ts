@@ -61,11 +61,123 @@ describe('buildProjectsTree', () => {
       warnings: ['Unable to read directory: /denied'],
     };
     const scope: ProjectScope = { mode: 'activeProject', activeProjectId: 'proj-1' };
-    const nodes = buildProjectsTree(registry, scope);
+    const nodes = buildProjectsTree(registry, scope, 'list');
 
     expect(nodes.some((node) => node.kind === 'scope')).toBe(true);
     expect(nodes.some((node) => node.kind === 'project' && node.projectId === 'proj-1')).toBe(true);
     expect(nodes.some((node) => node.kind === 'warning')).toBe(true);
+  });
+});
+
+describe('buildProjectsTree path tree', () => {
+  it('compacts sole project under a folder into leaf label folder/displayName', () => {
+    const registry: ProjectRegistry = {
+      projects: [
+        sampleProject({
+          id: 'a',
+          displayName: 'AUTH_GATEWAY_YAML',
+          relativePath: 'policies/AUTH_GATEWAY/AUTH_GATEWAY_YAML',
+          workspaceFolder: 'file:///repo',
+          rootPath: '/repo/policies/AUTH_GATEWAY/AUTH_GATEWAY_YAML',
+        }),
+        sampleProject({
+          id: 'b',
+          displayName: 'PAYMENT_API_YAML',
+          relativePath: 'policies/PAYMENT_API/PAYMENT_API_YAML',
+          workspaceFolder: 'file:///repo',
+          rootPath: '/repo/policies/PAYMENT_API/PAYMENT_API_YAML',
+        }),
+      ],
+      discoveredAt: new Date(),
+      warnings: [],
+    };
+    const roots = buildProjectsTree(registry, { mode: 'allProjects' }, 'tree');
+    const folders = roots.filter((n) => n.kind === 'folder');
+    expect(folders).toHaveLength(1);
+    expect(folders[0].label).toBe('policies');
+    const leaves = folders[0].children ?? [];
+    expect(leaves.map((n) => n.label).sort()).toEqual([
+      'AUTH_GATEWAY/AUTH_GATEWAY_YAML',
+      'PAYMENT_API/PAYMENT_API_YAML',
+    ]);
+    expect(leaves.every((n) => n.kind === 'project')).toBe(true);
+  });
+
+  it('does not wrap workspaceFolder when only one workspace root', () => {
+    const roots = buildProjectsTree(
+      {
+        projects: [sampleProject({ relativePath: 'gateway', displayName: 'gateway' })],
+        discoveredAt: new Date(),
+        warnings: [],
+      },
+      { mode: 'allProjects' },
+      'tree',
+    );
+    expect(roots.some((n) => n.kind === 'workspaceFolder')).toBe(false);
+  });
+
+  it('wraps under workspaceFolder when multiple workspace roots', () => {
+    const roots = buildProjectsTree(
+      {
+        projects: [
+          sampleProject({
+            id: '1',
+            workspaceFolder: 'file:///repo-a',
+            relativePath: 'gw',
+            displayName: 'gw',
+            rootPath: '/repo-a/gw',
+          }),
+          sampleProject({
+            id: '2',
+            workspaceFolder: 'file:///repo-b',
+            relativePath: 'gw',
+            displayName: 'gw',
+            rootPath: '/repo-b/gw',
+          }),
+        ],
+        discoveredAt: new Date(),
+        warnings: [],
+      },
+      { mode: 'allProjects' },
+      'tree',
+    );
+    const ws = roots.filter((n) => n.kind === 'workspaceFolder');
+    expect(ws).toHaveLength(2);
+  });
+
+  it('list mode stays flat with project kind nodes and no children', () => {
+    const roots = buildProjectsTree(
+      {
+        projects: [
+          sampleProject({
+            relativePath: 'policies/AUTH_GATEWAY/AUTH_GATEWAY_YAML',
+            displayName: 'AUTH_GATEWAY_YAML',
+          }),
+        ],
+        discoveredAt: new Date(),
+        warnings: [],
+      },
+      { mode: 'allProjects' },
+      'list',
+    );
+    const projects = roots.filter((n) => n.kind === 'project');
+    expect(projects).toHaveLength(1);
+    expect(projects[0].children).toBeUndefined();
+    expect(projects[0].label).toBe('AUTH_GATEWAY_YAML');
+  });
+
+  it('places root-level project as leaf without empty folder', () => {
+    const roots = buildProjectsTree(
+      {
+        projects: [sampleProject({ relativePath: '', displayName: 'root-proj' })],
+        discoveredAt: new Date(),
+        warnings: [],
+      },
+      { mode: 'allProjects' },
+      'tree',
+    );
+    expect(roots.some((n) => n.kind === 'project' && n.label === 'root-proj')).toBe(true);
+    expect(roots.some((n) => n.kind === 'folder')).toBe(false);
   });
 });
 
