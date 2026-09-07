@@ -70,7 +70,7 @@ describe('buildProjectsTree', () => {
 });
 
 describe('buildProjectsTree path tree', () => {
-  it('compacts sole project under a folder into leaf label folder/displayName', () => {
+  it('keeps a folder for a sole project and shows the project as its child', () => {
     const registry: ProjectRegistry = {
       projects: [
         sampleProject({
@@ -95,12 +95,15 @@ describe('buildProjectsTree path tree', () => {
     const folders = roots.filter((n) => n.kind === 'folder');
     expect(folders).toHaveLength(1);
     expect(folders[0].label).toBe('policies');
-    const leaves = folders[0].children ?? [];
-    expect(leaves.map((n) => n.label).sort()).toEqual([
-      'AUTH_GATEWAY/AUTH_GATEWAY_YAML',
-      'PAYMENT_API/PAYMENT_API_YAML',
-    ]);
-    expect(leaves.every((n) => n.kind === 'project')).toBe(true);
+    const categoryFolders = (folders[0].children ?? []).filter((n) => n.kind === 'folder');
+    expect(categoryFolders.map((n) => n.label).sort()).toEqual(['AUTH_GATEWAY', 'PAYMENT_API']);
+    expect(categoryFolders.every((n) => (n.children ?? []).length === 1)).toBe(true);
+    expect(categoryFolders.every((n) => n.children?.[0]?.kind === 'project')).toBe(true);
+    expect(
+      categoryFolders
+        .map((n) => n.children?.[0]?.label)
+        .sort(),
+    ).toEqual(['AUTH_GATEWAY_YAML', 'PAYMENT_API_YAML']);
   });
 
   it('does not wrap workspaceFolder when only one workspace root', () => {

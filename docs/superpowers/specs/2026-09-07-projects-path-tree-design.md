@@ -10,7 +10,7 @@ Make the Policy Studio **Projects** sidebar view easier to scan when many projec
 
 1. **Scope:** Group **project roots** by path. Do not show policy/circuit trees under a project.
 2. **Default mode:** `tree`. Alternate mode: `list` (current flat behaviour).
-3. **Compact folders:** Collapse single-child folder segments (VS Code Explorer–style), including a folder whose only child is a project leaf (leaf label becomes `parent/displayName`). Sibling folders under a shared parent (e.g. two gateways under `policies/`) do not collapse.
+3. **Compact folders:** Collapse single-child **folder** chains (VS Code Explorer–style). A folder whose only child is a **project** stays a folder with that project as its child (label = `displayName`) so categories remain visible. Sibling folders under a shared parent (e.g. two gateways under `policies/`) do not collapse.
 4. **Toggle:** Projects view title-bar button only. Persist in **workspace state** (`policyStudio.projects.viewMode`: `'tree' | 'list'`). No `settings.json` key.
 5. **Multi-root:** When the registry spans more than one workspace folder, wrap each tree under a `workspaceFolder` node. Single-root workspaces omit that wrapper.
 6. **Architecture:** Approach 1 — hierarchical tree model + flat list mode; extend `buildProjectsTree` / `ProjectsTreeProvider`.
@@ -37,8 +37,10 @@ Tree mode (single workspace root):
 Active: PAYMENT_API_YAML
 Refresh projects
 policies/
-  AUTH_GATEWAY/AUTH_GATEWAY_YAML     ← project leaf
-  PAYMENT_API/PAYMENT_API_YAML
+  AUTH_GATEWAY/
+    AUTH_GATEWAY_YAML
+  PAYMENT_API/
+    PAYMENT_API_YAML
 ```
 
 Tree mode (multi-root):
@@ -85,7 +87,7 @@ For TreeView parenting, either:
 Build a trie from each project’s posix `relativePath` segments (all segments including the project folder name). Then compact:
 
 1. **Folder chains:** while a folder node has exactly one child that is also a folder and has no project leaves at that node, merge: label becomes `parent/child`, children become the child’s children.
-2. **Sole project under a folder:** while a folder node has exactly one child and that child is a project leaf, replace the folder with that project leaf and set the leaf label to `folderLabel/projectDisplayName` (e.g. `AUTH_GATEWAY/AUTH_GATEWAY_YAML`). Description may still show type / active markers; avoid duplicating the full `relativePath` when it is already in the label.
+2. **Sole project under a folder:** keep the folder node; show the project as its only child with label `displayName` (do **not** merge into a single leaf). Description may omit `relativePath` when the path is already clear from parent folders.
 
 Projects with `relativePath === ''` are leaves at the tree root for that workspace folder (no empty path folder); label stays `displayName`.
 
@@ -93,11 +95,13 @@ Example for `policies/AUTH_GATEWAY/AUTH_GATEWAY_YAML` and `policies/PAYMENT_API/
 
 ```
 policies/
-  AUTH_GATEWAY/AUTH_GATEWAY_YAML
-  PAYMENT_API/PAYMENT_API_YAML
+  AUTH_GATEWAY/
+    AUTH_GATEWAY_YAML
+  PAYMENT_API/
+    PAYMENT_API_YAML
 ```
 
-(`policies` has two children → not collapsed; each gateway folder has one project → collapsed into the leaf label.)
+(`policies` has two children → not collapsed; each gateway folder keeps a project child.)
 
 ### Multi-root detection
 

@@ -56,7 +56,7 @@ Three views under the container, top to bottom:
 
 Shows discovery and scope at a glance. Supports two **view modes** (see `docs/superpowers/specs/2026-09-07-projects-path-tree-design.md`):
 
-- **Tree (default):** projects nested under compact path folders derived from each project’s `relativePath` (single-child folder chains collapsed; a folder with only one project child collapses into a project leaf labeled `folder/displayName`). Multi-root workspaces wrap each tree under a workspace-folder node.
+- **Tree (default):** projects nested under compact path folders derived from each project’s `relativePath` (single-child **folder** chains collapsed; a folder with only one project child stays a folder with that project as its child). Multi-root workspaces wrap each tree under a workspace-folder node.
 - **List:** flat project rows (original behaviour).
 
 Toggle via Projects view title-bar command `policyStudioTools.toggleProjectsViewMode`. Mode is persisted in workspace state (`policyStudio.projects.viewMode`: `tree` | `list`), not a user setting. Context key `policyStudio.projects.viewMode` drives the toolbar icon.

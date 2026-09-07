@@ -170,7 +170,8 @@ function buildCompactFolderNode(
     projects: [...folder.projects],
   };
 
-  // Collapse single-child folder chains.
+  // Collapse single-child folder chains (folders only — keep a folder when the
+  // sole child is a project so categories stay visible).
   while (working.projects.length === 0 && working.folders.size === 1) {
     const only = [...working.folders.values()][0];
     label = `${label}/${only.segment}`;
@@ -181,15 +182,6 @@ function buildCompactFolderNode(
       projects: [...only.projects],
     };
     id = `${id}/${only.segment}`;
-  }
-
-  // Sole project under this folder → project leaf with combined label.
-  if (working.projects.length === 1 && working.folders.size === 0) {
-    const project = working.projects[0];
-    return createProjectNode(project, scope, duplicateNames, {
-      omitRelativePath: true,
-      label: `${label}/${project.displayName}`,
-    });
   }
 
   const children = compactAndBuild(working, scope, duplicateNames, id, false);
