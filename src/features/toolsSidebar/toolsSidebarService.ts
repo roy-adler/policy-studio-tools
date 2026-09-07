@@ -7,11 +7,18 @@ import {
   getSharedProjectRegistryStore,
   ProjectRegistryService,
 } from '../projectRegistry/projectRegistryService';
+import type { ProjectsViewMode } from './projectsTreeModel';
 
 export const CONFIG_SHOW_ON_ACTIVATE = 'policyStudio.sidebar.showOnActivate';
 export const SIDEBAR_FOCUSED_CONTEXT = 'policyStudio.sidebar.focused';
+export const PROJECTS_VIEW_MODE_KEY = 'policyStudio.projects.viewMode';
+export const PROJECTS_VIEW_MODE_CONTEXT = 'policyStudio.projects.viewMode';
 
 const SIDEBAR_VIEW_CONTAINER = 'workbench.view.extension.policy-studio';
+
+function parseViewMode(value: unknown): ProjectsViewMode {
+  return value === 'list' ? 'list' : 'tree';
+}
 
 export class ToolsSidebarService {
   private readonly projectsProvider: ProjectsTreeProvider;
@@ -35,6 +42,10 @@ export class ToolsSidebarService {
     const hub = getSharedToolsHubService();
     const store = getSharedProjectRegistryStore();
 
+    const initialMode = parseViewMode(this.context.workspaceState.get(PROJECTS_VIEW_MODE_KEY));
+    this.projectsProvider.setViewMode(initialMode);
+    void vscode.commands.executeCommand('setContext', PROJECTS_VIEW_MODE_CONTEXT, initialMode);
+
     this.context.subscriptions.push(
       vscode.window.registerTreeDataProvider('policyStudio.projects', this.projectsProvider),
       vscode.window.registerTreeDataProvider('policyStudio.tools', this.toolsProvider),
@@ -45,6 +56,9 @@ export class ToolsSidebarService {
       registerSetActiveProjectCommand((projectId) => {
         this.projectRegistry.activateProject(projectId);
       }),
+      vscode.commands.registerCommand('policyStudioTools.toggleProjectsViewMode', () => {
+        void this.toggleProjectsViewMode();
+      }),
       vscode.commands.registerCommand('policyStudioTools.focusCircuitSearch', (query?: string) => {
         void this.focusCircuitSearch(query);
       }),
@@ -54,6 +68,14 @@ export class ToolsSidebarService {
     );
 
     this.onRegistryChanged(false);
+  }
+
+  private async toggleProjectsViewMode(): Promise<void> {
+    const next: ProjectsViewMode =
+      this.projectsProvider.getViewMode() === 'tree' ? 'list' : 'tree';
+    this.projectsProvider.setViewMode(next);
+    await this.context.workspaceState.update(PROJECTS_VIEW_MODE_KEY, next);
+    await vscode.commands.executeCommand('setContext', PROJECTS_VIEW_MODE_CONTEXT, next);
   }
 
   async focusCircuitSearch(prefillQuery?: string): Promise<void> {

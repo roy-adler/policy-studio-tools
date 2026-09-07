@@ -1,9 +1,14 @@
 import * as vscode from 'vscode';
 import { getSharedProjectRegistryStore } from '../projectRegistry/projectRegistryService';
-import { buildProjectsTree, type ProjectsTreeNode } from './projectsTreeModel';
+import {
+  buildProjectsTree,
+  type ProjectsTreeNode,
+  type ProjectsViewMode,
+} from './projectsTreeModel';
 
 export class ProjectsTreeProvider implements vscode.TreeDataProvider<ProjectsTreeNode> {
   private readonly emitter = new vscode.EventEmitter<ProjectsTreeNode | undefined | void>();
+  private viewMode: ProjectsViewMode = 'tree';
 
   readonly onDidChangeTreeData = this.emitter.event;
 
@@ -13,12 +18,26 @@ export class ProjectsTreeProvider implements vscode.TreeDataProvider<ProjectsTre
     store.onScopeChanged(() => this.refresh());
   }
 
+  getViewMode(): ProjectsViewMode {
+    return this.viewMode;
+  }
+
+  setViewMode(mode: ProjectsViewMode): void {
+    this.viewMode = mode;
+    this.refresh();
+  }
+
   refresh(): void {
     this.emitter.fire();
   }
 
   getTreeItem(element: ProjectsTreeNode): vscode.TreeItem {
-    const item = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.None);
+    const collapsible =
+      element.kind === 'folder' || element.kind === 'workspaceFolder'
+        ? vscode.TreeItemCollapsibleState.Expanded
+        : vscode.TreeItemCollapsibleState.None;
+
+    const item = new vscode.TreeItem(element.label, collapsible);
     item.id = element.id;
     item.description = element.description;
     item.tooltip = element.tooltip;
@@ -47,9 +66,13 @@ export class ProjectsTreeProvider implements vscode.TreeDataProvider<ProjectsTre
     return item;
   }
 
-  getChildren(): ProjectsTreeNode[] {
+  getChildren(element?: ProjectsTreeNode): ProjectsTreeNode[] {
+    if (element) {
+      return element.children ?? [];
+    }
+
     const store = getSharedProjectRegistryStore();
-    return buildProjectsTree(store.getProjectRegistry(), store.getScope());
+    return buildProjectsTree(store.getProjectRegistry(), store.getScope(), this.viewMode);
   }
 }
 

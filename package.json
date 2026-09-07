@@ -134,6 +134,12 @@
         "category": "Policy Studio"
       },
       {
+        "command": "policyStudioTools.toggleProjectsViewMode",
+        "title": "Toggle Projects Tree/List View",
+        "category": "Policy Studio",
+        "icon": "$(list-tree)"
+      },
+      {
         "command": "policyStudioTools.jumpToCircuit",
         "title": "Jump to Circuit",
         "category": "Policy Studio"
@@ -250,6 +256,11 @@
         {
           "command": "policyStudioTools.refreshProjects",
           "when": "view == policyStudio.tools",
+          "group": "navigation"
+        },
+        {
+          "command": "policyStudioTools.toggleProjectsViewMode",
+          "when": "view == policyStudio.projects",
           "group": "navigation"
         }
       ]
