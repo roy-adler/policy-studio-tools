@@ -1,0 +1,5 @@
+---
+type: XMLFirewall
+fields:
+  filterCircuit: /Policies/A/Shared
+  uriprefix: /shared

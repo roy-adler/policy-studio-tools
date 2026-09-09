@@ -1,0 +1,11 @@
+---
+type: XMLFirewall
+fields:
+  filterCircuit: /Policies/Commons/JWT/JWT verify
+  uriprefix: /
+children:
+- type: SoftCircuitRefrence
+  fields:
+    circitPK: system.policy.response
+    name: GLOBAL_POLICY_RSP
+    priority: 4

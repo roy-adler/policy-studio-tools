@@ -1,0 +1,5 @@
+---
+type: XMLFirewall
+fields:
+  filterCircuit: /Policies/Orders/Create Order Alt
+  uriprefix: /api/orders
