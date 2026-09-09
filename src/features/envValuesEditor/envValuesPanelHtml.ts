@@ -20,6 +20,7 @@ function escapeHtml(value: string): string {
 export interface EnvValuesPanelViewState {
   expandedPaths?: Iterable<string>;
   searchQuery?: string;
+  treeScrollTop?: number;
 }
 
 function getStyles(): string {
@@ -355,7 +356,10 @@ function formatScalar(value: EnvScalar): string {
   return value === null || value === undefined ? '' : String(value);
 }
 
-function renderDetail(model: EnvValuesModel, selectedPath?: string): string {
+export function renderEnvValuesDetailHtml(
+  model: EnvValuesModel,
+  selectedPath?: string,
+): string {
   if (!selectedPath) {
     return `<p class="placeholder">Select a key from the tree to view and edit its values.</p>`;
   }
@@ -489,6 +493,13 @@ export function renderEnvValuesEditorHtml(
 
   const expanded = resolveExpandedPaths(model.tree, userExpanded);
   const modelJson = JSON.stringify(model).replace(/</g, '\\u003c');
+  const restoreTreeScroll =
+    typeof viewState.treeScrollTop === 'number' && Number.isFinite(viewState.treeScrollTop)
+      ? `const tree = document.getElementById('tree');
+    if (tree) {
+      tree.scrollTop = ${Math.max(0, Math.trunc(viewState.treeScrollTop))};
+    }`
+      : '';
   const bodyHtml =
     model.stages.length === 0
       ? renderEmptyState(model.envRoot)
@@ -501,7 +512,7 @@ export function renderEnvValuesEditorHtml(
         ${renderTree(model.tree, selectedPath, expanded)}
       </div>
     </div>
-    <div id="detail">${renderDetail(model, selectedPath)}</div>`;
+    <div id="detail">${renderEnvValuesDetailHtml(model, selectedPath)}</div>`;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -519,7 +530,17 @@ export function renderEnvValuesEditorHtml(
   </div>
   <script type="application/json" id="model">${modelJson}</script>
   <script nonce="${nonce}">
-    const vscode = acquireVsCodeApi();
+    const vscodeApi = acquireVsCodeApi();
+    function treeScrollTop() {
+      const treeEl = document.getElementById('tree');
+      return treeEl ? treeEl.scrollTop : 0;
+    }
+    const vscode = {
+      postMessage(message) {
+        vscodeApi.postMessage(Object.assign({}, message, { treeScrollTop: treeScrollTop() }));
+      },
+    };
+    ${restoreTreeScroll}
 
     function autoExpandSingletons(detailsEl) {
       let current = detailsEl;
@@ -582,8 +603,35 @@ export function renderEnvValuesEditorHtml(
       }
     }
 
+    function applySelectedLeaf(path) {
+      document.querySelectorAll('#tree .leaf').forEach((leaf) => {
+        leaf.classList.toggle('selected', leaf.dataset.path === path);
+      });
+    }
+
+    function applyDetailHtml(html) {
+      const detail = document.getElementById('detail');
+      if (detail) {
+        detail.innerHTML = html;
+      }
+    }
+
+    window.addEventListener('message', (event) => {
+      const message = event.data;
+      if (!message || message.type !== 'showDetail') {
+        return;
+      }
+      if (message.path) {
+        applySelectedLeaf(message.path);
+      }
+      if (typeof message.html === 'string') {
+        applyDetailHtml(message.html);
+      }
+    });
+
     document.querySelectorAll('#tree .leaf').forEach((el) => {
       el.addEventListener('click', () => {
+        applySelectedLeaf(el.dataset.path);
         vscode.postMessage({ type: 'select', path: el.dataset.path });
       });
     });
@@ -615,17 +663,6 @@ export function renderEnvValuesEditorHtml(
       });
     }
 
-    document.querySelectorAll('.value-input').forEach((el) => {
-      el.addEventListener('change', () => {
-        vscode.postMessage({
-          type: 'setValue',
-          path: el.dataset.path,
-          stageId: el.dataset.stage,
-          value: el.value,
-        });
-      });
-    });
-
     function collectListValues(editor) {
       return Array.from(editor.querySelectorAll('.list-item-input')).map((input) => input.value);
     }
@@ -634,41 +671,65 @@ export function renderEnvValuesEditorHtml(
       vscode.postMessage({ type: 'setList', path, stageId, values });
     }
 
-    document.querySelectorAll('.list-item-input').forEach((el) => {
-      el.addEventListener('change', () => {
-        const editor = el.closest('.list-editor');
-        postList(editor.dataset.path, editor.dataset.stage, collectListValues(editor));
+    const detailPane = document.getElementById('detail');
+    if (detailPane) {
+      detailPane.addEventListener('change', (event) => {
+        const el = event.target;
+        if (!(el instanceof HTMLInputElement)) {
+          return;
+        }
+        if (el.classList.contains('value-input')) {
+          vscode.postMessage({
+            type: 'setValue',
+            path: el.dataset.path,
+            stageId: el.dataset.stage,
+            value: el.value,
+          });
+          return;
+        }
+        if (el.classList.contains('list-item-input')) {
+          const editor = el.closest('.list-editor');
+          if (editor) {
+            postList(editor.dataset.path, editor.dataset.stage, collectListValues(editor));
+          }
+        }
       });
-    });
 
-    document.querySelectorAll('.list-remove').forEach((el) => {
-      el.addEventListener('click', () => {
-        const editor = el.closest('.list-editor');
-        const index = Number(el.dataset.index);
-        const values = collectListValues(editor);
-        values.splice(index, 1);
-        postList(editor.dataset.path, editor.dataset.stage, values);
+      detailPane.addEventListener('click', (event) => {
+        const el = event.target;
+        if (!(el instanceof HTMLElement)) {
+          return;
+        }
+        if (el.classList.contains('list-remove')) {
+          const editor = el.closest('.list-editor');
+          if (!editor) {
+            return;
+          }
+          const index = Number(el.dataset.index);
+          const values = collectListValues(editor);
+          values.splice(index, 1);
+          postList(editor.dataset.path, editor.dataset.stage, values);
+          return;
+        }
+        if (el.classList.contains('list-add')) {
+          const editor = el.closest('.list-editor');
+          if (!editor) {
+            return;
+          }
+          const values = collectListValues(editor);
+          values.push('');
+          postList(editor.dataset.path, editor.dataset.stage, values);
+          return;
+        }
+        if (el.classList.contains('create-missing')) {
+          vscode.postMessage({
+            type: 'createMissing',
+            path: el.dataset.path,
+            stageId: el.dataset.stage,
+          });
+        }
       });
-    });
-
-    document.querySelectorAll('.list-add').forEach((el) => {
-      el.addEventListener('click', () => {
-        const editor = el.closest('.list-editor');
-        const values = collectListValues(editor);
-        values.push('');
-        postList(editor.dataset.path, editor.dataset.stage, values);
-      });
-    });
-
-    document.querySelectorAll('.create-missing').forEach((el) => {
-      el.addEventListener('click', () => {
-        vscode.postMessage({
-          type: 'createMissing',
-          path: el.dataset.path,
-          stageId: el.dataset.stage,
-        });
-      });
-    });
+    }
 
     document.getElementById('save').addEventListener('click', () => {
       vscode.postMessage({ type: 'save' });

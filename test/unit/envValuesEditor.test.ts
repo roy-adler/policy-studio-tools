@@ -1056,6 +1056,29 @@ describe('env tree view helpers', () => {
     expect(html).toMatch(/details[^>]*data-path="B"[^>]*open|details[^>]*open[^>]*data-path="B"/);
     expect(html).toContain('applyTreeFilter');
   });
+
+  it('selects a leaf in the webview without replacing the tree document', () => {
+    const model = loadEnvValuesSession(envRoot);
+    const html = renderEnvValuesEditorHtml(model, 'B.BA.BAB', 'sample', {
+      expandedPaths: new Set(['B', 'B.BA']),
+    });
+
+    // Click updates the selected class locally so the host need not replace webview.html
+    // (full-document replace resets #tree scrollTop to 0).
+    expect(html).toContain("classList.toggle('selected'");
+    expect(html).toContain("addEventListener('message'");
+    expect(html).toContain('showDetail');
+    expect(html).toContain('detail.innerHTML');
+  });
+
+  it('restores tree scroll after a host re-render', () => {
+    const model = loadEnvValuesSession(envRoot);
+    const html = renderEnvValuesEditorHtml(model, 'A.AA', 'sample', {
+      treeScrollTop: 37,
+    });
+    expect(html).toContain('tree.scrollTop = 37');
+    expect(html).toContain('treeScrollTop: treeScrollTop()');
+  });
 });
 
 function createParseErrorEnv(): string {

@@ -12,7 +12,11 @@ import {
   setLeafValue,
   setListValue,
 } from './envValuesMutations';
-import { getEnvValuesPanelShellHtml, renderEnvValuesEditorHtml } from './envValuesPanelHtml';
+import {
+  getEnvValuesPanelShellHtml,
+  renderEnvValuesDetailHtml,
+  renderEnvValuesEditorHtml,
+} from './envValuesPanelHtml';
 import { writeDirtyEnvDocuments } from './envValuesWriter';
 import { listEnvRootsForProjects, type EnvRootCandidate } from './listEnvRoots';
 import { loadEnvValuesSession } from './loadEnvValuesSession';
@@ -31,7 +35,9 @@ const BROWSE_ENV_FOLDER_LABEL = 'Browse ENV folder…';
 const DISCARD_ACTION = 'Discard';
 const REMOVE_ACTION = 'Remove';
 
-type IncomingMessage =
+type IncomingMessage = {
+  treeScrollTop?: number;
+} & (
   | { type: 'ready' }
   | { type: 'select'; path: string }
   | { type: 'setValue'; path: string; stageId: string; value: string }
@@ -44,7 +50,8 @@ type IncomingMessage =
   | { type: 'pickEnv' }
   | { type: 'switchEnv' }
   | { type: 'toggleExpand'; path: string; expanded: boolean }
-  | { type: 'search'; query: string };
+  | { type: 'search'; query: string }
+);
 
 type EnvQuickPickItem = vscode.QuickPickItem & {
   kind?: vscode.QuickPickItemKind;
@@ -62,6 +69,7 @@ export class EnvValuesEditorService {
   private followInFlight = false;
   private expandedPaths = new Set<string>();
   private searchQuery = '';
+  private treeScrollTop = 0;
 
   constructor(private readonly context: vscode.ExtensionContext) {}
 
@@ -260,6 +268,7 @@ export class EnvValuesEditorService {
         this.selectedPath = undefined;
         this.expandedPaths.clear();
         this.searchQuery = '';
+        this.treeScrollTop = 0;
       } else if (this.selectedPath && !findTreeNode(this.model.tree, this.selectedPath)) {
         this.selectedPath = undefined;
       }
@@ -313,11 +322,16 @@ export class EnvValuesEditorService {
       {
         expandedPaths: this.expandedPaths,
         searchQuery: this.searchQuery,
+        treeScrollTop: this.treeScrollTop,
       },
     );
   }
 
   private async handleMessage(message: IncomingMessage): Promise<void> {
+    if (typeof message.treeScrollTop === 'number' && Number.isFinite(message.treeScrollTop)) {
+      this.treeScrollTop = Math.max(0, Math.trunc(message.treeScrollTop));
+    }
+
     if (!this.model && message.type !== 'switchEnv' && message.type !== 'pickEnv') {
       return;
     }
@@ -327,8 +341,16 @@ export class EnvValuesEditorService {
         this.render();
         break;
       case 'select':
+        if (!this.model) {
+          return;
+        }
         this.selectedPath = message.path;
-        this.render();
+        // Update the detail pane in place. Replacing webview.html resets tree scroll.
+        void this.panel?.webview.postMessage({
+          type: 'showDetail',
+          path: message.path,
+          html: renderEnvValuesDetailHtml(this.model, message.path),
+        });
         break;
       case 'toggleExpand':
         this.handleToggleExpand(message.path, message.expanded);

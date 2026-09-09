@@ -67,12 +67,12 @@ As a Policy Studio developer, I want to see and edit all environment `values.yam
 
 ### Editor UI (split pane)
 
-- Selecting a leaf in the tree shows per-stage fields in the detail pane.
+- Selecting a leaf in the tree shows per-stage fields in the detail pane **without replacing the tree document** (the tree must not jump to the top).
 - Scalar leaves: single-line text input.
 - Scalar-list leaves: **per-item text inputs** for each stage, with **+** (add item) and **−** (remove item) controls; order is preserved.
 - Missing cells show a warning affordance and **Create missing** (inserts `""` for scalar leaves, or `[]` when any other stage has a list at that path).
 - **Missing highlight:** Leaves missing in any stage are marked in **yellow** in the tree; ancestor branches that contain a missing descendant also show a yellow cue.
-- **Tree persistence:** Save, Reload, and in-place re-renders keep the **selected leaf** and **expanded branch paths**. Expansion resets only when switching to a different ENV root.
+- **Tree persistence:** Save, Reload, and in-place re-renders keep the **selected leaf**, **expanded branch paths**, and **tree scroll position**. Expansion resets only when switching to a different ENV root. Selecting a leaf is an in-place update (selected class + detail pane), not a full-panel re-render.
 - **Search/filter:** A search box above the tree filters to leaves whose **key path** (variable / segment / filename-like segment) **or** any stage **value** (scalar or list item) matches the query (case-insensitive substring). Matching leaves and their ancestors remain; clear query restores the full tree. Filtering runs in the webview (no full-panel re-render on each keystroke).
 - **Smart auto-expand:** When a branch is opened (or the filtered tree leaves a single chain), keep expanding while a node has **exactly one child**, until a **leaf** or a node with **2+ children**.
 - **Add key:** User supplies a key path (relative to current node or absolute). Key is created in **all** discovered stages (empty string initially).
