@@ -5,6 +5,7 @@ import { JUMP_TO_CIRCUIT_TOOL } from '../../src/features/circuitNavigation/toolD
 import { ENV_VALUES_EDITOR_TOOL } from '../../src/features/envValuesEditor/toolDescriptor';
 import { KPS_EDITOR_TOOL } from '../../src/features/kpsEditor/toolDescriptor';
 import { EXPORT_DOCUMENTATION_TOOL } from '../../src/features/exportDocumentation/toolDescriptor';
+import { PATH_SEARCH_TOOL } from '../../src/features/pathSearch/toolDescriptor';
 import { PATH_TEMPLATE_VALIDATOR_TOOL } from '../../src/features/pathTemplateValidator/toolDescriptor';
 import { POLICY_DIFF_TOOL } from '../../src/features/policyDiff/toolDescriptor';
 import { POLICY_FLOW_TOOL } from '../../src/features/policyFlowView/toolDescriptor';
@@ -14,6 +15,7 @@ import { buildToolsTree } from '../../src/features/toolsSidebar/toolsTreeModel';
 
 const ALL_TOOLS = [
   JUMP_TO_CIRCUIT_TOOL,
+  PATH_SEARCH_TOOL,
   POLICY_FLOW_TOOL,
   CIRCUIT_GRAPH_TOOL,
   POLICY_DIFF_TOOL,
@@ -35,6 +37,7 @@ describe('sidebar tool registrations', () => {
 
   it('places tools in the correct sidebar groups', () => {
     expect(JUMP_TO_CIRCUIT_TOOL.group).toBe('navigate');
+    expect(PATH_SEARCH_TOOL.group).toBe('navigate');
     expect(POLICY_FLOW_TOOL.group).toBe('analyze');
     expect(CIRCUIT_GRAPH_TOOL.group).toBe('analyze');
     expect(POLICY_DIFF_TOOL.group).toBe('analyze');

@@ -99,6 +99,11 @@
           "id": "policyStudio.circuitSearch",
           "name": "Circuit Search",
           "type": "webview"
+        },
+        {
+          "id": "policyStudio.pathSearch",
+          "name": "Path Search",
+          "type": "webview"
         }
       ]
     },
@@ -121,6 +126,11 @@
       {
         "command": "policyStudioTools.searchCircuits",
         "title": "Search Circuits",
+        "category": "Policy Studio"
+      },
+      {
+        "command": "policyStudioTools.searchPaths",
+        "title": "Search Paths",
         "category": "Policy Studio"
       },
       {
@@ -210,6 +220,10 @@
         },
         {
           "command": "policyStudioTools.searchCircuits",
+          "when": "policyStudio.projectDetected"
+        },
+        {
+          "command": "policyStudioTools.searchPaths",
           "when": "policyStudio.projectDetected"
         },
         {

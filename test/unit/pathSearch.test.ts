@@ -10,6 +10,7 @@ import {
   stripCollisionSuffix,
 } from '../../src/features/pathSearch/filenameTokens';
 import { parseServicePathYaml } from '../../src/features/pathSearch/parseServicePathYaml';
+import { PATH_SEARCH_TOOL } from '../../src/features/pathSearch/toolDescriptor';
 import type { PolicyStudioProject } from '../../src/features/projectRegistry/types';
 
 const yamlRoot = path.join(__dirname, '..', 'fixtures', 'path-search', 'yaml-project');
@@ -151,5 +152,16 @@ describe('loadPathInventory', () => {
     ]);
     expect(response.projectsScanned).toBe(2);
     expect(response.results.filter((r) => r.uriPrefix === '/shared')).toHaveLength(2);
+  });
+});
+
+describe('path search tool', () => {
+  it('registers Search paths in Navigate order 3', () => {
+    expect(PATH_SEARCH_TOOL.command).toBe('policyStudioTools.searchPaths');
+    expect(PATH_SEARCH_TOOL.label).toBe('Search paths');
+    expect(PATH_SEARCH_TOOL.iconId).toBe('list-filter');
+    expect(PATH_SEARCH_TOOL.group).toBe('navigate');
+    expect(PATH_SEARCH_TOOL.order).toBe(3);
+    expect(PATH_SEARCH_TOOL.available).toBe(true);
   });
 });

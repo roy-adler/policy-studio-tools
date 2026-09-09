@@ -6,6 +6,7 @@ import { CircuitSearchService } from './features/circuitSearch/circuitSearchServ
 import { EnvValuesEditorService } from './features/envValuesEditor/envValuesEditorService';
 import { KpsEditorService } from './features/kpsEditor/kpsEditorService';
 import { ExportDocumentationService } from './features/exportDocumentation/exportDocumentationService';
+import { PathSearchService } from './features/pathSearch/pathSearchService';
 import { PathTemplateValidatorService } from './features/pathTemplateValidator/pathTemplateValidatorService';
 import { PolicyDiffService } from './features/policyDiff/policyDiffService';
 import { PolicyFlowViewService } from './features/policyFlowView/policyFlowViewService';
@@ -25,6 +26,9 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const circuitNavigation = new CircuitNavigationService(context);
   circuitNavigation.activate();
+
+  const pathSearch = new PathSearchService(context);
+  pathSearch.activate();
 
   const policyFlowView = new PolicyFlowViewService(context);
   policyFlowView.activate();

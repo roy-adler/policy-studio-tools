@@ -27,6 +27,7 @@ As a Policy Studio developer, I want to click the Policy Studio icon in the VS C
 | Scope | `policyStudioTools.refreshProjects` | `000` / `001` |
 | Navigate | `policyStudioTools.searchCircuits` | `002` |
 | Navigate | `policyStudioTools.jumpToCircuit` | `003` |
+| Navigate | `policyStudioTools.searchPaths` | Path Search |
 | Analyze | `policyStudioTools.showCircuitGraph` | `008` |
 | Analyze | `policyStudioTools.comparePolicies` | `006` |
 | Analyze | `policyStudioTools.openEnvValuesEditor` | `011` |
@@ -80,6 +81,7 @@ Grouped action list. Each leaf runs an existing command (no duplicated business 
 Navigate
   $(search) Search circuits          → searchCircuits
   $(link)   Jump to circuit          → jumpToCircuit
+  $(list-filter) Search paths        → searchPaths
 Analyze
   $(type-hierarchy) Circuit graph    → showCircuitGraph
   $(diff)   Compare policies         → comparePolicies
@@ -110,6 +112,27 @@ Embedded search UI replacing quick-pick-only flow for day-to-day use (`002`):
 - Empty query → placeholder text only; no full-project scan.
 
 Command palette entry for `searchCircuits` remains; it focuses this view and places cursor in the search box.
+
+#### 4. `policyStudio.pathSearch` — Path Search (WebviewView)
+
+Embedded inventory and search UI for YAML service paths under
+`Environment Configuration/Service`:
+
+- Loads from every project in `getProjectRegistry().projects`, independent of
+  the selected project scope.
+- Empty query loads the full catalog; typed queries are debounced by 300 ms.
+- Results show URI prefix, HTTP method or URI matcher, project, interface, and
+  filter circuit.
+- Clicking a result opens its YAML file and reveals `uriprefix`.
+- **Go to circuit** delegates to shared circuit navigation in the owning
+  project.
+- Empty states are *“Open a Policy Studio project to search paths.”*,
+  *“No service paths found under Environment Configuration/Service.”*, and
+  *“No paths match.”*
+- Footer reports path count, project count, and warning count when non-zero.
+
+Command `policyStudioTools.searchPaths` focuses this view. The Tools view
+registers **Search paths** in Navigate at order 3.
 
 ### Status bar integration
 
@@ -178,6 +201,13 @@ Each feature module calls `registerTool` during activation when its command exis
 - Respect `policyStudio.circuitSearch.maxResults`.
 - When scope changes mid-search, clear results and show *“Scope changed — search again”*.
 
+### Path Search view
+
+- Refresh on project registry changes, explicit refresh, and query changes.
+- Scope changes do not clear or alter results because inventory always uses the
+  full project registry.
+- Empty queries remain valid and reload the complete catalog.
+
 ### Trace files (bridge to `004`)
 
 - v1: **Open trace file…** runs file picker filtered to `*.trc`, then opens via Trace Viewer custom editor when `004` exists.
@@ -210,6 +240,9 @@ Each feature module calls `registerTool` during activation when its command exis
 - [ ] Unimplemented tools (`003`–`008` until shipped) do not appear as dead entries.
 - [ ] **Circuit search** webview provides input, debounced results, and navigation consistent with `002`.
 - [ ] Command `policyStudioTools.searchCircuits` focuses the Circuit search view.
+- [ ] **Path Search** loads all registry projects, supports debounced filtering,
+      opens YAML results, and delegates circuit navigation.
+- [ ] Command `policyStudioTools.searchPaths` focuses the Path Search view.
 - [ ] Status bar scope display stays consistent with Projects view.
 - [ ] All views respect `policyStudio.projectDetected` / scope rules from `000`.
 - [ ] `registerTool` API allows a new feature to add a sidebar entry without modifying hub tree source.
