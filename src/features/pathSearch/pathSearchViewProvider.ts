@@ -78,7 +78,7 @@ export class PathSearchViewProvider implements vscode.WebviewViewProvider {
     } else {
       this.focusPending = true;
     }
-    void vscode.commands.executeCommand(`workbench.view.extension.policy-studio.${VIEW_TYPE}`);
+    void vscode.commands.executeCommand(`${VIEW_TYPE}.focus`);
   }
 
   notifyProjectsChanged(): void {
