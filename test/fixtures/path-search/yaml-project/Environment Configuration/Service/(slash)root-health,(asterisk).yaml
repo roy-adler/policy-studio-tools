@@ -1,0 +1,4 @@
+type: XMLFirewall
+fields:
+  uriprefix: /root-health
+  filterCircuit: /Policies/Health/Root health

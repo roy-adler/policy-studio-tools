@@ -2,7 +2,9 @@ import fs from 'fs';
 import path from 'path';
 import { describe, expect, it } from 'vitest';
 import { discoverServicePaths } from '../../src/features/pathSearch/discoverServicePaths';
+import { PathInventoryCache } from '../../src/features/pathSearch/pathInventoryCache';
 import { loadPathInventory } from '../../src/features/pathSearch/loadPathInventory';
+import { resolveServicePathCircuitName } from '../../src/features/pathSearch/resolveServicePathCircuitName';
 import { searchPaths } from '../../src/features/pathSearch/searchPaths';
 import {
   decodeFilenameTokens,
@@ -95,14 +97,25 @@ describe('parseServicePathYaml', () => {
 });
 
 describe('discoverServicePaths', () => {
-  it('finds listeners and skips _parent and solpacks', () => {
+  it('finds nested and root-level listeners and skips _parent and solpacks', () => {
     const { entries, warnings } = discoverServicePaths([project('p1', yamlRoot, 'yaml-project')]);
-    expect(warnings).toEqual([]);
-    expect(entries).toHaveLength(3);
-    expect(entries.map((e) => e.uriPrefix).sort()).toEqual(['/', '/api/orders', '/api/orders']);
-    expect(entries.every((e) => e.interfaceName === 'Name_One Interface')).toBe(true);
+    expect(warnings.length).toBeGreaterThan(0);
+    expect(entries).toHaveLength(4);
+    expect(entries.map((e) => e.uriPrefix).sort()).toEqual([
+      '/',
+      '/api/orders',
+      '/api/orders',
+      '/root-health',
+    ]);
+    expect(entries.find((e) => e.uriPrefix === '/root-health')?.interfaceName).toBe('Service');
     const methods = entries.filter((e) => e.httpMethod === 'GET');
     expect(methods).toHaveLength(2);
+  });
+
+  it('warns for malformed YAML and continues discovering valid listeners', () => {
+    const { entries, warnings } = discoverServicePaths([project('p1', yamlRoot, 'yaml-project')]);
+    expect(warnings.some((warning) => warning.includes('invalid-listener.yaml'))).toBe(true);
+    expect(entries.some((entry) => entry.uriPrefix === '/api/orders')).toBe(true);
   });
 
   it('attributes the same uriPrefix to each owning project', () => {
@@ -121,7 +134,7 @@ describe('searchPaths', () => {
   const inventory = () => discoverServicePaths([project('p1', yamlRoot, 'yaml-project')]).entries;
 
   it('returns full catalog for empty query', () => {
-    expect(searchPaths(inventory(), '   ')).toHaveLength(3);
+    expect(searchPaths(inventory(), '   ')).toHaveLength(4);
   });
 
   it('filters by uriPrefix substring', () => {
@@ -131,7 +144,7 @@ describe('searchPaths', () => {
   });
 
   it('filters by project display name and circuit', () => {
-    expect(searchPaths(inventory(), 'yaml-project').length).toBe(3);
+    expect(searchPaths(inventory(), 'yaml-project').length).toBe(4);
     expect(searchPaths(inventory(), 'JWT verify')).toHaveLength(1);
     expect(searchPaths(inventory(), 'GET').length).toBeGreaterThanOrEqual(2);
   });
@@ -140,6 +153,34 @@ describe('searchPaths', () => {
     const sorted = searchPaths(inventory(), '');
     const keys = sorted.map((e) => `${e.uriPrefix}|${e.projectDisplayName}|${e.filePath}`);
     expect(keys).toEqual([...keys].sort((a, b) => a.localeCompare(b)));
+  });
+});
+
+describe('PathInventoryCache', () => {
+  it('reuses discovery until explicitly rebuilt or invalidated', () => {
+    let discoveries = 0;
+    const cache = new PathInventoryCache((projects) => {
+      discoveries += 1;
+      return { entries: [], warnings: [`scan ${discoveries}: ${projects.length}`] };
+    });
+    const projects = [project('p1', yamlRoot, 'yaml-project')];
+
+    expect(cache.get(projects).warnings).toEqual(['scan 1: 1']);
+    expect(cache.get(projects).warnings).toEqual(['scan 1: 1']);
+    expect(discoveries).toBe(1);
+
+    expect(cache.rebuild(projects).warnings).toEqual(['scan 2: 1']);
+    cache.invalidate();
+    expect(cache.get(projects).warnings).toEqual(['scan 3: 1']);
+    expect(discoveries).toBe(3);
+  });
+});
+
+describe('path search navigation', () => {
+  it('normalizes a fully qualified filterCircuit to its circuit name', () => {
+    expect(resolveServicePathCircuitName('/Policies/Commons/JWT/JWT verify')).toBe('JWT verify');
+    expect(resolveServicePathCircuitName('  ./Local circuit  ')).toBe('Local circuit');
+    expect(resolveServicePathCircuitName()).toBeUndefined();
   });
 });
 

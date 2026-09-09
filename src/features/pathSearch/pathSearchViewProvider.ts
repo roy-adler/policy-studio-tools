@@ -1,10 +1,11 @@
 import * as vscode from 'vscode';
 import { getSharedProjectRegistryStore } from '../projectRegistry/projectRegistryService';
-import { loadPathInventory } from './loadPathInventory';
 import {
   jumpToServicePathCircuit,
   openServicePathEntry,
 } from './pathSearchNavigation';
+import { PathInventoryCache } from './pathInventoryCache';
+import { searchPaths } from './searchPaths';
 import type { ServicePathEntry } from './types';
 
 const DEBOUNCE_MS = 300;
@@ -33,6 +34,7 @@ export class PathSearchViewProvider implements vscode.WebviewViewProvider {
   private lastResults: ServicePathEntry[] = [];
   private query = '';
   private focusPending = false;
+  private readonly inventoryCache = new PathInventoryCache();
 
   resolveWebviewView(
     webviewView: vscode.WebviewView,
@@ -49,7 +51,7 @@ export class PathSearchViewProvider implements vscode.WebviewViewProvider {
     webviewView.webview.onDidReceiveMessage((message: IncomingMessage) => {
       switch (message.type) {
         case 'ready':
-          this.runSearch(this.query);
+          this.rebuildAndSearch();
           if (this.focusPending) {
             this.postMessage({ type: 'focusInput' });
             this.focusPending = false;
@@ -59,7 +61,7 @@ export class PathSearchViewProvider implements vscode.WebviewViewProvider {
           this.scheduleSearch(message.query ?? '');
           break;
         case 'refresh':
-          this.runSearch(this.query);
+          this.rebuildAndSearch();
           break;
         case 'openResult':
           this.withResult(message.index, openServicePathEntry);
@@ -82,6 +84,7 @@ export class PathSearchViewProvider implements vscode.WebviewViewProvider {
   }
 
   notifyProjectsChanged(): void {
+    this.inventoryCache.invalidate();
     if (this.view) {
       this.runSearch(this.query);
     }
@@ -114,10 +117,10 @@ export class PathSearchViewProvider implements vscode.WebviewViewProvider {
   private runSearch(query: string): void {
     this.query = query;
     const projects = getSharedProjectRegistryStore().getProjectRegistry().projects;
-    const response = loadPathInventory(projects, query);
-    this.lastResults = response.results;
+    const inventory = this.inventoryCache.get(projects);
+    this.lastResults = searchPaths(inventory.entries, query);
 
-    const results: WebviewPathResult[] = response.results.map((entry, index) => ({
+    const results: WebviewPathResult[] = this.lastResults.map((entry, index) => ({
       index,
       uriPrefix: entry.uriPrefix,
       projectDisplayName: entry.projectDisplayName,
@@ -132,9 +135,14 @@ export class PathSearchViewProvider implements vscode.WebviewViewProvider {
       projectDetected: projects.length > 0,
       query,
       results,
-      projectsScanned: response.projectsScanned,
-      warningCount: response.warnings.length,
+      projectsScanned: inventory.projectsScanned,
+      warningCount: inventory.warnings.length,
     });
+  }
+
+  private rebuildAndSearch(): void {
+    this.inventoryCache.invalidate();
+    this.runSearch(this.query);
   }
 
   private postMessage(message: Record<string, unknown>): void {

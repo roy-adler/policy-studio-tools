@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { jumpToCircuit } from '../circuitNavigation/circuitNavigationService';
+import { resolveServicePathCircuitName } from './resolveServicePathCircuitName';
 import type { ServicePathEntry } from './types';
 
 export async function openServicePathEntry(entry: ServicePathEntry): Promise<void> {
@@ -16,8 +17,9 @@ export async function openServicePathEntry(entry: ServicePathEntry): Promise<voi
 }
 
 export async function jumpToServicePathCircuit(entry: ServicePathEntry): Promise<void> {
-  if (!entry.filterCircuit) {
+  const circuitName = resolveServicePathCircuitName(entry.filterCircuit);
+  if (!circuitName) {
     return;
   }
-  await jumpToCircuit(entry.filterCircuit, { projectId: entry.projectId });
+  await jumpToCircuit(circuitName, { projectId: entry.projectId });
 }
