@@ -6,3 +6,4 @@ fields:
   path: "{{id}}"
   plain: "{{A.AA}}"
   spaced: "{{  A.AA.attributeValue  }}"
+  note: A.AA

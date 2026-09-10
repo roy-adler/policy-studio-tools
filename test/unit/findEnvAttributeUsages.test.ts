@@ -3,13 +3,13 @@ import os from 'os';
 import path from 'path';
 import { describe, expect, it } from 'vitest';
 import {
-  extractEnvAttributePlaceholders,
+  collectEnvLeafPaths,
+  findEnvKeyOccurrences,
   listSiblingPolicyProjects,
   NO_SIBLING_POLICY_PROJECT_WARNING,
   scanEnvAttributeUsages,
-  usagesForEnvKey,
 } from '../../src/features/envValuesEditor/findEnvAttributeUsages';
-import type { EnvAttributeUsage } from '../../src/features/envValuesEditor/types';
+import { loadEnvValuesSession } from '../../src/features/envValuesEditor/loadEnvValuesSession';
 
 const usagesEnvRoot = path.join(
   __dirname,
@@ -20,67 +20,37 @@ const usagesEnvRoot = path.join(
   'ENV',
 );
 
-describe('extractEnvAttributePlaceholders', () => {
-  it('maps {{path.attributeValue}} to the full inner name and match offsets', () => {
+describe('findEnvKeyOccurrences', () => {
+  it('finds the key inside {{path.attributeValue}}', () => {
     const content = 'cert: "{{Service.Health.serviceCert.attributeValue}}"';
-    const found = extractEnvAttributePlaceholders(content);
+    const found = findEnvKeyOccurrences(content, 'Service.Health.serviceCert');
     expect(found).toHaveLength(1);
-    expect(found[0].envKey).toBe('Service.Health.serviceCert.attributeValue');
     expect(content.slice(found[0].startOffset, found[0].endOffset)).toBe(
-      '{{Service.Health.serviceCert.attributeValue}}',
+      'Service.Health.serviceCert',
     );
   });
 
-  it('maps {{path}} without a suffix to the ENV key', () => {
-    const content = 'cert: "{{Service.Health.serviceCert}}"';
-    const found = extractEnvAttributePlaceholders(content);
+  it('finds the key without braces', () => {
+    const content = 'see Service.Health.serviceCert in docs';
+    const found = findEnvKeyOccurrences(content, 'Service.Health.serviceCert');
     expect(found).toHaveLength(1);
-    expect(found[0].envKey).toBe('Service.Health.serviceCert');
     expect(content.slice(found[0].startOffset, found[0].endOffset)).toBe(
-      '{{Service.Health.serviceCert}}',
+      'Service.Health.serviceCert',
     );
   });
 
-  it('trims whitespace inside the braces', () => {
-    const content = '{{  A.AA.attributeValue  }}';
-    const found = extractEnvAttributePlaceholders(content);
-    expect(found).toHaveLength(1);
-    expect(found[0].envKey).toBe('A.AA.attributeValue');
-    expect(content.slice(found[0].startOffset, found[0].endOffset)).toBe(content);
+  it('finds every occurrence', () => {
+    const content = '{{A.AA.attributeValue}} then {{B.BB}} and A.AA';
+    const found = findEnvKeyOccurrences(content, 'A.AA');
+    expect(found).toHaveLength(2);
   });
 
-  it('keeps every match in the same string', () => {
-    const content =
-      '{{A.AA.attributeValue}} then {{B.BB.attributeValue}} and {{A.AA}}';
-    const keys = extractEnvAttributePlaceholders(content).map((item) => item.envKey);
-    expect(keys).toEqual(['A.AA.attributeValue', 'B.BB.attributeValue', 'A.AA']);
+  it('does not treat A.AAA as A.AA', () => {
+    expect(findEnvKeyOccurrences('A.AAA', 'A.AA')).toEqual([]);
   });
 
-  it('still extracts unrelated placeholder names (they are not usages of a different ENV key)', () => {
-    const content = 'path: "{{id}}" selector: "{{request.headers.host}}"';
-    const keys = extractEnvAttributePlaceholders(content).map((item) => item.envKey);
-    expect(keys).toEqual(['id', 'request.headers.host']);
-  });
-});
-
-describe('usagesForEnvKey', () => {
-  const usage = (envKey: string): EnvAttributeUsage => ({
-    envKey,
-    absolutePath: '/x.yaml',
-    relativePath: 'x.yaml',
-    line: 1,
-    range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } },
-  });
-
-  it('includes the whole key and that key plus a dotted suffix', () => {
-    const byKey = {
-      'A.AA': [usage('A.AA')],
-      'A.AA.attributeValue': [usage('A.AA.attributeValue')],
-      'A.AAA': [usage('A.AAA')],
-      id: [usage('id')],
-    };
-    const keys = usagesForEnvKey(byKey, 'A.AA').map((item) => item.envKey);
-    expect(keys.sort()).toEqual(['A.AA', 'A.AA.attributeValue']);
+  it('does not treat id as a usage of A.AA', () => {
+    expect(findEnvKeyOccurrences('path: "{{id}}"', 'A.AA')).toEqual([]);
   });
 });
 
@@ -101,30 +71,32 @@ describe('listSiblingPolicyProjects', () => {
 });
 
 describe('scanEnvAttributeUsages', () => {
-  it('indexes YAML and XML interpolations by whole ENV key, with or without a suffix', async () => {
-    const scan = await scanEnvAttributeUsages(usagesEnvRoot);
+  it('indexes YAML, XML, and bare text by ENV leaf path', async () => {
+    const model = loadEnvValuesSession(usagesEnvRoot);
+    const keys = collectEnvLeafPaths(model.tree);
+    const scan = await scanEnvAttributeUsages(usagesEnvRoot, keys);
     expect(scan.projectCount).toBe(1);
     expect(scan.warnings).toEqual([]);
-    const used = usagesForEnvKey(scan.byKey, 'A.AA');
-    expect(used).toHaveLength(4);
-    expect(usagesForEnvKey(scan.byKey, 'B.BB')).toEqual([]);
-    expect(usagesForEnvKey(scan.byKey, 'id')).toHaveLength(1);
-    const relatives = used.map((usage) => usage.relativePath).sort();
+    expect(scan.byKey['A.AA']).toHaveLength(5);
+    expect(scan.byKey['B.BB'] ?? []).toEqual([]);
+    expect(scan.byKey['id']).toBeUndefined();
+    const relatives = scan.byKey['A.AA'].map((usage) => usage.relativePath).sort();
     expect(relatives).toEqual([
+      'Policies/Used Circuit.yaml',
       'Policies/Used Circuit.yaml',
       'Policies/Used Circuit.yaml',
       'Policies/Used Circuit.yaml',
       'Policies/legacy.xml',
     ]);
-    expect(used[0].line).toBeGreaterThan(0);
-    expect(used[0].range.start.line).toBe(used[0].line - 1);
+    expect(scan.byKey['A.AA'][0].line).toBeGreaterThan(0);
+    expect(scan.byKey['A.AA'][0].range.start.line).toBe(scan.byKey['A.AA'][0].line - 1);
   });
 
   it('warns when no sibling policy project exists', async () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'env-scan-none-'));
     const envRoot = path.join(tmp, 'ENV');
     fs.mkdirSync(envRoot);
-    const scan = await scanEnvAttributeUsages(envRoot);
+    const scan = await scanEnvAttributeUsages(envRoot, ['A.AA']);
     expect(scan.projectCount).toBe(0);
     expect(scan.byKey).toEqual({});
     expect(scan.warnings).toEqual([NO_SIBLING_POLICY_PROJECT_WARNING]);

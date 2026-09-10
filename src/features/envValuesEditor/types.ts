@@ -65,12 +65,6 @@ export interface EnvTextRange {
   end: { line: number; character: number };
 }
 
-export interface EnvAttributePlaceholder {
-  envKey: string;
-  startOffset: number;
-  endOffset: number;
-}
-
 export interface EnvAttributeUsage {
   envKey: string;
   absolutePath: string;

@@ -6,50 +6,55 @@ import { offsetToRange } from '../circuitSearch/textUtils';
 import { isPolicyStudioProject } from '../projectDetection/detectPolicyStudioProject';
 import { createProjectId } from '../projectRegistry/projectId';
 import type { PolicyStudioProject } from '../projectRegistry/types';
-import type {
-  EnvAttributePlaceholder,
-  EnvAttributeUsage,
-  EnvUsageScan,
-} from './types';
+import type { EnvAttributeUsage, EnvTreeNode, EnvUsageScan } from './types';
 
 export const NO_SIBLING_POLICY_PROJECT_WARNING =
   'No Policy Studio project found next to this ENV folder; policy usages were not scanned.';
 
-const ENV_PLACEHOLDER = /\{\{\s*([^{}]+?)\s*\}\}/g;
-
-export function extractEnvAttributePlaceholders(content: string): EnvAttributePlaceholder[] {
-  const found: EnvAttributePlaceholder[] = [];
-  const pattern = new RegExp(ENV_PLACEHOLDER.source, 'g');
-  let match: RegExpExecArray | null;
-  while ((match = pattern.exec(content)) !== null) {
-    const envKey = match[1].trim();
-    if (!envKey) {
-      continue;
-    }
-    found.push({
-      envKey,
-      startOffset: match.index,
-      endOffset: match.index + match[0].length,
-    });
+function isIdentifierContinue(char: string | undefined): boolean {
+  if (!char) {
+    return false;
   }
-  return found;
+  return /[A-Za-z0-9_]/.test(char);
 }
 
-export function placeholderMatchesEnvKey(placeholderInner: string, envKey: string): boolean {
-  return placeholderInner === envKey || placeholderInner.startsWith(`${envKey}.`);
-}
-
-export function usagesForEnvKey(
-  byKey: Record<string, EnvAttributeUsage[]>,
+export function findEnvKeyOccurrences(
+  content: string,
   envKey: string,
-): EnvAttributeUsage[] {
-  const found: EnvAttributeUsage[] = [];
-  for (const [inner, usages] of Object.entries(byKey)) {
-    if (placeholderMatchesEnvKey(inner, envKey)) {
-      found.push(...usages);
+): { startOffset: number; endOffset: number }[] {
+  if (!envKey) {
+    return [];
+  }
+
+  const found: { startOffset: number; endOffset: number }[] = [];
+  let from = 0;
+  while (from <= content.length - envKey.length) {
+    const start = content.indexOf(envKey, from);
+    if (start === -1) {
+      break;
     }
+    const end = start + envKey.length;
+    const before = start === 0 ? undefined : content[start - 1];
+    const after = end >= content.length ? undefined : content[end];
+    if (!isIdentifierContinue(before) && !isIdentifierContinue(after)) {
+      found.push({ startOffset: start, endOffset: end });
+    }
+    from = start + 1;
   }
   return found;
+}
+
+export function collectEnvLeafPaths(nodes: EnvTreeNode[]): string[] {
+  const paths: string[] = [];
+  for (const node of nodes) {
+    if (node.cells) {
+      paths.push(node.path);
+    }
+    if (node.children) {
+      paths.push(...collectEnvLeafPaths(node.children));
+    }
+  }
+  return paths;
 }
 
 function detectProjectType(folderPath: string): 'xml' | 'yaml' | undefined {
@@ -97,10 +102,10 @@ export function listSiblingPolicyProjects(envRoot: string): PolicyStudioProject[
   return projects;
 }
 
-export async function scanPolicyFileForUsages(file: {
-  absolutePath: string;
-  relativePath: string;
-}): Promise<{ usages: EnvAttributeUsage[]; warning?: string }> {
+export async function scanPolicyFileForUsages(
+  file: { absolutePath: string; relativePath: string },
+  envKeys: string[] = [],
+): Promise<{ usages: EnvAttributeUsage[]; warning?: string }> {
   let content: string;
   try {
     content = await fsPromises.readFile(file.absolutePath, 'utf8');
@@ -112,20 +117,27 @@ export async function scanPolicyFileForUsages(file: {
     };
   }
 
-  const usages = extractEnvAttributePlaceholders(content).map((placeholder) => {
-    const range = offsetToRange(content, placeholder.startOffset, placeholder.endOffset);
-    return {
-      envKey: placeholder.envKey,
-      absolutePath: file.absolutePath,
-      relativePath: file.relativePath.split(path.sep).join('/'),
-      line: range.start.line + 1,
-      range,
-    };
-  });
+  const relativePath = file.relativePath.split(path.sep).join('/');
+  const usages: EnvAttributeUsage[] = [];
+  for (const envKey of envKeys) {
+    for (const occurrence of findEnvKeyOccurrences(content, envKey)) {
+      const range = offsetToRange(content, occurrence.startOffset, occurrence.endOffset);
+      usages.push({
+        envKey,
+        absolutePath: file.absolutePath,
+        relativePath,
+        line: range.start.line + 1,
+        range,
+      });
+    }
+  }
   return { usages };
 }
 
-export async function scanEnvAttributeUsages(envRoot: string): Promise<EnvUsageScan> {
+export async function scanEnvAttributeUsages(
+  envRoot: string,
+  envKeys: string[] = [],
+): Promise<EnvUsageScan> {
   const projects = listSiblingPolicyProjects(envRoot);
   if (projects.length === 0) {
     return { byKey: {}, warnings: [NO_SIBLING_POLICY_PROJECT_WARNING], projectCount: 0 };
@@ -138,7 +150,7 @@ export async function scanEnvAttributeUsages(envRoot: string): Promise<EnvUsageS
     const files = await discoverPolicyFiles(project);
     for (const absolutePath of files) {
       const relativePath = path.relative(project.rootPath, absolutePath);
-      const result = await scanPolicyFileForUsages({ absolutePath, relativePath });
+      const result = await scanPolicyFileForUsages({ absolutePath, relativePath }, envKeys);
       if (result.warning) {
         warnings.push(result.warning);
       }

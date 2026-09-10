@@ -17,7 +17,7 @@ import {
   renderEnvValuesDetailHtml,
   renderEnvValuesEditorHtml,
 } from './envValuesPanelHtml';
-import { scanEnvAttributeUsages, usagesForEnvKey } from './findEnvAttributeUsages';
+import { collectEnvLeafPaths, scanEnvAttributeUsages } from './findEnvAttributeUsages';
 import { writeDirtyEnvDocuments } from './envValuesWriter';
 import { listEnvRootsForProjects, type EnvRootCandidate } from './listEnvRoots';
 import { loadEnvValuesSession } from './loadEnvValuesSession';
@@ -279,7 +279,10 @@ export class EnvValuesEditorService {
       this.model = loadEnvValuesSession(envRoot);
       this.envLabel = label ?? path.basename(path.dirname(envRoot)) ?? path.basename(envRoot);
       this.usageScan = { byKey: {}, warnings: [], projectCount: 0 };
-      this.usageScan = await scanEnvAttributeUsages(envRoot);
+      this.usageScan = await scanEnvAttributeUsages(
+        envRoot,
+        collectEnvLeafPaths(this.model.tree),
+      );
 
       if (!sameEnv) {
         this.selectedPath = undefined;
@@ -352,7 +355,7 @@ export class EnvValuesEditorService {
     if (!selectedPath) {
       return [];
     }
-    return usagesForEnvKey(this.usageScan.byKey, selectedPath);
+    return this.usageScan.byKey[selectedPath] ?? [];
   }
 
   private async handleMessage(message: IncomingMessage): Promise<void> {

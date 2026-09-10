@@ -8,7 +8,7 @@ Edit environment-specific configuration across all stages in one view. Policy de
 
 As a Policy Studio developer, I want to see and edit all environment `values.yaml` files together (tree of keys + per-stage values), so that I can keep stages aligned, spot missing keys, and change values without switching between files.
 
-As a Policy Studio developer, I want to see where a selected ENV key is referenced from policy files (`{{<key.path>}}`, with or without a trailing `.attributeValue` or other dotted suffix), so that I can tell whether a value is in use and jump to those places.
+As a Policy Studio developer, I want to see where a selected ENV key is referenced from policy files (the dotted path `x.y.z.serviceCert` appears in the file text), so that I can tell whether a value is in use and jump to those places.
 
 ## Inputs
 
@@ -92,12 +92,12 @@ As a Policy Studio developer, I want to see where a selected ENV key is referenc
 
 Show where the selected ENV leaf is referenced in sibling Policy Studio project files.
 
-1. **Match:** Any `{{…}}` placeholder (trim whitespace inside the braces) whose inner text is the **whole ENV key** (`{{Service.X.serviceCert}}`) or that key plus a dotted suffix (`{{Service.X.serviceCert.attributeValue}}`, or any other `.segment` after the key). Do not treat a different name as a usage (`{{id}}` is not a usage of `A.AA`). A longer sibling name is not a match (`A.AAA` is not a usage of `A.AA`).
+1. **Match:** The selected leaf’s dotted path appears as text in a sibling policy file (e.g. `Service.X.serviceCert`). Braces and suffixes are irrelevant: `{{Service.X.serviceCert}}`, `{{Service.X.serviceCert.attributeValue}}`, and a bare `Service.X.serviceCert` all count. A longer sibling name is not a match (`A.AAA` is not a usage of `A.AA`). Unrelated names (`id`) are not usages of `A.AA`.
 2. **When:** Scan on editor load and Reload (not on Save; no live watch of policy files).
-3. **Where:** Walk `.yaml` / `.yml` / `.xml` policy files in sibling Policy Studio project(s) next to the open `ENV/` folder (same bundle layout as discovery). Reuse the existing policy-file walk. Read file text; do not parse circuits. Unparseable documents are still scanned as text.
+3. **Where:** Walk `.yaml` / `.yml` / `.xml` policy files in sibling Policy Studio project(s) next to the open `ENV/` folder (same bundle layout as discovery). Reuse the existing policy-file walk. Read file text; do not parse circuits. Unparseable documents are still scanned as text. Search only for leaf paths from the loaded ENV model.
 4. **Detail pane:** After the per-stage value fields:
    - Heading badge: `N usages` (`N` = match count). Unused → red `0 usages`.
-   - Used: section **Used in** with one clickable row per match (`relativePath` + line). Click opens the file and highlights the full `{{…}}` range.
+   - Used: section **Used in** with one clickable row per match (`relativePath` + line). Click opens the file and highlights the key path.
    - Unused: no rows; italic **Not used in any policy.**
 5. **Tree:** No unused coloring. Missing-in-stage yellow is unchanged.
 6. **Unreadable file:** Skip it; keep the editor; add a short warning.
@@ -123,7 +123,7 @@ Show where the selected ENV leaf is referenced in sibling Policy Studio project 
 - **Several interpolations in one file:** One usage row per match.
 - **Unreadable policy file during usage scan:** Skip; do not fail the ENV session.
 - **No sibling Policy Studio project:** All leaves unused; session warning that nothing was scanned.
-- **Unrelated placeholders** (e.g. `{{id}}` when the selected key is `A.AA`): Not a usage of that key. They only count if the inner text is that key or that key plus a dotted suffix.
+- **Unrelated text** (e.g. `id` when the selected key is `A.AA`): Not a usage of that key.
 
 ## Acceptance Criteria
 
@@ -142,9 +142,9 @@ Show where the selected ENV leaf is referenced in sibling Policy Studio project 
 - [ ] Unit tests cover discovery, merge (missing vs empty), mutations, and write-back using fixtures under `test/fixtures/env-values-editor/`.
 - [ ] Tool appears in the Tools sidebar and uses project scope APIs from `000`.
 - [ ] Selecting an ENV leaf shows a usage count badge and either a clickable “Used in” list or “Not used in any policy.”
-- [ ] Usages come from `{{<key.path>}}` in sibling policy YAML/XML, including an optional dotted suffix such as `.attributeValue`; click opens the file at that range.
+- [ ] Usages come from the ENV key path appearing in sibling policy YAML/XML text (braces optional); click opens the file at that range.
 - [ ] Unused keys show a red `0 usages` badge. Reload rescans usages.
-- [ ] Unit tests cover interpolation extraction, used vs unused lookup, skip-unreadable, and detail-pane HTML (badge, list, unused state).
+- [ ] Unit tests cover key-path occurrence search, used vs unused lookup, skip-unreadable, and detail-pane HTML (badge, list, unused state).
 
 ## Non-goals
 
