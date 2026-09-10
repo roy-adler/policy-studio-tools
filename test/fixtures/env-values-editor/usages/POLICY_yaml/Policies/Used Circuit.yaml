@@ -1,0 +1,7 @@
+---
+type: FilterCircuit
+fields:
+  name: Used Circuit
+  cert: "{{A.AA.attributeValue}}"
+  path: "{{id}}"
+  spaced: "{{  A.AA.attributeValue  }}"
