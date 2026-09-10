@@ -17,6 +17,7 @@ import {
   renderEnvValuesDetailHtml,
   renderEnvValuesEditorHtml,
 } from './envValuesPanelHtml';
+import { scanEnvAttributeUsages } from './findEnvAttributeUsages';
 import { writeDirtyEnvDocuments } from './envValuesWriter';
 import { listEnvRootsForProjects, type EnvRootCandidate } from './listEnvRoots';
 import { loadEnvValuesSession } from './loadEnvValuesSession';
@@ -24,7 +25,7 @@ import { resolveAddKeyPath } from './resolveAddKeyPath';
 import { resolveEnvFollowActiveProject, resolveEnvOpenDecision } from './resolveEnvSelection';
 import { collectSingletonExpandPaths } from './envTreeView';
 import { ENV_VALUES_EDITOR_TOOL } from './toolDescriptor';
-import type { EnvTreeNode, EnvValuesModel } from './types';
+import type { EnvTextRange, EnvTreeNode, EnvUsageScan, EnvValuesModel } from './types';
 import type { PolicyStudioProject } from '../projectRegistry/types';
 
 function createNonce(): string {
@@ -51,6 +52,7 @@ type IncomingMessage = {
   | { type: 'switchEnv' }
   | { type: 'toggleExpand'; path: string; expanded: boolean }
   | { type: 'search'; query: string }
+  | { type: 'openUsage'; filePath: string; range: EnvTextRange }
 );
 
 type EnvQuickPickItem = vscode.QuickPickItem & {
@@ -70,6 +72,7 @@ export class EnvValuesEditorService {
   private expandedPaths = new Set<string>();
   private searchQuery = '';
   private treeScrollTop = 0;
+  private usageScan: EnvUsageScan = { byKey: {}, warnings: [], projectCount: 0 };
 
   constructor(private readonly context: vscode.ExtensionContext) {}
 
@@ -118,7 +121,10 @@ export class EnvValuesEditorService {
       if (!(await this.confirmDiscardIfDirty())) {
         return;
       }
-      this.loadAndShow(decision.candidate.envRoot, formatCandidateLabel(decision.candidate));
+      await this.loadAndShow(
+        decision.candidate.envRoot,
+        formatCandidateLabel(decision.candidate),
+      );
     } finally {
       this.followInFlight = false;
     }
@@ -134,7 +140,10 @@ export class EnvValuesEditorService {
       if (!(await this.confirmDiscardIfDirty())) {
         return;
       }
-      this.loadAndShow(decision.candidate.envRoot, formatCandidateLabel(decision.candidate));
+      await this.loadAndShow(
+        decision.candidate.envRoot,
+        formatCandidateLabel(decision.candidate),
+      );
       return;
     }
 
@@ -152,7 +161,7 @@ export class EnvValuesEditorService {
       return;
     }
 
-    this.loadAndShow(selection.envRoot, selection.label);
+    await this.loadAndShow(selection.envRoot, selection.label);
   }
 
   /**
@@ -255,7 +264,7 @@ export class EnvValuesEditorService {
     return folders?.[0]?.fsPath;
   }
 
-  private loadAndShow(envRoot: string, label?: string): void {
+  private async loadAndShow(envRoot: string, label?: string): Promise<void> {
     const previousRoot = this.model?.envRoot;
     const sameEnv =
       previousRoot !== undefined && path.resolve(previousRoot) === path.resolve(envRoot);
@@ -263,6 +272,7 @@ export class EnvValuesEditorService {
     try {
       this.model = loadEnvValuesSession(envRoot);
       this.envLabel = label ?? path.basename(path.dirname(envRoot)) ?? path.basename(envRoot);
+      this.usageScan = await scanEnvAttributeUsages(envRoot);
 
       if (!sameEnv) {
         this.selectedPath = undefined;
@@ -323,8 +333,19 @@ export class EnvValuesEditorService {
         expandedPaths: this.expandedPaths,
         searchQuery: this.searchQuery,
         treeScrollTop: this.treeScrollTop,
+        usages: this.usagesForSelection(this.selectedPath),
+        usageWarnings: this.usageScan.warnings,
       },
     );
+  }
+
+  private usagesForSelection(
+    selectedPath: string | undefined,
+  ): import('./types').EnvAttributeUsage[] {
+    if (!selectedPath) {
+      return [];
+    }
+    return this.usageScan.byKey[selectedPath] ?? [];
   }
 
   private async handleMessage(message: IncomingMessage): Promise<void> {
@@ -349,7 +370,11 @@ export class EnvValuesEditorService {
         void this.panel?.webview.postMessage({
           type: 'showDetail',
           path: message.path,
-          html: renderEnvValuesDetailHtml(this.model, message.path),
+          html: renderEnvValuesDetailHtml(
+            this.model,
+            message.path,
+            this.usagesForSelection(message.path),
+          ),
         });
         break;
       case 'toggleExpand':
@@ -398,6 +423,9 @@ export class EnvValuesEditorService {
       case 'switchEnv':
         await this.handleSwitchEnv();
         break;
+      case 'openUsage':
+        await this.handleOpenUsage(message.filePath, message.range);
+        break;
     }
   }
 
@@ -432,7 +460,7 @@ export class EnvValuesEditorService {
       return;
     }
 
-    this.loadAndShow(selection.envRoot, selection.label);
+    await this.loadAndShow(selection.envRoot, selection.label);
   }
 
   private async handleAddKey(): Promise<void> {
@@ -531,7 +559,7 @@ export class EnvValuesEditorService {
       return;
     }
 
-    this.loadAndShow(envRoot, label);
+    await this.loadAndShow(envRoot, label);
   }
 
   private async handlePickEnv(): Promise<void> {
@@ -544,7 +572,24 @@ export class EnvValuesEditorService {
       return;
     }
 
-    this.loadAndShow(folder);
+    await this.loadAndShow(folder);
+  }
+
+  private async handleOpenUsage(filePath: string, range: EnvTextRange): Promise<void> {
+    try {
+      const document = await vscode.workspace.openTextDocument(vscode.Uri.file(filePath));
+      const selection = new vscode.Range(
+        range.start.line,
+        range.start.character,
+        range.end.line,
+        range.end.character,
+      );
+      const editor = await vscode.window.showTextDocument(document, { selection });
+      editor.revealRange(selection, vscode.TextEditorRevealType.InCenter);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      void vscode.window.showErrorMessage(`Could not open policy usage: ${message}`);
+    }
   }
 }
 
