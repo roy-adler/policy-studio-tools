@@ -1,5 +1,10 @@
 import * as crypto from 'crypto';
-import type { EnvScalar, EnvTreeNode, EnvValuesModel } from './types';
+import type {
+  EnvAttributeUsage,
+  EnvScalar,
+  EnvTreeNode,
+  EnvValuesModel,
+} from './types';
 import {
   nodeOrDescendantHasMissing,
   resolveExpandedPaths,
@@ -21,6 +26,8 @@ export interface EnvValuesPanelViewState {
   expandedPaths?: Iterable<string>;
   searchQuery?: string;
   treeScrollTop?: number;
+  usages?: EnvAttributeUsage[];
+  usageWarnings?: string[];
 }
 
 function getStyles(): string {
@@ -30,6 +37,7 @@ function getStyles(): string {
       --env-missing-color: #c9a227;
       --env-missing-bg: rgba(201, 162, 39, 0.28);
       --env-conflict-color: var(--vscode-charts-red, #d1242f);
+      --env-unused-color: var(--vscode-charts-red, #d1242f);
     }
     * { box-sizing: border-box; }
     body {
@@ -159,6 +167,54 @@ function getStyles(): string {
     .tree-empty-filter.visible { display: block; }
     .placeholder { opacity: 0.7; font-size: 12px; }
     h2 { font-size: 14px; margin: 0 0 4px; word-break: break-all; }
+    h2 .usage-badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      vertical-align: middle;
+      margin-left: 8px;
+      padding: 1px 8px;
+      border-radius: 8px;
+      background: var(--vscode-badge-background, #094771);
+      color: var(--vscode-badge-foreground, #fff);
+      white-space: nowrap;
+    }
+    h2 .usage-badge.unused {
+      background: var(--env-unused-color);
+      color: #fff;
+    }
+    .usages {
+      margin-top: 16px;
+      padding-top: 12px;
+      border-top: 1px solid var(--vscode-panel-border);
+    }
+    .usages-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      opacity: 0.7;
+      margin-bottom: 6px;
+    }
+    .usage-hit {
+      display: block;
+      width: 100%;
+      text-align: left;
+      background: transparent;
+      color: var(--vscode-textLink-foreground, #9cdcfe);
+      border: none;
+      border-radius: 3px;
+      padding: 4px 6px;
+      cursor: pointer;
+      font: inherit;
+    }
+    .usage-hit:hover { background: var(--vscode-list-hoverBackground, #2a2d2e); }
+    .usage-hit .usage-line { opacity: 0.7; margin-left: 6px; }
+    .usages-empty {
+      font-style: italic;
+      color: var(--env-unused-color);
+      opacity: 0.9;
+      margin: 0;
+    }
     .stage-rows { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
     .stage-row { display: flex; align-items: center; gap: 10px; }
     .stage-row.list-stage { align-items: flex-start; }
@@ -359,6 +415,7 @@ function formatScalar(value: EnvScalar): string {
 export function renderEnvValuesDetailHtml(
   model: EnvValuesModel,
   selectedPath?: string,
+  usages: EnvAttributeUsage[] = [],
 ): string {
   if (!selectedPath) {
     return `<p class="placeholder">Select a key from the tree to view and edit its values.</p>`;
@@ -427,7 +484,23 @@ export function renderEnvValuesDetailHtml(
     </div>`;
   });
 
-  return `<h2>${escapeHtml(selectedPath)}</h2><div class="stage-rows">${rows.join('')}</div>`;
+  const count = usages.length;
+  const badgeClass = count === 0 ? 'usage-badge unused' : 'usage-badge';
+  const badge = `<span class="${badgeClass}">${count} usages</span>`;
+  const usageSection =
+    count === 0
+      ? `<div class="usages"><p class="usages-empty">Not used in any policy</p></div>`
+      : `<div class="usages">
+        <div class="usages-label">Used in</div>
+        ${usages
+          .map(
+            (usage) =>
+              `<button type="button" class="usage-hit" data-file="${escapeHtml(usage.absolutePath)}" data-start-line="${usage.range.start.line}" data-start-character="${usage.range.start.character}" data-end-line="${usage.range.end.line}" data-end-character="${usage.range.end.character}">${escapeHtml(usage.relativePath)}<span class="usage-line">L${usage.line}</span></button>`,
+          )
+          .join('')}
+      </div>`;
+
+  return `<h2>${escapeHtml(selectedPath)} ${badge}</h2><div class="stage-rows">${rows.join('')}</div>${usageSection}`;
 }
 
 function renderEmptyState(envRoot: string): string {
@@ -444,7 +517,7 @@ function renderEmptyState(envRoot: string): string {
   </div>`;
 }
 
-function renderBanner(model: EnvValuesModel): string {
+function renderBanner(model: EnvValuesModel, usageWarnings: string[] = []): string {
   const parseErrors = Object.values(model.documents)
     .filter((document) => document.parseError)
     .map((document) => `${document.stageId}: ${document.parseError}`);
@@ -453,11 +526,12 @@ function renderBanner(model: EnvValuesModel): string {
   if (parseErrors.length > 0) {
     parts.push(`<div class="banner error">${escapeHtml(parseErrors.join(' · '))}</div>`);
   }
-  if (model.warnings.length > 0) {
-    const preview = model.warnings.slice(0, 3).join(' · ');
-    const suffix = model.warnings.length > 3 ? '…' : '';
+  const warnings = [...model.warnings, ...usageWarnings];
+  if (warnings.length > 0) {
+    const preview = warnings.slice(0, 3).join(' · ');
+    const suffix = warnings.length > 3 ? '…' : '';
     parts.push(
-      `<div class="banner warning">${model.warnings.length} warning(s): ${escapeHtml(preview)}${suffix}</div>`,
+      `<div class="banner warning">${warnings.length} warning(s): ${escapeHtml(preview)}${suffix}</div>`,
     );
   }
   return parts.join('');
@@ -481,6 +555,8 @@ export function renderEnvValuesEditorHtml(
   const nonce = createNonce();
   const dirtyCount = Object.values(model.documents).filter((document) => document.dirty).length;
   const searchQuery = viewState.searchQuery ?? '';
+  const usages = viewState.usages ?? [];
+  const usageWarnings = viewState.usageWarnings ?? [];
 
   // Always render the full tree. Search filtering runs in the webview so typing
   // does not replace the whole document (which caused flicker / lost focus).
@@ -512,7 +588,7 @@ export function renderEnvValuesEditorHtml(
         ${renderTree(model.tree, selectedPath, expanded)}
       </div>
     </div>
-    <div id="detail">${renderEnvValuesDetailHtml(model, selectedPath)}</div>`;
+    <div id="detail">${renderEnvValuesDetailHtml(model, selectedPath, usages)}</div>`;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -524,7 +600,7 @@ export function renderEnvValuesEditorHtml(
 </head>
 <body>
   ${getToolbarHtml(dirtyCount, envLabel)}
-  ${renderBanner(model)}
+  ${renderBanner(model, usageWarnings)}
   <div id="body">
     ${bodyHtml}
   </div>
@@ -698,6 +774,27 @@ export function renderEnvValuesEditorHtml(
       detailPane.addEventListener('click', (event) => {
         const el = event.target;
         if (!(el instanceof HTMLElement)) {
+          return;
+        }
+        if (el.classList.contains('usage-hit') || el.closest('.usage-hit')) {
+          const hit = el.classList.contains('usage-hit') ? el : el.closest('.usage-hit');
+          if (!(hit instanceof HTMLElement)) {
+            return;
+          }
+          vscode.postMessage({
+            type: 'openUsage',
+            filePath: hit.dataset.file,
+            range: {
+              start: {
+                line: Number(hit.dataset.startLine),
+                character: Number(hit.dataset.startCharacter),
+              },
+              end: {
+                line: Number(hit.dataset.endLine),
+                character: Number(hit.dataset.endCharacter),
+              },
+            },
+          });
           return;
         }
         if (el.classList.contains('list-remove')) {

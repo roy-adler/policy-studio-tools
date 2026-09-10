@@ -38,9 +38,12 @@ import {
   nodeOrDescendantHasMissing,
   resolveExpandedPaths,
 } from '../../src/features/envValuesEditor/envTreeView';
-import type { EnvTreeNode } from '../../src/features/envValuesEditor/types';
+import type {
+  EnvAttributeUsage,
+  EnvTreeNode,
+  EnvValuesModel,
+} from '../../src/features/envValuesEditor/types';
 import type { PolicyStudioProject } from '../../src/features/projectRegistry/types';
-import type { EnvValuesModel } from '../../src/features/envValuesEditor/types';
 
 const sampleRoot = path.join(__dirname, '..', 'fixtures', 'env-values-editor', 'sample');
 const policyRoot = path.join(sampleRoot, 'POLICY_yaml');
@@ -1078,6 +1081,42 @@ describe('env tree view helpers', () => {
     });
     expect(html).toContain('tree.scrollTop = 37');
     expect(html).toContain('treeScrollTop: treeScrollTop()');
+  });
+});
+
+describe('ENV key usage list HTML', () => {
+  it('shows a red unused badge when the selected key has no usages', () => {
+    const model = loadEnvValuesSession(envRoot);
+    const html = renderEnvValuesEditorHtml(model, 'A.AA', 'sample', { usages: [] });
+    expect(html).toContain('class="usage-badge unused"');
+    expect(html).toContain('0 usages');
+    expect(html).toContain('Not used in any policy');
+    expect(html).not.toContain('class="usage-hit"');
+  });
+
+  it('shows a count badge and clickable rows for usages', () => {
+    const model = loadEnvValuesSession(envRoot);
+    const usages: EnvAttributeUsage[] = [
+      {
+        envKey: 'A.AA',
+        absolutePath: '/proj/Policies/Used Circuit.yaml',
+        relativePath: 'Policies/Used Circuit.yaml',
+        line: 42,
+        range: {
+          start: { line: 41, character: 9 },
+          end: { line: 41, character: 40 },
+        },
+      },
+    ];
+    const html = renderEnvValuesEditorHtml(model, 'A.AA', 'sample', { usages });
+    expect(html).toContain('class="usage-badge"');
+    expect(html).not.toContain('class="usage-badge unused"');
+    expect(html).toContain('1 usages');
+    expect(html).toContain('Used in');
+    expect(html).toContain('Policies/Used Circuit.yaml');
+    expect(html).toContain('L42');
+    expect(html).toContain('class="usage-hit"');
+    expect(html).toContain('openUsage');
   });
 });
 
