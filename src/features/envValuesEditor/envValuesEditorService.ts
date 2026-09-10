@@ -25,7 +25,13 @@ import { resolveAddKeyPath } from './resolveAddKeyPath';
 import { resolveEnvFollowActiveProject, resolveEnvOpenDecision } from './resolveEnvSelection';
 import { collectSingletonExpandPaths } from './envTreeView';
 import { ENV_VALUES_EDITOR_TOOL } from './toolDescriptor';
-import type { EnvTextRange, EnvTreeNode, EnvUsageScan, EnvValuesModel } from './types';
+import type {
+  EnvAttributeUsage,
+  EnvTextRange,
+  EnvTreeNode,
+  EnvUsageScan,
+  EnvValuesModel,
+} from './types';
 import type { PolicyStudioProject } from '../projectRegistry/types';
 
 function createNonce(): string {
@@ -272,6 +278,7 @@ export class EnvValuesEditorService {
     try {
       this.model = loadEnvValuesSession(envRoot);
       this.envLabel = label ?? path.basename(path.dirname(envRoot)) ?? path.basename(envRoot);
+      this.usageScan = { byKey: {}, warnings: [], projectCount: 0 };
       this.usageScan = await scanEnvAttributeUsages(envRoot);
 
       if (!sameEnv) {
@@ -341,7 +348,7 @@ export class EnvValuesEditorService {
 
   private usagesForSelection(
     selectedPath: string | undefined,
-  ): import('./types').EnvAttributeUsage[] {
+  ): EnvAttributeUsage[] {
     if (!selectedPath) {
       return [];
     }
