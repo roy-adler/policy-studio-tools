@@ -2,7 +2,7 @@
   "name": "policy-studio-tools",
   "displayName": "Policy Studio Tools",
   "description": "Tools for Axway Policy Studio projects",
-  "version": "0.0.1",
+  "version": "0.1.1",
   "publisher": "RoyAdler",
   "license": "MIT",
   "repository": {
