@@ -8,6 +8,8 @@ Edit environment-specific configuration across all stages in one view. Policy de
 
 As a Policy Studio developer, I want to see and edit all environment `values.yaml` files together (tree of keys + per-stage values), so that I can keep stages aligned, spot missing keys, and change values without switching between files.
 
+As a Policy Studio developer, I want to see where a selected ENV key is referenced from policy files (`{{…attributeValue}}`), so that I can tell whether a value is in use and jump to those places.
+
 ## Inputs
 
 - **Project scope:** Prefer the active/selected Policy Studio project from the project registry (`000-multi-project-monorepo.md`). ENV discovery for switching uses all discovered projects so sibling ENV folders remain searchable.
@@ -32,7 +34,7 @@ As a Policy Studio developer, I want to see and edit all environment `values.yam
 
 - Webview panel **Environment Values Editor**:
   - **Left:** Expandable tree of nested keys from the merged key set across all stages.
-  - **Right:** For the selected leaf path, one editable field per discovered stage.
+  - **Right:** For the selected leaf path, one editable field per discovered stage, then policy **usages** of that key (see Policy usages).
   - **Warnings:** Key missing in a stage (distinct from empty value).
   - **Actions:** Save, Reload, Add key, Remove key, Create missing (per stage), optional Open ENV folder.
 - On Save: write updated nested YAML only to stage files that changed.
@@ -84,7 +86,23 @@ As a Policy Studio developer, I want to see and edit all environment `values.yam
   - **compact list indentation** when the original used it (`key:` then `- item` at the same indent as `key`)
   - **single-quoted** scalars when the original used `'…'` (double-quoted / plain left as such; new values may use plain or double when quoting is required)
   - no trailing blank line / extra newline after the last entry (indentation may be normalized to 2 spaces)
-- **Reload** re-reads from disk; if dirty, confirm discard. Keep selection and expansion.
+- **Reload** re-reads from disk; if dirty, confirm discard. Keep selection and expansion. Reload also **rescans policy usages**.
+
+### Policy usages
+
+Show where the selected ENV leaf is referenced in sibling Policy Studio project files.
+
+1. **Match:** Text `{{<dotted.path>.attributeValue}}` only. Trim whitespace inside the braces. The ENV key is `<dotted.path>` (`.attributeValue` stripped). Exact key match; do not treat other `{{…}}` placeholders as usages.
+2. **When:** Scan on editor load and Reload (not on Save; no live watch of policy files).
+3. **Where:** Walk `.yaml` / `.yml` / `.xml` policy files in sibling Policy Studio project(s) next to the open `ENV/` folder (same bundle layout as discovery). Reuse the existing policy-file walk. Read file text; do not parse circuits. Unparseable documents are still scanned as text.
+4. **Detail pane:** After the per-stage value fields:
+   - Heading badge: `N usages` (`N` = match count). Unused → red `0 usages`.
+   - Used: section **Used in** with one clickable row per match (`relativePath` + line). Click opens the file and highlights the full `{{…}}` range.
+   - Unused: no rows; italic **Not used in any policy.**
+5. **Tree:** No unused coloring. Missing-in-stage yellow is unchanged.
+6. **Unreadable file:** Skip it; keep the editor; add a short warning.
+7. **No sibling policy project** (including folder-picked ENV with none): empty usage map; unused empty state for every leaf; one session warning (banner) that no policy project was scanned.
+8. **Click when the file is gone:** error toast; editor stays usable.
 
 ### Integration
 
@@ -102,6 +120,10 @@ As a Policy Studio developer, I want to see and edit all environment `values.yam
 - **User-picked ENV unrelated to project:** Allowed; discovery runs on the picked folder.
 - **Concurrent external edits:** No live watch in v1; Reload picks up disk changes.
 - **Large nested trees:** Tree should remain usable (expand/collapse); no hard limit required for v1 beyond reasonable fixture sizes.
+- **Several interpolations in one file:** One usage row per match.
+- **Unreadable policy file during usage scan:** Skip; do not fail the ENV session.
+- **No sibling Policy Studio project:** All leaves unused; session warning that nothing was scanned.
+- **Non-`attributeValue` placeholders** (e.g. `{{id}}`): Ignored.
 
 ## Acceptance Criteria
 
@@ -119,6 +141,10 @@ As a Policy Studio developer, I want to see and edit all environment `values.yam
 - [ ] Certificate Store is not edited in v1.
 - [ ] Unit tests cover discovery, merge (missing vs empty), mutations, and write-back using fixtures under `test/fixtures/env-values-editor/`.
 - [ ] Tool appears in the Tools sidebar and uses project scope APIs from `000`.
+- [ ] Selecting an ENV leaf shows a usage count badge and either a clickable “Used in” list or “Not used in any policy.”
+- [ ] Usages come only from `{{<key.path>.attributeValue}}` in sibling policy YAML/XML; click opens the file at that range.
+- [ ] Unused keys show a red `0 usages` badge. Reload rescans usages.
+- [ ] Unit tests cover interpolation extraction, used vs unused lookup, skip-unreadable, and detail-pane HTML (badge, list, unused state).
 
 ## Non-goals
 
@@ -127,8 +153,13 @@ As a Policy Studio developer, I want to see and edit all environment `values.yam
 - Diff highlighting of unequal values across stages (may come later)
 - Live bidirectional sync with open text editors
 - Lists of maps/objects as editable values (scalar lists are in scope)
+- Unused-key highlighting in the ENV tree
+- Reporting `{{…attributeValue}}` interpolations that do not match any ENV key
+- Matching placeholders other than `.attributeValue`
+- Live watch of policy files for usage changes (Reload rescans)
 
 ## Notes
 
 - Design discussion: `docs/superpowers/specs/2026-08-06-env-values-editor-design.md`
+- Policy usages: `docs/superpowers/specs/2026-09-10-env-key-usages-design.md`
 - Project-root `values.yaml` remains the YAML project **marker** (`001`); it is unrelated to `ENV/*/values.yaml` content.
