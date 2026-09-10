@@ -59,3 +59,29 @@ export interface EnvValuesModel {
   tree: EnvTreeNode[];
   warnings: string[];
 }
+
+export interface EnvTextRange {
+  start: { line: number; character: number };
+  end: { line: number; character: number };
+}
+
+export interface EnvAttributePlaceholder {
+  envKey: string;
+  startOffset: number;
+  endOffset: number;
+}
+
+export interface EnvAttributeUsage {
+  envKey: string;
+  absolutePath: string;
+  relativePath: string;
+  /** 1-based line for display */
+  line: number;
+  range: EnvTextRange;
+}
+
+export interface EnvUsageScan {
+  byKey: Record<string, EnvAttributeUsage[]>;
+  warnings: string[];
+  projectCount: number;
+}
