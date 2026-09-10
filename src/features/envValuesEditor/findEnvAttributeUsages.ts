@@ -15,11 +15,11 @@ import type {
 export const NO_SIBLING_POLICY_PROJECT_WARNING =
   'No Policy Studio project found next to this ENV folder; policy usages were not scanned.';
 
-const ATTRIBUTE_VALUE_PLACEHOLDER = /\{\{\s*([^{}]*?)\.attributeValue\s*\}\}/g;
+const ENV_PLACEHOLDER = /\{\{\s*([^{}]+?)\s*\}\}/g;
 
 export function extractEnvAttributePlaceholders(content: string): EnvAttributePlaceholder[] {
   const found: EnvAttributePlaceholder[] = [];
-  const pattern = new RegExp(ATTRIBUTE_VALUE_PLACEHOLDER.source, 'g');
+  const pattern = new RegExp(ENV_PLACEHOLDER.source, 'g');
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(content)) !== null) {
     const envKey = match[1].trim();
@@ -31,6 +31,23 @@ export function extractEnvAttributePlaceholders(content: string): EnvAttributePl
       startOffset: match.index,
       endOffset: match.index + match[0].length,
     });
+  }
+  return found;
+}
+
+export function placeholderMatchesEnvKey(placeholderInner: string, envKey: string): boolean {
+  return placeholderInner === envKey || placeholderInner.startsWith(`${envKey}.`);
+}
+
+export function usagesForEnvKey(
+  byKey: Record<string, EnvAttributeUsage[]>,
+  envKey: string,
+): EnvAttributeUsage[] {
+  const found: EnvAttributeUsage[] = [];
+  for (const [inner, usages] of Object.entries(byKey)) {
+    if (placeholderMatchesEnvKey(inner, envKey)) {
+      found.push(...usages);
+    }
   }
   return found;
 }

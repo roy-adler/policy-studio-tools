@@ -17,7 +17,7 @@ import {
   renderEnvValuesDetailHtml,
   renderEnvValuesEditorHtml,
 } from './envValuesPanelHtml';
-import { scanEnvAttributeUsages } from './findEnvAttributeUsages';
+import { scanEnvAttributeUsages, usagesForEnvKey } from './findEnvAttributeUsages';
 import { writeDirtyEnvDocuments } from './envValuesWriter';
 import { listEnvRootsForProjects, type EnvRootCandidate } from './listEnvRoots';
 import { loadEnvValuesSession } from './loadEnvValuesSession';
@@ -352,7 +352,7 @@ export class EnvValuesEditorService {
     if (!selectedPath) {
       return [];
     }
-    return this.usageScan.byKey[selectedPath] ?? [];
+    return usagesForEnvKey(this.usageScan.byKey, selectedPath);
   }
 
   private async handleMessage(message: IncomingMessage): Promise<void> {

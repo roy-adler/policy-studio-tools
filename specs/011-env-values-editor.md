@@ -8,7 +8,7 @@ Edit environment-specific configuration across all stages in one view. Policy de
 
 As a Policy Studio developer, I want to see and edit all environment `values.yaml` files together (tree of keys + per-stage values), so that I can keep stages aligned, spot missing keys, and change values without switching between files.
 
-As a Policy Studio developer, I want to see where a selected ENV key is referenced from policy files (`{{…attributeValue}}`), so that I can tell whether a value is in use and jump to those places.
+As a Policy Studio developer, I want to see where a selected ENV key is referenced from policy files (`{{<key.path>}}`, with or without a trailing `.attributeValue` or other dotted suffix), so that I can tell whether a value is in use and jump to those places.
 
 ## Inputs
 
@@ -92,7 +92,7 @@ As a Policy Studio developer, I want to see where a selected ENV key is referenc
 
 Show where the selected ENV leaf is referenced in sibling Policy Studio project files.
 
-1. **Match:** Text `{{<dotted.path>.attributeValue}}` only. Trim whitespace inside the braces. The ENV key is `<dotted.path>` (`.attributeValue` stripped). Exact key match; do not treat other `{{…}}` placeholders as usages.
+1. **Match:** Any `{{…}}` placeholder (trim whitespace inside the braces) whose inner text is the **whole ENV key** (`{{Service.X.serviceCert}}`) or that key plus a dotted suffix (`{{Service.X.serviceCert.attributeValue}}`, or any other `.segment` after the key). Do not treat a different name as a usage (`{{id}}` is not a usage of `A.AA`). A longer sibling name is not a match (`A.AAA` is not a usage of `A.AA`).
 2. **When:** Scan on editor load and Reload (not on Save; no live watch of policy files).
 3. **Where:** Walk `.yaml` / `.yml` / `.xml` policy files in sibling Policy Studio project(s) next to the open `ENV/` folder (same bundle layout as discovery). Reuse the existing policy-file walk. Read file text; do not parse circuits. Unparseable documents are still scanned as text.
 4. **Detail pane:** After the per-stage value fields:
@@ -123,7 +123,7 @@ Show where the selected ENV leaf is referenced in sibling Policy Studio project 
 - **Several interpolations in one file:** One usage row per match.
 - **Unreadable policy file during usage scan:** Skip; do not fail the ENV session.
 - **No sibling Policy Studio project:** All leaves unused; session warning that nothing was scanned.
-- **Non-`attributeValue` placeholders** (e.g. `{{id}}`): Ignored.
+- **Unrelated placeholders** (e.g. `{{id}}` when the selected key is `A.AA`): Not a usage of that key. They only count if the inner text is that key or that key plus a dotted suffix.
 
 ## Acceptance Criteria
 
@@ -142,7 +142,7 @@ Show where the selected ENV leaf is referenced in sibling Policy Studio project 
 - [ ] Unit tests cover discovery, merge (missing vs empty), mutations, and write-back using fixtures under `test/fixtures/env-values-editor/`.
 - [ ] Tool appears in the Tools sidebar and uses project scope APIs from `000`.
 - [ ] Selecting an ENV leaf shows a usage count badge and either a clickable “Used in” list or “Not used in any policy.”
-- [ ] Usages come only from `{{<key.path>.attributeValue}}` in sibling policy YAML/XML; click opens the file at that range.
+- [ ] Usages come from `{{<key.path>}}` in sibling policy YAML/XML, including an optional dotted suffix such as `.attributeValue`; click opens the file at that range.
 - [ ] Unused keys show a red `0 usages` badge. Reload rescans usages.
 - [ ] Unit tests cover interpolation extraction, used vs unused lookup, skip-unreadable, and detail-pane HTML (badge, list, unused state).
 
@@ -154,8 +154,7 @@ Show where the selected ENV leaf is referenced in sibling Policy Studio project 
 - Live bidirectional sync with open text editors
 - Lists of maps/objects as editable values (scalar lists are in scope)
 - Unused-key highlighting in the ENV tree
-- Reporting `{{…attributeValue}}` interpolations that do not match any ENV key
-- Matching placeholders other than `.attributeValue`
+- Reporting `{{…}}` interpolations that do not match any ENV key
 - Live watch of policy files for usage changes (Reload rescans)
 
 ## Notes

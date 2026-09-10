@@ -4,4 +4,5 @@ fields:
   name: Used Circuit
   cert: "{{A.AA.attributeValue}}"
   path: "{{id}}"
+  plain: "{{A.AA}}"
   spaced: "{{  A.AA.attributeValue  }}"
