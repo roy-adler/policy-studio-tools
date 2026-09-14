@@ -1,4 +1,5 @@
 import type { PolicyStudioProject, ProjectRegistry, ProjectScope } from '../projectRegistry/types';
+import { policyTreeRelativePath } from '../projectRegistry/yamlPolicyBundle';
 
 export type ProjectsViewMode = 'tree' | 'list';
 
@@ -98,10 +99,6 @@ function basenameFromWorkspaceFolder(uriOrPath: string): string {
   return parts[parts.length - 1] || cleaned;
 }
 
-function toPosixRelative(relativePath: string): string {
-  return relativePath.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
-}
-
 interface MutableFolder {
   kind: 'folder';
   segment: string;
@@ -114,7 +111,7 @@ function createMutableFolder(segment: string): MutableFolder {
 }
 
 function insertProject(root: MutableFolder, project: PolicyStudioProject): void {
-  const posix = toPosixRelative(project.relativePath);
+  const posix = policyTreeRelativePath(project.rootPath, project.relativePath);
   if (!posix) {
     root.projects.push(project);
     return;

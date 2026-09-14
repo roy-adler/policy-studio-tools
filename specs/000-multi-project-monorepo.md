@@ -41,7 +41,7 @@ interface PolicyStudioProject {
   rootPath: string;        // absolute path to project root (directory containing markers)
   workspaceFolder: string; // owning VS Code workspace folder URI/path
   relativePath: string;    // path from workspace folder to project root
-  displayName: string;     // default: folder basename or relative path
+  displayName: string;     // POLICYNAME for YAML layout POLICYNAME/POLICYNAME_yaml; otherwise folder basename or relativePath when names collide
   projectType: 'xml' | 'yaml';
 }
 
@@ -98,6 +98,7 @@ interface ProjectScopedLocation {
   1. For each workspace folder, walk the directory tree within `scanDepth`, honouring include/exclude globs.
   2. A directory is a **project root** when it contains valid markers and is not nested inside another discovered project root (inner `PrimaryStore.xml` inside an already-registered project tree is part of that project, not a separate project — refine if Axway layout requires exceptions).
   3. Register each project in `ProjectRegistry`.
+- **YAML policy bundle layout:** Axway YAML checkouts typically live at `POLICYNAME/POLICYNAME_yaml` (suffix `_yaml` / `_YAML`, case-insensitive; parent folder name matches the stem). The **inner** `_yaml` folder is the project root (`rootPath` / `relativePath` — markers live there). The **parent** `POLICYNAME` is the user-facing policy: `displayName` is `POLICYNAME`, and the Projects tree shows that parent as the project leaf (no extra folder around `_yaml`). The parent directory itself is not a second project. A `_yaml` folder whose parent name does not match the stem keeps today’s basename behaviour.
 - Debounce file watchers; invalidate and incrementally update registry when marker files or `values.yaml` / policy trees appear, disappear, or move.
 - Do not block the extension host: discovery runs asynchronously with cancellable tasks; show lightweight progress when initial scan exceeds ~1 s.
 
@@ -154,6 +155,7 @@ When scope is `allProjects` or `selectedProjects`:
 ## Acceptance Criteria
 
 - [ ] Nested Policy Studio projects are discovered under a monorepo workspace fixture (at least two projects at different depths).
+- [ ] YAML layout `POLICYNAME/POLICYNAME_yaml` is one project named `POLICYNAME`; `rootPath` remains the inner `_yaml` folder; the parent folder is not registered as its own project.
 - [ ] `ProjectRegistry` exposes stable `id`, `rootPath`, `relativePath`, and `displayName` per project.
 - [ ] `getProjectForFile` returns the correct project when the active editor is inside nested project A vs B.
 - [ ] Scope picker offers `activeProject`, `allProjects`, and multi-select `selectedProjects`.
@@ -176,6 +178,7 @@ When scope is `allProjects` or `selectedProjects`:
 ### Test fixture requirements
 
 - `test/fixtures/monorepo/two-projects/` — workspace root is generic repo root; `apps/gateway-a/` and `apps/gateway-b/` each contain a valid YAML or XML Policy Studio project.
+- `test/fixtures/monorepo/yaml-policy-bundles/` — `policies/NAME/NAME_YAML` YAML layout plus a non-matching `_yaml` folder (parent name ≠ stem).
 - `test/fixtures/monorepo/nested-depth/` — project at `packages/team/service/policy/` (depth > 1).
 - `test/fixtures/monorepo/with-node-modules/` — `node_modules` contains decoy `PrimaryStore.xml`; must be excluded.
 - `test/fixtures/monorepo/multi-root/` — two workspace folders each with one project (for multi-root integration tests if harness supports).

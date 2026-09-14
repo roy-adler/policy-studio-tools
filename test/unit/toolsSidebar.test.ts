@@ -70,19 +70,19 @@ describe('buildProjectsTree', () => {
 });
 
 describe('buildProjectsTree path tree', () => {
-  it('keeps a folder for a sole project and shows the project as its child', () => {
+  it('shows YAML POLICYNAME/POLICYNAME_yaml bundles as project leaves under the shared parent', () => {
     const registry: ProjectRegistry = {
       projects: [
         sampleProject({
           id: 'a',
-          displayName: 'AUTH_GATEWAY_YAML',
+          displayName: 'AUTH_GATEWAY',
           relativePath: 'policies/AUTH_GATEWAY/AUTH_GATEWAY_YAML',
           workspaceFolder: 'file:///repo',
           rootPath: '/repo/policies/AUTH_GATEWAY/AUTH_GATEWAY_YAML',
         }),
         sampleProject({
           id: 'b',
-          displayName: 'PAYMENT_API_YAML',
+          displayName: 'PAYMENT_API',
           relativePath: 'policies/PAYMENT_API/PAYMENT_API_YAML',
           workspaceFolder: 'file:///repo',
           rootPath: '/repo/policies/PAYMENT_API/PAYMENT_API_YAML',
@@ -95,15 +95,27 @@ describe('buildProjectsTree path tree', () => {
     const folders = roots.filter((n) => n.kind === 'folder');
     expect(folders).toHaveLength(1);
     expect(folders[0].label).toBe('policies');
-    const categoryFolders = (folders[0].children ?? []).filter((n) => n.kind === 'folder');
-    expect(categoryFolders.map((n) => n.label).sort()).toEqual(['AUTH_GATEWAY', 'PAYMENT_API']);
-    expect(categoryFolders.every((n) => (n.children ?? []).length === 1)).toBe(true);
-    expect(categoryFolders.every((n) => n.children?.[0]?.kind === 'project')).toBe(true);
-    expect(
-      categoryFolders
-        .map((n) => n.children?.[0]?.label)
-        .sort(),
-    ).toEqual(['AUTH_GATEWAY_YAML', 'PAYMENT_API_YAML']);
+    const children = folders[0].children ?? [];
+    expect(children.every((n) => n.kind === 'project')).toBe(true);
+    expect(children.map((n) => n.label).sort()).toEqual(['AUTH_GATEWAY', 'PAYMENT_API']);
+  });
+
+  it('keeps a folder for a sole non-bundle project and shows the project as its child', () => {
+    const roots = buildProjectsTree(
+      {
+        projects: [sampleProject({ relativePath: 'apps/gateway', displayName: 'gateway', rootPath: '/repo/apps/gateway' })],
+        discoveredAt: new Date(),
+        warnings: [],
+      },
+      { mode: 'allProjects' },
+      'tree',
+    );
+    const folders = roots.filter((n) => n.kind === 'folder');
+    expect(folders).toHaveLength(1);
+    expect(folders[0].label).toBe('apps');
+    expect(folders[0].children).toEqual([
+      expect.objectContaining({ kind: 'project', label: 'gateway' }),
+    ]);
   });
 
   it('does not wrap workspaceFolder when only one workspace root', () => {
@@ -154,7 +166,8 @@ describe('buildProjectsTree path tree', () => {
         projects: [
           sampleProject({
             relativePath: 'policies/AUTH_GATEWAY/AUTH_GATEWAY_YAML',
-            displayName: 'AUTH_GATEWAY_YAML',
+            displayName: 'AUTH_GATEWAY',
+            rootPath: '/repo/policies/AUTH_GATEWAY/AUTH_GATEWAY_YAML',
           }),
         ],
         discoveredAt: new Date(),
@@ -166,7 +179,7 @@ describe('buildProjectsTree path tree', () => {
     const projects = roots.filter((n) => n.kind === 'project');
     expect(projects).toHaveLength(1);
     expect(projects[0].children).toBeUndefined();
-    expect(projects[0].label).toBe('AUTH_GATEWAY_YAML');
+    expect(projects[0].label).toBe('AUTH_GATEWAY');
   });
 
   it('places root-level project as leaf without empty folder', () => {

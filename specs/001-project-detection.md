@@ -26,8 +26,8 @@ As a developer, I want the extension to recognize Policy Studio projects automat
 
 ## Behaviour
 
-- Expose primitive `isPolicyStudioProject(directoryPath): boolean` (marker check only).
-- On workspace open, run nested discovery per `000-multi-project-monorepo.md` and populate the project registry.
+- Expose primitive `isPolicyStudioProject(directoryPath): boolean` (marker check only). Marker checks stay on the directory that contains `values.yaml` / `PrimaryStore.xml` (for YAML bundles that is the inner `POLICYNAME_yaml` folder, not the parent `POLICYNAME`).
+- On workspace open, run nested discovery per `000-multi-project-monorepo.md` and populate the project registry. Registry `displayName` and the Projects tree follow the YAML `POLICYNAME/POLICYNAME_yaml` bundle rule in `000`.
 - If at least one project is found, set `policyStudio.projectDetected` and show the status bar item.
 - If none are found, keep Policy Studio commands hidden or inactive.
 - Re-run discovery when workspace folders change or when marker files are created/deleted (debounced).

@@ -52,6 +52,22 @@ describe('discoverProjects', () => {
     expect(result.projects[0].projectType).toBe('xml');
   });
 
+  it('names YAML POLICYNAME/POLICYNAME_yaml bundles after the parent folder', async () => {
+    const workspace = path.join(fixturesDir, 'monorepo', 'yaml-policy-bundles');
+    const result = await discoverProjects(workspace, workspace, defaultSettings);
+
+    const byRelative = Object.fromEntries(result.projects.map((p) => [p.relativePath, p]));
+    expect(Object.keys(byRelative).sort()).toEqual([
+      'policies/AUTH_GATEWAY/AUTH_GATEWAY_YAML',
+      'policies/PAYMENT_API/PAYMENT_API_YAML',
+      'policies/loose/OtherPolicy_yaml',
+    ]);
+    expect(byRelative['policies/AUTH_GATEWAY/AUTH_GATEWAY_YAML'].displayName).toBe('AUTH_GATEWAY');
+    expect(byRelative['policies/PAYMENT_API/PAYMENT_API_YAML'].displayName).toBe('PAYMENT_API');
+    expect(byRelative['policies/loose/OtherPolicy_yaml'].displayName).toBe('OtherPolicy_yaml');
+    expect(result.projects.some((p) => p.relativePath === 'policies/AUTH_GATEWAY')).toBe(false);
+  });
+
   it('uses relativePath for displayName when basenames collide', async () => {
     const workspace = path.join(fixturesDir, 'monorepo', 'two-projects');
     const result = await discoverProjects(workspace, workspace, defaultSettings);

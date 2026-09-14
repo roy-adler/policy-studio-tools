@@ -57,7 +57,7 @@ Three views under the container, top to bottom:
 
 Shows discovery and scope at a glance. Supports two **view modes** (see `docs/superpowers/specs/2026-09-07-projects-path-tree-design.md`):
 
-- **Tree (default):** projects nested under compact path folders derived from each project’s `relativePath` (single-child **folder** chains collapsed; a folder with only one project child stays a folder with that project as its child). Multi-root workspaces wrap each tree under a workspace-folder node.
+- **Tree (default):** projects nested under compact path folders derived from each project’s `relativePath` (single-child **folder** chains collapsed; a folder with only one project child stays a folder with that project as its child). For YAML `POLICYNAME/POLICYNAME_yaml` bundles (`000`), omit the inner `_yaml` folder so the project leaf sits at `POLICYNAME` (label = `displayName`). Multi-root workspaces wrap each tree under a workspace-folder node.
 - **List:** flat project rows (original behaviour).
 
 Toggle via Projects view title-bar command `policyStudioTools.toggleProjectsViewMode`. Mode is persisted in workspace state (`policyStudio.projects.viewMode`: `tree` | `list`), not a user setting. Context key `policyStudio.projects.viewMode` drives the toolbar icon.
@@ -67,7 +67,7 @@ Toggle via Projects view title-bar command `policyStudioTools.toggleProjectsView
 | Scope summary (root) | e.g. `Active: gateway-a`, `All projects (3)`, `Selected: 2 projects` | Click → `selectProjectScope` |
 | Refresh | `$(refresh) Refresh projects` | → `refreshProjects` |
 | Workspace folder (tree, multi-root only) | Workspace folder basename | Expand/collapse only |
-| Folder (tree) | Compact path segment(s), e.g. `policies/AUTH_GATEWAY` | Expand/collapse only |
+| Folder (tree) | Compact path segment(s), e.g. `policies` | Expand/collapse only |
 | Per-project (list: flat; tree: leaf) | `displayName`, type badge (`yaml` / `xml` — YAML is the primary format, XML legacy), `relativePath` | Click → set `activeProject` scope to that project |
 | Warnings | Discovery warnings from registry (truncated scan, unreadable paths) | Informational |
 

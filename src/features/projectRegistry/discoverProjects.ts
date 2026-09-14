@@ -8,6 +8,7 @@ import {
 import { isPathExcluded, isPathIncluded } from './globMatch';
 import { createProjectId } from './projectId';
 import type { DiscoverySettings, PolicyStudioProject, ProjectRegistry } from './types';
+import { policyDisplayBasename } from './yamlPolicyBundle';
 
 function detectProjectType(folderPath: string): 'xml' | 'yaml' | undefined {
   if (fsSync.existsSync(path.join(folderPath, XML_PROJECT_MARKER))) {
@@ -26,18 +27,12 @@ function toPosix(filePath: string): string {
 function assignDisplayNames(projects: PolicyStudioProject[]): void {
   const basenameCounts = new Map<string, number>();
   for (const project of projects) {
-    const base =
-      project.relativePath === ''
-        ? path.basename(project.rootPath)
-        : path.basename(project.relativePath);
+    const base = policyDisplayBasename(project.rootPath, project.relativePath);
     basenameCounts.set(base, (basenameCounts.get(base) ?? 0) + 1);
   }
 
   for (const project of projects) {
-    const base =
-      project.relativePath === ''
-        ? path.basename(project.rootPath)
-        : path.basename(project.relativePath);
+    const base = policyDisplayBasename(project.rootPath, project.relativePath);
     project.displayName =
       (basenameCounts.get(base) ?? 0) > 1
         ? project.relativePath || path.basename(project.rootPath)
