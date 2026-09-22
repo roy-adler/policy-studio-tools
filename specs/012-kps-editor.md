@@ -70,7 +70,7 @@ As a Policy Studio developer, I want to see and edit all stage copies of a KPS d
    - JSON key not in the Type Group → warning on that extra column
    - Value not coercible to the Type Group type → warning; keep the loaded value so it can be edited
 6. Cells that are nested objects, or arrays on a column that is not a list, are marked non-editable with a warning. Scalar cells (including empty string / null) are editable. A `java.util.List` column whose value is a flat array of scalars is editable and holds that array. A list column whose value contains an object or nested array stays non-editable. A list column whose value is a scalar stays editable and warns that it is not a list; load and Save do not turn that scalar into an array until the user commits text that parses as a flat scalar array.
-7. Rows are **independent per stage** (different lengths and values are allowed).
+7. Rows may differ per stage. When two or more present stages contain the same rows as a multiset, they form a stage group (see Stage groups).
 
 ### Editor UI (layout B)
 
@@ -81,9 +81,10 @@ As a Policy Studio developer, I want to see and edit all stage copies of a KPS d
   - Else preserve the prior JSON type when compatible: previous `number` + parseable numeric text → number; previous `boolean` + `true`/`false` → boolean; previous `null` + empty text → null; otherwise store a string (including `""`).
   - Invalid schema/previous-type input **keeps the previous cell value**, does not mark dirty, and shows a warning in the banner.
 - **List cells:** A Type Group property with `fields.type` of `java.util.List` or `List` is a list column. `fields.value` is the element type, mapped with the same Java scalar rules as other columns. The input shows `JSON.stringify` of the array. On commit, the text is parsed as JSON and stored as that value with no coercion: `[3,5]` stays numbers, `["3","5"]` stays strings. A known element type that does not match (including `null`, and a non-integer in an integer list; an integer in a `Double`/`Float`/`Number` list does match) keeps the parsed array, warns on the cell, and marks the stage dirty. Invalid JSON, a non-array, or an array containing an object or nested array keeps the previous value, does not mark dirty, and shows the banner warning. Missing or unknown `fields.value` still edits as a list, warns once at schema load, and does not check elements. A new row and a missing list property default to `[]`. The array is stored on the cell, not in the preserved non-scalar bag, so Save writes a JSON array.
-- **Add row:** Appends a row to the **active stage only**. Columns with a schema default to `""` (string), `false` (boolean), `0` (integer/number), or `[]` (list); columns without a schema default to `""`.
+- **Stage groups:** For the selected table, present stages with the same row multiset form a group badge labeled with their ids in discovery order joined by `/` (example: `DEVL/TEST`). Row order and JSON key order do not matter. Duplicate rows count. List element order matters. Nested values matter. Cell warnings do not. Missing and error stages are never members. The stage bar shows every group badge first (ordered by each group's first member), then every stage badge. On open and on every table switch, the largest group is selected; a tie goes to the group whose first member appears earliest. With no group, the first present stage is selected, otherwise the first stage. Switching tables does not keep the previous selection. While a group is selected, its badge and its member badges are highlighted, and the grid shows the first member's row order. Edits in that view write that one row list to every member. A stage badge selects only that stage; a later edit that makes it differ removes it from the group, and a later edit that makes stages match creates or grows a group, without moving the current selection. If the selected group's exact member set disappears, selection falls back to the first of those members. **Create missing** leaves selection on that stage. An empty file joins a group of other empty stages on the next compute. A rejected cell edit changes no member of a group. **Open JSON** is disabled in a group view, because that view is not one file. It stays available for a single selected stage.
+- **Add row:** In a single-stage view, appends a row to that stage only. In a group view, appends the same new row to every member. Columns with a schema default to `""` (string), `false` (boolean), `0` (integer/number), or `[]` (list); columns without a schema default to `""`.
 - On load and Save, coerce compatible existing scalar cells to the schema type so booleans/integers are written as JSON booleans/numbers, not strings. List elements are not coerced. A loaded flat list whose elements do not match a known element type keeps the array, sets the cell warning, and adds a session warning.
-- **Remove row:** Removes that row from the **active stage only** (confirm optional; confirm for v1).
+- **Remove row:** In a single-stage view, removes that row from that stage only (confirm for v1). In a group view, one confirm removes that row index from the shared row list and writes the result to every member.
 - **Create missing:** Creates `[]` for that stage’s file path for the selected table basename, then allows editing.
 - **Open JSON / Store Group / Type Group:** Open the current table’s active-stage JSON, Store Group YAML, and Type Group YAML in the editor. If a path is unknown or the file is missing, show a warning instead of failing silently.
 - Edits mark the corresponding stage file dirty; **Save** persists only dirty stage files (pretty-printed JSON with 4-space indent). Do **not** add a trailing newline or blank line after the closing `]`. Preserve each row’s original JSON key order; newly added keys (missing Type Group properties filled in on save, extra keys) are appended after existing keys.
@@ -125,10 +126,12 @@ As a Policy Studio developer, I want to see and edit all stage copies of a KPS d
 - [ ] Invalid JSON in one stage does not block loading other stages.
 - [ ] Unit tests cover discovery, column union, mutations, and write-back using fixtures under `test/fixtures/kps-editor/`.
 - [ ] Toolbar/source actions can open the current table’s JSON (active stage), Store Group YAML, and Type Group YAML.
+- [ ] A table whose present stages share the same rows shows a group badge (for example `DEVL/TEST`) that edits those stages together, highlights the member badges, and still allows selecting one stage on its own. Stages that differ, and missing or invalid stages, stay individual.
 
 ## Non-goals
 
-- Cross-stage row sync or equality/diff highlighting
+- Diff highlighting between stages whose rows differ
+- Keeping stages linked after their rows diverge
 - Add/remove columns
 - Nested object editing, and editing arrays that contain objects or nested arrays
 - Coercing list elements to the Type Group element type
@@ -140,4 +143,5 @@ As a Policy Studio developer, I want to see and edit all stage copies of a KPS d
 
 - Design discussion: `docs/superpowers/specs/2026-08-11-kps-editor-design.md`
 - List columns: `docs/superpowers/specs/2026-09-22-kps-list-editor-design.md`
+- Stage groups: `docs/superpowers/specs/2026-09-22-kps-stage-groups-design.md`
 - Pattern reference: `specs/011-env-values-editor.md`

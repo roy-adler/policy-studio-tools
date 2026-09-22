@@ -7,6 +7,14 @@ import {
   resolveSiblingKpsRoot,
 } from '../../src/features/kpsEditor/discoverKpsStages';
 import { loadKpsSession } from '../../src/features/kpsEditor/loadKpsSession';
+import {
+  applyKpsTargetEdit,
+  applyStageGroupEdit,
+  defaultStageTarget,
+  findStageGroups,
+  isExactStageGroup,
+  resolveStageTarget,
+} from '../../src/features/kpsEditor/kpsStageGroups';
 import { buildKpsSession } from '../../src/features/kpsEditor/kpsTableModel';
 import {
   addRow,
@@ -474,6 +482,45 @@ describe('kps panel html', () => {
     expect(html).toContain('value="[&quot;a&quot;,&quot;b&quot;]"');
     expect(html).not.toContain('value="a,b"');
   });
+
+  it('renders a stage group badge, member highlighting, and individual badges', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kps-group-html-'));
+    const fixture = writeStageGroupFixture(tmp);
+    const session = loadKpsSession(fixture.kpsRoot);
+    const grouped = renderKpsEditorHtml(session, {
+      cspSource: 'https://example',
+      tableName: fixture.tableName,
+      stageTarget: { kind: 'group', memberIds: ['DEVL', 'TEST'] },
+      nonce: 'testnonce',
+    });
+    expect(grouped).toContain('class="stage-group active" data-group="DEVL,TEST">DEVL/TEST');
+    expect(grouped).toContain('class="stage-tab member" data-stage="DEVL"');
+    expect(grouped).toContain('class="stage-tab member" data-stage="TEST"');
+    expect(grouped).toContain('class="stage-tab" data-stage="HUTL"');
+    expect(grouped).toContain('class="stage-tab missing" data-stage="MISS"');
+    expect(grouped).toContain('"kind":"group"');
+    expect(grouped).toContain('"memberIds":["DEVL","TEST"]');
+    expect(grouped).toContain('const gridStageId = "DEVL";');
+    expect(grouped).toContain("type: 'selectGroup'");
+    expect(grouped).toContain('id="openJson" disabled');
+    expect(grouped.indexOf('data-group="DEVL,TEST"')).toBeLessThan(
+      grouped.indexOf('data-stage="DEVL"'),
+    );
+
+    const single = renderKpsEditorHtml(session, {
+      cspSource: 'https://example',
+      tableName: fixture.tableName,
+      stageTarget: { kind: 'stage', stageId: 'DEVL' },
+      nonce: 'testnonce',
+    });
+    expect(single).toContain('class="stage-group" data-group="DEVL,TEST">DEVL/TEST');
+    expect(single).toContain('class="stage-tab active" data-stage="DEVL"');
+    expect(single).not.toContain('class="stage-tab member"');
+    expect(single).toContain('"kind":"stage"');
+    expect(single).toContain('const gridStageId = "DEVL";');
+    expect(single).toContain('id="openJson">JSON');
+    expect(single).toContain('source: \'json\', tableName, stageId: gridStageId');
+  });
 });
 
 describe('kps type schema', () => {
@@ -869,5 +916,331 @@ fields:
     const raw = fs.readFileSync(session.tables[table].stages.DEVL.filePath, 'utf8');
     expect(raw.endsWith(']')).toBe(true);
     expect(raw.endsWith('\n')).toBe(false);
+  });
+});
+
+function writeStageGroupFixture(root: string): { kpsRoot: string; tableName: string } {
+  const policyRoot = path.join(root, 'POLICY_yaml');
+  const typeDir = path.join(
+    policyRoot,
+    'Environment Configuration',
+    'Key Property Stores',
+    'JWT_Collection',
+    'Type Group',
+  );
+  const storeDir = path.join(
+    policyRoot,
+    'Environment Configuration',
+    'Key Property Stores',
+    'JWT_Collection',
+    'Store Group',
+  );
+  fs.mkdirSync(typeDir, { recursive: true });
+  fs.mkdirSync(storeDir, { recursive: true });
+  fs.mkdirSync(path.join(policyRoot, 'Policies'), { recursive: true });
+  fs.writeFileSync(path.join(policyRoot, 'values.yaml'), '---\n');
+  fs.writeFileSync(
+    path.join(typeDir, 'Tags.yaml'),
+    `---
+type: KPSType
+fields:
+  name: Tags
+children:
+- type: KPSTypeProperty
+  fields:
+    name: name
+    type: java.lang.String
+    key: ""
+    value: ""
+- type: KPSTypeProperty
+  fields:
+    name: enabled
+    type: java.lang.Boolean
+    key: ""
+    value: ""
+- type: KPSTypeProperty
+  fields:
+    name: codes
+    type: java.util.List
+    key: ""
+    value: java.lang.Integer
+`,
+  );
+  fs.writeFileSync(
+    path.join(storeDir, 'Tags.yaml'),
+    `---
+type: KPSReadWriteStore
+fields:
+  aliases: T_Tags
+  type: Environment Configuration/Key Property Stores/JWT_Collection/Type Group/Tags.yaml
+`,
+  );
+  const shared = [
+    { name: 'a', enabled: true, codes: [1, 2], meta: { n: 1 } },
+    { name: 'b', enabled: true, codes: [3] },
+  ];
+  const files: Record<string, string> = {
+    DEVL: JSON.stringify(shared),
+    TEST: JSON.stringify([
+      { codes: [3], enabled: true, name: 'b' },
+      { meta: { n: 1 }, codes: [1, 2], enabled: true, name: 'a' },
+    ]),
+    HUTL: JSON.stringify([
+      { name: 'a', enabled: true, codes: [2, 1], meta: { n: 1 } },
+      { name: 'b', enabled: true, codes: [3] },
+    ]),
+    NEST: JSON.stringify([
+      { name: 'a', enabled: true, codes: [1, 2], meta: { n: 2 } },
+      { name: 'b', enabled: true, codes: [3] },
+    ]),
+    SCALAR: JSON.stringify([
+      { name: 'a', enabled: true, codes: '1,2', meta: { n: 1 } },
+      { name: 'b', enabled: true, codes: [3] },
+    ]),
+    PROD: JSON.stringify([{ name: 'z', enabled: true, codes: [] }]),
+    QA: JSON.stringify([{ name: 'z', enabled: true, codes: [] }]),
+    LONE: JSON.stringify([{ name: 'only', enabled: true, codes: [9] }]),
+    BAD: 'not-json',
+  };
+  for (const [stageId, body] of Object.entries(files)) {
+    const stageDir = path.join(root, 'KPS', stageId);
+    fs.mkdirSync(stageDir, { recursive: true });
+    fs.writeFileSync(path.join(stageDir, 'T_Tags.json'), body);
+  }
+  const missDir = path.join(root, 'KPS', 'MISS');
+  fs.mkdirSync(missDir, { recursive: true });
+  fs.writeFileSync(path.join(missDir, 'T_Other.json'), '[]');
+  return { kpsRoot: path.join(root, 'KPS'), tableName: 'T_Tags.json' };
+}
+
+describe('kps stage groups', () => {
+  function loadGroups(): { session: ReturnType<typeof loadKpsSession>; tableName: string } {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kps-groups-'));
+    const fixture = writeStageGroupFixture(tmp);
+    return { session: loadKpsSession(fixture.kpsRoot), tableName: fixture.tableName };
+  }
+
+  it('groups stages with the same rows regardless of row and key order', () => {
+    const { session, tableName } = loadGroups();
+    const groups = findStageGroups(session.tables[tableName], session.stageIds);
+    expect(groups.map((group) => group.label)).toEqual(['DEVL/TEST', 'PROD/QA']);
+    expect(groups[0].memberIds).toEqual(['DEVL', 'TEST']);
+  });
+
+  it('does not group a different list order, nested value, or scalar in a list column', () => {
+    const { session, tableName } = loadGroups();
+    const members = findStageGroups(session.tables[tableName], session.stageIds).flatMap(
+      (group) => group.memberIds,
+    );
+    expect(members).not.toContain('HUTL');
+    expect(members).not.toContain('NEST');
+    expect(members).not.toContain('SCALAR');
+    expect(members).not.toContain('LONE');
+  });
+
+  it('excludes missing and invalid stages', () => {
+    const { session, tableName } = loadGroups();
+    expect(session.tables[tableName].stages.MISS.status).toBe('missing');
+    expect(session.tables[tableName].stages.BAD.status).toBe('error');
+    const members = findStageGroups(session.tables[tableName], session.stageIds).flatMap(
+      (group) => group.memberIds,
+    );
+    expect(members).not.toContain('MISS');
+    expect(members).not.toContain('BAD');
+  });
+
+  it('ignores cell warnings and nested key order', () => {
+    const { session, tableName } = loadGroups();
+    const table = session.tables[tableName];
+    table.stages.DEVL.rows[0].cells.name!.warning = 'cosmetic';
+    const devlMeta = table.stages.DEVL.rows.find((row) => row.cells.name?.value === 'a')!;
+    const testMeta = table.stages.TEST.rows.find((row) => row.cells.name?.value === 'a')!;
+    devlMeta.extra.meta = { n: 1, z: true };
+    devlMeta.cells.meta = { editable: false, nested: devlMeta.extra.meta, warning: 'nested' };
+    testMeta.extra.meta = { z: true, n: 1 };
+    testMeta.cells.meta = { editable: false, nested: testMeta.extra.meta, warning: 'nested' };
+    const labels = findStageGroups(table, session.stageIds).map((group) => group.label);
+    expect(labels).toContain('DEVL/TEST');
+  });
+
+  it('counts duplicate rows in the multiset', () => {
+    const { session, tableName } = loadGroups();
+    const table = session.tables[tableName];
+    table.stages.DEVL.rows.push(structuredClone(table.stages.DEVL.rows[0]));
+    expect(
+      findStageGroups(table, session.stageIds).some((group) => group.memberIds.includes('DEVL')),
+    ).toBe(false);
+    const testRowA = table.stages.TEST.rows.find((row) => row.cells.name?.value === 'a')!;
+    table.stages.TEST.rows.push(structuredClone(testRowA));
+    expect(findStageGroups(table, session.stageIds).map((group) => group.label)).toContain(
+      'DEVL/TEST',
+    );
+  });
+
+  it('groups present stages that are both empty', () => {
+    const { session, tableName } = loadGroups();
+    const table = session.tables[tableName];
+    table.stages.HUTL.rows = [];
+    table.stages.LONE.rows = [];
+    expect(findStageGroups(table, session.stageIds).map((group) => group.label)).toContain(
+      'HUTL/LONE',
+    );
+  });
+});
+
+describe('kps stage group selection', () => {
+  function loadGroups(): { session: ReturnType<typeof loadKpsSession>; tableName: string } {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kps-group-selection-'));
+    const fixture = writeStageGroupFixture(tmp);
+    return { session: loadKpsSession(fixture.kpsRoot), tableName: fixture.tableName };
+  }
+
+  it('selects the largest group, breaking ties by the earliest first member', () => {
+    const { session, tableName } = loadGroups();
+    expect(defaultStageTarget(session.tables[tableName], session.stageIds)).toEqual({
+      kind: 'group',
+      memberIds: ['DEVL', 'TEST'],
+    });
+  });
+
+  it('selects the first present stage when nothing matches', () => {
+    const { session, tableName } = loadGroups();
+    const table = session.tables[tableName];
+    table.stages.TEST.rows[0].cells.name!.value = 'different';
+    table.stages.QA.rows[0].cells.name!.value = 'different-too';
+    const present = session.stageIds.find((id) => table.stages[id]?.status === 'present');
+    expect(defaultStageTarget(table, session.stageIds)).toEqual({
+      kind: 'stage',
+      stageId: present,
+    });
+  });
+
+  it('keeps a single-stage selection after that stage leaves its group', () => {
+    const { session, tableName } = loadGroups();
+    const table = session.tables[tableName];
+    table.stages.DEVL.rows[0].cells.name!.value = 'only-devl';
+    expect(
+      resolveStageTarget({ kind: 'stage', stageId: 'DEVL' }, table, session.stageIds),
+    ).toEqual({ kind: 'stage', stageId: 'DEVL' });
+    expect(isExactStageGroup(table, session.stageIds, ['DEVL', 'TEST'])).toBe(false);
+  });
+
+  it('falls back to the first former member when the selected group dissolves', () => {
+    const { session, tableName } = loadGroups();
+    const table = session.tables[tableName];
+    table.stages.DEVL.rows[0].cells.name!.value = 'only-devl';
+    expect(
+      resolveStageTarget(
+        { kind: 'group', memberIds: ['DEVL', 'TEST'] },
+        table,
+        session.stageIds,
+      ),
+    ).toEqual({ kind: 'stage', stageId: 'DEVL' });
+  });
+
+  it('keeps a group whose exact member set still exists', () => {
+    const { session, tableName } = loadGroups();
+    expect(
+      resolveStageTarget(
+        { kind: 'group', memberIds: ['QA', 'PROD'] },
+        session.tables[tableName],
+        session.stageIds,
+      ),
+    ).toEqual({ kind: 'group', memberIds: ['PROD', 'QA'] });
+  });
+});
+
+describe('kps stage group edits', () => {
+  function loadGroups(): { session: ReturnType<typeof loadKpsSession>; tableName: string } {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kps-group-edit-'));
+    const fixture = writeStageGroupFixture(tmp);
+    return { session: loadKpsSession(fixture.kpsRoot), tableName: fixture.tableName };
+  }
+
+  it('writes one row list, including a list cell, to every member', () => {
+    const { session, tableName } = loadGroups();
+    const applied = applyStageGroupEdit(session, tableName, ['TEST', 'DEVL'], (stageId) => {
+      setCell(session, tableName, stageId, 0, 'codes', '[4]');
+    });
+    expect(applied).toBe(true);
+    for (const stageId of ['DEVL', 'TEST']) {
+      const stage = session.tables[tableName].stages[stageId];
+      expect(stage.dirty).toBe(true);
+      expect(stage.rows.map((row) => row.cells.name?.value)).toEqual(['a', 'b']);
+      expect(stage.rows[0].cells.codes?.value).toEqual([4]);
+    }
+    expect(session.tables[tableName].stages.HUTL.dirty).toBe(false);
+    const devlCodes = session.tables[tableName].stages.DEVL.rows[0].cells.codes?.value as number[];
+    devlCodes.push(9);
+    expect(session.tables[tableName].stages.TEST.rows[0].cells.codes?.value).toEqual([4]);
+  });
+
+  it('leaves every member unchanged when list text is rejected', () => {
+    const { session, tableName } = loadGroups();
+    const before = structuredClone(session.tables[tableName].stages.DEVL.rows);
+    const applied = applyStageGroupEdit(session, tableName, ['DEVL', 'TEST'], (stageId) => {
+      setCell(session, tableName, stageId, 0, 'codes', '{');
+    });
+    expect(applied).toBe(true);
+    expect(session.editWarning).toBe('Could not set "codes" to a list');
+    expect(session.tables[tableName].stages.DEVL.dirty).toBe(false);
+    expect(session.tables[tableName].stages.TEST.dirty).toBe(false);
+    expect(session.tables[tableName].stages.DEVL.rows).toEqual(before);
+    expect(session.tables[tableName].stages.TEST.rows[0].cells.name?.value).toBe('b');
+  });
+
+  it('leaves every member unchanged when a scalar edit is rejected', () => {
+    const { session, tableName } = loadGroups();
+    applyStageGroupEdit(session, tableName, ['DEVL', 'TEST'], (stageId) => {
+      setCell(session, tableName, stageId, 0, 'enabled', 'nope');
+    });
+    expect(session.editWarning).toBe('Could not set "enabled" to "nope" as boolean');
+    expect(session.tables[tableName].stages.DEVL.dirty).toBe(false);
+    expect(session.tables[tableName].stages.TEST.dirty).toBe(false);
+    expect(session.tables[tableName].stages.DEVL.rows[0].cells.enabled?.value).toBe(true);
+  });
+
+  it('does not edit a stale group', () => {
+    const { session, tableName } = loadGroups();
+    const applied = applyStageGroupEdit(session, tableName, ['DEVL', 'HUTL'], () => {
+      throw new Error('edit should not run');
+    });
+    expect(applied).toBe(false);
+    expect(session.tables[tableName].stages.DEVL.dirty).toBe(false);
+  });
+
+  it('keeps a single-stage edit on that stage after the group shrinks', () => {
+    const { session, tableName } = loadGroups();
+    const result = applyKpsTargetEdit(
+      session,
+      tableName,
+      { kind: 'stage', stageId: 'DEVL' },
+      (stageId) => {
+        setCell(session, tableName, stageId, 0, 'name', 'only-devl');
+      },
+    );
+    expect(result).toEqual({ applied: true, target: { kind: 'stage', stageId: 'DEVL' } });
+    expect(session.tables[tableName].stages.DEVL.rows[0].cells.name?.value).toBe('only-devl');
+    expect(session.tables[tableName].stages.TEST.dirty).toBe(false);
+    expect(
+      findStageGroups(session.tables[tableName], session.stageIds).some((group) =>
+        group.memberIds.includes('DEVL'),
+      ),
+    ).toBe(false);
+  });
+
+  it('adds and removes a row on every member', () => {
+    const { session, tableName } = loadGroups();
+    applyStageGroupEdit(session, tableName, ['DEVL', 'TEST'], (stageId) => {
+      addRow(session, tableName, stageId);
+    });
+    expect(session.tables[tableName].stages.DEVL.rows).toHaveLength(3);
+    expect(session.tables[tableName].stages.TEST.rows).toHaveLength(3);
+    expect(session.tables[tableName].stages.HUTL.rows).toHaveLength(2);
+    applyStageGroupEdit(session, tableName, ['DEVL', 'TEST'], (stageId) => {
+      removeRow(session, tableName, stageId, 2);
+    });
+    expect(session.tables[tableName].stages.DEVL.rows).toHaveLength(2);
+    expect(session.tables[tableName].stages.TEST.rows).toHaveLength(2);
   });
 });

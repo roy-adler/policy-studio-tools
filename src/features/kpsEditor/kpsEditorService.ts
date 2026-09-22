@@ -5,6 +5,12 @@ import { getSharedProjectRegistryStore } from '../projectRegistry/projectRegistr
 import type { PolicyStudioProject } from '../projectRegistry/types';
 import { getSharedToolsHubService } from '../toolsSidebar/toolsHubService';
 import {
+  applyKpsTargetEdit,
+  defaultStageTarget,
+  resolveStageTarget,
+  type KpsStageTarget,
+} from './kpsStageGroups';
+import {
   addRow,
   createMissing,
   isSessionDirty,
@@ -31,16 +37,17 @@ type IncomingMessage =
   | { type: 'ready' }
   | { type: 'selectTable'; tableName: string }
   | { type: 'selectStage'; stageId: string }
+  | { type: 'selectGroup'; memberIds: string[] }
   | {
       type: 'setCell';
       tableName: string;
-      stageId: string;
+      target: KpsStageTarget;
       rowIndex: number;
       column: string;
       value: string;
     }
-  | { type: 'addRow'; tableName: string; stageId: string }
-  | { type: 'removeRow'; tableName: string; stageId: string; rowIndex: number }
+  | { type: 'addRow'; tableName: string; target: KpsStageTarget }
+  | { type: 'removeRow'; tableName: string; target: KpsStageTarget; rowIndex: number }
   | { type: 'createMissing'; tableName: string; stageId: string }
   | { type: 'save' }
   | { type: 'reload' }
@@ -58,7 +65,7 @@ export class KpsEditorService {
   private panel: vscode.WebviewPanel | undefined;
   private session: KpsSession | undefined;
   private selectedTableName: string | undefined;
-  private selectedStageId: string | undefined;
+  private stageTarget: KpsStageTarget | undefined;
   private kpsLabel: string | undefined;
   private followInFlight = false;
 
@@ -247,7 +254,14 @@ export class KpsEditorService {
 
       if (!sameKps) {
         this.selectedTableName = this.session.tableNames[0];
-        this.selectedStageId = this.session.stageIds[0];
+        const table = this.selectedTableName
+          ? this.session.tables[this.selectedTableName]
+          : undefined;
+        if (table) {
+          this.stageTarget = defaultStageTarget(table, this.session.stageIds);
+        } else {
+          this.stageTarget = { kind: 'stage', stageId: this.session.stageIds[0] ?? '' };
+        }
       } else {
         if (
           !this.selectedTableName ||
@@ -255,11 +269,15 @@ export class KpsEditorService {
         ) {
           this.selectedTableName = this.session.tableNames[0];
         }
-        if (
-          !this.selectedStageId ||
-          !this.session.stageIds.includes(this.selectedStageId)
-        ) {
-          this.selectedStageId = this.session.stageIds[0];
+        const table = this.selectedTableName
+          ? this.session.tables[this.selectedTableName]
+          : undefined;
+        if (table) {
+          this.stageTarget = this.stageTarget
+            ? resolveStageTarget(this.stageTarget, table, this.session.stageIds)
+            : defaultStageTarget(table, this.session.stageIds);
+        } else {
+          this.stageTarget = { kind: 'stage', stageId: this.session.stageIds[0] ?? '' };
         }
       }
 
@@ -308,7 +326,7 @@ export class KpsEditorService {
     this.panel.webview.html = renderKpsEditorHtml(this.session, {
       cspSource: this.panel.webview.cspSource,
       tableName: this.selectedTableName,
-      stageId: this.selectedStageId,
+      stageTarget: this.stageTarget,
       kpsLabel: titleLabel,
     });
   }
@@ -324,42 +342,85 @@ export class KpsEditorService {
         break;
       case 'selectTable':
         this.selectedTableName = message.tableName;
+        if (this.session && this.session.tables[message.tableName]) {
+          this.stageTarget = defaultStageTarget(
+            this.session.tables[message.tableName],
+            this.session.stageIds,
+          );
+        }
         this.render();
         break;
       case 'selectStage':
-        this.selectedStageId = message.stageId;
+        this.stageTarget = { kind: 'stage', stageId: message.stageId };
+        this.render();
+        break;
+      case 'selectGroup':
+        if (!this.session || !this.selectedTableName) {
+          return;
+        }
+        {
+          const table = this.session.tables[this.selectedTableName];
+          const requested = { kind: 'group' as const, memberIds: message.memberIds };
+          this.stageTarget = table
+            ? resolveStageTarget(requested, table, this.session.stageIds)
+            : requested;
+        }
         this.render();
         break;
       case 'setCell':
         if (!this.session) {
           return;
         }
-        setCell(
-          this.session,
-          message.tableName,
-          message.stageId,
-          message.rowIndex,
-          message.column,
-          message.value,
-        );
-        this.render();
+        {
+          const result = applyKpsTargetEdit(
+            this.session,
+            message.tableName,
+            message.target,
+            (stageId) => {
+              setCell(
+                this.session!,
+                message.tableName,
+                stageId,
+                message.rowIndex,
+                message.column,
+                message.value,
+              );
+            },
+          );
+          if (result.applied) {
+            this.stageTarget = result.target;
+            this.render();
+          }
+        }
         break;
       case 'addRow':
         if (!this.session) {
           return;
         }
-        addRow(this.session, message.tableName, message.stageId);
-        this.render();
+        {
+          const result = applyKpsTargetEdit(
+            this.session,
+            message.tableName,
+            message.target,
+            (stageId) => {
+              addRow(this.session!, message.tableName, stageId);
+            },
+          );
+          if (result.applied) {
+            this.stageTarget = result.target;
+            this.render();
+          }
+        }
         break;
       case 'removeRow':
-        await this.handleRemoveRow(message.tableName, message.stageId, message.rowIndex);
+        await this.handleRemoveRow(message.tableName, message.target, message.rowIndex);
         break;
       case 'createMissing':
         if (!this.session) {
           return;
         }
         createMissing(this.session, message.tableName, message.stageId);
-        this.selectedStageId = message.stageId;
+        this.stageTarget = { kind: 'stage', stageId: message.stageId };
         this.render();
         break;
       case 'save':
@@ -422,15 +483,19 @@ export class KpsEditorService {
 
   private async handleRemoveRow(
     tableName: string,
-    stageId: string,
+    target: KpsStageTarget,
     rowIndex: number,
   ): Promise<void> {
     if (!this.session) {
       return;
     }
 
+    const label =
+      target.kind === 'group'
+        ? this.session.stageIds.filter((id) => target.memberIds.includes(id)).join('/')
+        : target.stageId;
     const confirm = await vscode.window.showWarningMessage(
-      `Remove row ${rowIndex + 1} from ${stageId}?`,
+      `Remove row ${rowIndex + 1} from ${label}?`,
       { modal: true },
       REMOVE_ACTION,
     );
@@ -438,8 +503,13 @@ export class KpsEditorService {
       return;
     }
 
-    removeRow(this.session, tableName, stageId, rowIndex);
-    this.render();
+    const result = applyKpsTargetEdit(this.session, tableName, target, (stageId) => {
+      removeRow(this.session!, tableName, stageId, rowIndex);
+    });
+    if (result.applied) {
+      this.stageTarget = result.target;
+      this.render();
+    }
   }
 
   private async handleSwitchKps(): Promise<void> {

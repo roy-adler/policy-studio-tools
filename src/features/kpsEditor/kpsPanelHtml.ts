@@ -1,4 +1,10 @@
 import * as crypto from 'crypto';
+import {
+  defaultStageTarget,
+  findStageGroups,
+  resolveStageTarget,
+  type KpsStageTarget,
+} from './kpsStageGroups';
 import type { KpsSession, KpsStageTable } from './types';
 import { isSessionDirty } from './kpsTableMutations';
 
@@ -104,6 +110,11 @@ function getStyles(): string {
       margin-right: 4px;
     }
     .tabs button.active {
+      background: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
+      border-color: var(--vscode-button-background);
+    }
+    .tabs button.member {
       background: var(--vscode-button-background);
       color: var(--vscode-button-foreground);
       border-color: var(--vscode-button-background);
@@ -262,6 +273,7 @@ export function renderKpsEditorHtml(
     cspSource: string;
     tableName?: string;
     stageId?: string;
+    stageTarget?: KpsStageTarget;
     kpsLabel?: string;
     nonce?: string;
   },
@@ -314,12 +326,15 @@ export function renderKpsEditorHtml(
       ? options.tableName
       : session.tableNames[0];
   const table = session.tables[tableName];
-  const stageId =
-    options.stageId && table.stages[options.stageId]
-      ? options.stageId
-      : session.stageIds.find((id) => table.stages[id]?.status === 'present') ??
-        session.stageIds[0];
-  const stage = table.stages[stageId];
+  const requested: KpsStageTarget = options.stageTarget
+    ? options.stageTarget
+    : options.stageId && table.stages[options.stageId]
+      ? { kind: 'stage', stageId: options.stageId }
+      : defaultStageTarget(table, session.stageIds);
+  const target = resolveStageTarget(requested, table, session.stageIds);
+  const gridStageId = target.kind === 'group' ? target.memberIds[0] : target.stageId;
+  const stage = table.stages[gridStageId];
+  const groups = findStageGroups(table, session.stageIds);
   const dirtyCount = countDirty(session);
   const title = options.kpsLabel
     ? `KPS — ${escapeHtml(options.kpsLabel)}`
@@ -333,12 +348,26 @@ export function renderKpsEditorHtml(
     })
     .join('');
 
+  const groupTabs = groups
+    .map((group) => {
+      const active =
+        target.kind === 'group' &&
+        group.memberIds.length === target.memberIds.length &&
+        group.memberIds.every((id) => target.memberIds.includes(id))
+          ? ' active'
+          : '';
+      return `<button class="stage-group${active}" data-group="${escapeHtml(group.memberIds.join(','))}">${escapeHtml(group.label)}</button>`;
+    })
+    .join('');
+
   const stageTabs = session.stageIds
     .map((id) => {
       const st = table.stages[id];
-      const active = id === stageId ? ' active' : '';
+      const active = target.kind === 'stage' && id === gridStageId ? ' active' : '';
+      const member =
+        target.kind === 'group' && target.memberIds.includes(id) ? ' member' : '';
       const missing = st?.status === 'missing' ? ' missing' : '';
-      return `<button class="stage-tab${active}${missing}" data-stage="${escapeHtml(id)}">${escapeHtml(id)}</button>`;
+      return `<button class="stage-tab${active}${member}${missing}" data-stage="${escapeHtml(id)}">${escapeHtml(id)}</button>`;
     })
     .join('');
 
@@ -379,35 +408,36 @@ export function renderKpsEditorHtml(
   ${banners.join('')}
   <div id="main">
     <div class="tabs"><span class="label">Tables</span>${tableTabs}</div>
-    <div class="tabs"><span class="label">Stages</span>${stageTabs}</div>
+    <div class="tabs"><span class="label">Stages</span>${groupTabs}${stageTabs}</div>
     <div class="tabs">
       <span class="label">Open</span>
-      <button id="openJson"${stage.status === 'missing' ? ' disabled' : ''}>JSON</button>
+      <button id="openJson"${target.kind === 'group' || stage.status === 'missing' ? ' disabled' : ''}>JSON</button>
       <button id="openStoreGroup"${table.storeGroupPath ? '' : ' disabled'}>Store Group</button>
       <button id="openTypeGroup"${table.typeGroupPath ? '' : ' disabled'}>Type Group</button>
     </div>
-    ${renderStageBody(stage, table, tableName, stageId)}
+    ${renderStageBody(stage, table, tableName, gridStageId)}
   </div>
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
     const tableName = ${JSON.stringify(tableName)};
-    const stageId = ${JSON.stringify(stageId)};
+    const target = ${JSON.stringify(target)};
+    const gridStageId = ${JSON.stringify(gridStageId)};
 
     document.getElementById('save')?.addEventListener('click', () => vscode.postMessage({ type: 'save' }));
     document.getElementById('reload')?.addEventListener('click', () => vscode.postMessage({ type: 'reload' }));
     document.getElementById('switchKps')?.addEventListener('click', () => vscode.postMessage({ type: 'switchKps' }));
     document.getElementById('pickKps')?.addEventListener('click', () => vscode.postMessage({ type: 'pickKps' }));
     document.getElementById('openJson')?.addEventListener('click', () => {
-      vscode.postMessage({ type: 'openSource', source: 'json', tableName, stageId });
+      vscode.postMessage({ type: 'openSource', source: 'json', tableName, stageId: gridStageId });
     });
     document.getElementById('openStoreGroup')?.addEventListener('click', () => {
-      vscode.postMessage({ type: 'openSource', source: 'storeGroup', tableName, stageId });
+      vscode.postMessage({ type: 'openSource', source: 'storeGroup', tableName, gridStageId });
     });
     document.getElementById('openTypeGroup')?.addEventListener('click', () => {
-      vscode.postMessage({ type: 'openSource', source: 'typeGroup', tableName, stageId });
+      vscode.postMessage({ type: 'openSource', source: 'typeGroup', tableName, gridStageId });
     });
     document.getElementById('addRow')?.addEventListener('click', () => {
-      vscode.postMessage({ type: 'addRow', tableName, stageId });
+      vscode.postMessage({ type: 'addRow', tableName, target });
     });
     document.getElementById('createMissing')?.addEventListener('click', (event) => {
       const button = event.currentTarget;
@@ -422,6 +452,12 @@ export function renderKpsEditorHtml(
         vscode.postMessage({ type: 'selectTable', tableName: button.getAttribute('data-table') });
       });
     });
+    document.querySelectorAll('.stage-group').forEach((button) => {
+      button.addEventListener('click', () => {
+        const memberIds = (button.getAttribute('data-group') ?? '').split(',').filter(Boolean);
+        vscode.postMessage({ type: 'selectGroup', memberIds });
+      });
+    });
     document.querySelectorAll('.stage-tab').forEach((button) => {
       button.addEventListener('click', () => {
         vscode.postMessage({ type: 'selectStage', stageId: button.getAttribute('data-stage') });
@@ -430,7 +466,7 @@ export function renderKpsEditorHtml(
     document.querySelectorAll('.remove-row').forEach((button) => {
       button.addEventListener('click', () => {
         const rowIndex = Number(button.getAttribute('data-row'));
-        vscode.postMessage({ type: 'removeRow', tableName, stageId, rowIndex });
+        vscode.postMessage({ type: 'removeRow', tableName, target, rowIndex });
       });
     });
     document.querySelectorAll('table.grid input').forEach((input) => {
@@ -438,7 +474,7 @@ export function renderKpsEditorHtml(
         vscode.postMessage({
           type: 'setCell',
           tableName,
-          stageId,
+          target,
           rowIndex: Number(input.getAttribute('data-row')),
           column: input.getAttribute('data-column'),
           value: input.value,
