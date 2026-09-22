@@ -1,5 +1,10 @@
-import type { KpsColumnType, KpsRow, KpsScalar, KpsSession, KpsStageTable } from './types';
-import { coerceByColumnType, defaultValueForColumnType } from './kpsTypeSchema';
+import type { KpsColumnType, KpsRow, KpsScalar, KpsSession, KpsStageTable, KpsValue } from './types';
+import {
+  coerceByColumnType,
+  defaultValueForColumnType,
+  listElementMismatch,
+  parseListInput,
+} from './kpsTypeSchema';
 
 function requirePresentStage(
   session: KpsSession,
@@ -20,7 +25,10 @@ function requirePresentStage(
   return stage;
 }
 
-function coerceCellValue(previous: KpsScalar | undefined, text: string): KpsScalar {
+function coerceCellValue(previous: KpsValue | undefined, text: string): KpsScalar {
+  if (Array.isArray(previous)) {
+    return text;
+  }
   if (typeof previous === 'number') {
     const trimmed = text.trim();
     if (trimmed !== '' && !Number.isNaN(Number(trimmed))) {
@@ -60,6 +68,20 @@ export function setCell(
   }
   const previous = existing?.value;
   const columnType = session.tables[tableName].columnTypes[column];
+  if (columnType === 'list') {
+    const parsed = parseListInput(text);
+    if (!parsed.ok) {
+      session.editWarning = `Could not set "${column}" to a list`;
+      return;
+    }
+    const elementType = session.tables[tableName].listElementTypes[column];
+    const warning = listElementMismatch(parsed.value, elementType);
+    delete row.extra[column];
+    session.editWarning = undefined;
+    row.cells[column] = { editable: true, value: parsed.value, warning };
+    stage.dirty = true;
+    return;
+  }
   if (columnType) {
     const coerced = coerceByColumnType(text, columnType);
     if (!coerced.ok) {

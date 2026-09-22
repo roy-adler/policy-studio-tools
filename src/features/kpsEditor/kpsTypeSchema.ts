@@ -2,12 +2,13 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { parseMappingYaml } from '../envValuesEditor/yamlMaps';
 import { isPolicyStudioProject } from '../projectDetection/detectPolicyStudioProject';
-import type { KpsColumnType, KpsScalar } from './types';
+import type { KpsColumnType, KpsScalar, KpsScalarColumnType, KpsValue } from './types';
 
 const KEY_PROPERTY_STORES = path.join('Environment Configuration', 'Key Property Stores');
 
 export interface KpsTypeSchemaLoad {
   columnTypesByTable: Record<string, Record<string, KpsColumnType>>;
+  listElementTypesByTable: Record<string, Record<string, KpsScalarColumnType>>;
   schemaColumnsByTable: Record<string, string[]>;
   schemaFilesByTable: Record<string, { storeGroupPath: string; typeGroupPath: string }>;
   warnings: string[];
@@ -32,8 +33,8 @@ export function resolveSiblingPolicyProject(kpsRoot: string): string | undefined
   return undefined;
 }
 
-export function mapJavaTypeToColumnType(javaType: string): {
-  type: KpsColumnType;
+export function mapJavaScalarType(javaType: string): {
+  type: KpsScalarColumnType;
   unknown: boolean;
 } {
   const normalized = javaType.trim();
@@ -55,14 +56,78 @@ export function mapJavaTypeToColumnType(javaType: string): {
   return { type: 'string', unknown: true };
 }
 
-export function defaultValueForColumnType(columnType: KpsColumnType | undefined): KpsScalar {
+export function mapJavaTypeToColumnType(javaType: string): {
+  type: KpsColumnType;
+  unknown: boolean;
+} {
+  const normalized = javaType.trim();
+  if (normalized === 'java.util.List' || normalized === 'List') {
+    return { type: 'list', unknown: false };
+  }
+  return mapJavaScalarType(normalized);
+}
+
+export function defaultValueForColumnType(columnType: KpsColumnType | undefined): KpsValue {
   if (columnType === 'boolean') {
     return false;
   }
   if (columnType === 'integer' || columnType === 'number') {
     return 0;
   }
+  if (columnType === 'list') {
+    return [];
+  }
   return '';
+}
+
+export function parseListInput(text: string): { ok: true; value: KpsScalar[] } | { ok: false } {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return { ok: false };
+  }
+  if (!Array.isArray(parsed) || !parsed.every(isListScalar)) {
+    return { ok: false };
+  }
+  return { ok: true, value: parsed };
+}
+
+function isListScalar(value: unknown): value is KpsScalar {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') {
+    return true;
+  }
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+export function listElementMismatch(
+  values: KpsScalar[],
+  elementType: KpsScalarColumnType | undefined,
+): string | undefined {
+  if (!elementType) {
+    return undefined;
+  }
+  const matches = values.every((value) => scalarMatchesElementType(value, elementType));
+  if (matches) {
+    return undefined;
+  }
+  return `List element is not a valid ${elementType}`;
+}
+
+function scalarMatchesElementType(value: KpsScalar, elementType: KpsScalarColumnType): boolean {
+  if (value === null) {
+    return false;
+  }
+  if (elementType === 'string') {
+    return typeof value === 'string';
+  }
+  if (elementType === 'boolean') {
+    return typeof value === 'boolean';
+  }
+  if (elementType === 'integer') {
+    return typeof value === 'number' && Number.isInteger(value);
+  }
+  return typeof value === 'number' && Number.isFinite(value);
 }
 
 export function coerceByColumnType(
@@ -70,6 +135,10 @@ export function coerceByColumnType(
   columnType: KpsColumnType,
 ): { ok: true; value: KpsScalar } | { ok: false } {
   const trimmed = text.trim();
+
+  if (columnType === 'list') {
+    return { ok: false };
+  }
 
   if (columnType === 'string') {
     return { ok: true, value: text };
@@ -102,6 +171,10 @@ export function coerceLoadedScalar(
   value: KpsScalar,
   columnType: KpsColumnType,
 ): KpsScalar | undefined {
+  if (columnType === 'list' || Array.isArray(value)) {
+    return undefined;
+  }
+
   if (columnType === 'string') {
     if (value === null) {
       return '';
@@ -179,24 +252,29 @@ function resolveTypeGroupPath(projectRoot: string, typeRef: string): string {
 function parseTypeGroupProperties(
   typeGroupPath: string,
   warnings: string[],
-): { columns: string[]; columnTypes: Record<string, KpsColumnType> } {
+): {
+  columns: string[];
+  columnTypes: Record<string, KpsColumnType>;
+  listElementTypes: Record<string, KpsScalarColumnType>;
+} {
   const columns: string[] = [];
   const columnTypes: Record<string, KpsColumnType> = {};
+  const listElementTypes: Record<string, KpsScalarColumnType> = {};
   if (!fs.existsSync(typeGroupPath) || !fs.statSync(typeGroupPath).isFile()) {
     warnings.push(`Type Group not found: ${typeGroupPath}`);
-    return { columns, columnTypes };
+    return { columns, columnTypes, listElementTypes };
   }
 
   const parsed = parseMappingYaml(fs.readFileSync(typeGroupPath, 'utf8'));
   if (parsed.error) {
     warnings.push(`Invalid Type Group YAML (${typeGroupPath}): ${parsed.error}`);
-    return { columns, columnTypes };
+    return { columns, columnTypes, listElementTypes };
   }
 
   const children = parsed.data.children;
   if (!Array.isArray(children)) {
     warnings.push(`Type Group has no property list: ${typeGroupPath}`);
-    return { columns, columnTypes };
+    return { columns, columnTypes, listElementTypes };
   }
 
   for (const child of children) {
@@ -208,7 +286,23 @@ function parseTypeGroupProperties(
       continue;
     }
     const mapped = mapJavaTypeToColumnType(fields.type);
-    if (mapped.unknown) {
+    if (mapped.type === 'list') {
+      const elementType = typeof fields.value === 'string' ? fields.value.trim() : '';
+      if (!elementType) {
+        warnings.push(
+          `List property "${fields.name}" in ${path.basename(typeGroupPath)} has no element type; elements will not be checked`,
+        );
+      } else {
+        const element = mapJavaScalarType(elementType);
+        if (element.unknown) {
+          warnings.push(
+            `Unknown list element type "${elementType}" for "${fields.name}" in ${path.basename(typeGroupPath)}; elements will not be checked`,
+          );
+        } else {
+          listElementTypes[fields.name] = element.type;
+        }
+      }
+    } else if (mapped.unknown) {
       warnings.push(
         `Unknown Type Group type "${fields.type}" for "${fields.name}" in ${path.basename(typeGroupPath)}; treating as string`,
       );
@@ -219,12 +313,13 @@ function parseTypeGroupProperties(
     columnTypes[fields.name] = mapped.type;
   }
 
-  return { columns, columnTypes };
+  return { columns, columnTypes, listElementTypes };
 }
 
 export function loadKpsTypeSchemas(projectRoot: string): KpsTypeSchemaLoad {
   const warnings: string[] = [];
   const columnTypesByTable: Record<string, Record<string, KpsColumnType>> = {};
+  const listElementTypesByTable: Record<string, Record<string, KpsScalarColumnType>> = {};
   const schemaColumnsByTable: Record<string, string[]> = {};
   const schemaFilesByTable: Record<string, { storeGroupPath: string; typeGroupPath: string }> = {};
   const storesRoot = path.join(projectRoot, KEY_PROPERTY_STORES);
@@ -245,9 +340,16 @@ export function loadKpsTypeSchemas(projectRoot: string): KpsTypeSchemaLoad {
     const typeGroupPath = resolveTypeGroupPath(projectRoot, fields.type);
     const parsedType = parseTypeGroupProperties(typeGroupPath, warnings);
     columnTypesByTable[tableName] = parsedType.columnTypes;
+    listElementTypesByTable[tableName] = parsedType.listElementTypes;
     schemaColumnsByTable[tableName] = parsedType.columns;
     schemaFilesByTable[tableName] = { storeGroupPath: filePath, typeGroupPath };
   }
 
-  return { columnTypesByTable, schemaColumnsByTable, schemaFilesByTable, warnings };
+  return {
+    columnTypesByTable,
+    listElementTypesByTable,
+    schemaColumnsByTable,
+    schemaFilesByTable,
+    warnings,
+  };
 }

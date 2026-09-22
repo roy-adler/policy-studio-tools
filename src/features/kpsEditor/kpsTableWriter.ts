@@ -15,12 +15,17 @@ function rowToObject(
     if (seen.has(key)) {
       return;
     }
+    const cell = row.cells[key];
+    if (cell?.editable && Array.isArray(cell.value)) {
+      obj[key] = cell.value;
+      seen.add(key);
+      return;
+    }
     if (key in row.extra) {
       obj[key] = row.extra[key];
       seen.add(key);
       return;
     }
-    const cell = row.cells[key];
     if (!cell || !cell.editable) {
       return;
     }

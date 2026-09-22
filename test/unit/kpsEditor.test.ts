@@ -32,6 +32,66 @@ const sampleRoot = path.join(__dirname, '..', 'fixtures', 'kps-editor', 'sample'
 const policyRoot = path.join(sampleRoot, 'POLICY_yaml');
 const kpsRoot = path.join(sampleRoot, 'KPS');
 
+function writeTagsBundle(
+  root: string,
+  elementType: string,
+  rows: unknown[],
+): { kpsRoot: string } {
+  const policyRoot = path.join(root, 'POLICY_yaml');
+  const typeDir = path.join(
+    policyRoot,
+    'Environment Configuration',
+    'Key Property Stores',
+    'JWT_Collection',
+    'Type Group',
+  );
+  const storeDir = path.join(
+    policyRoot,
+    'Environment Configuration',
+    'Key Property Stores',
+    'JWT_Collection',
+    'Store Group',
+  );
+  fs.mkdirSync(typeDir, { recursive: true });
+  fs.mkdirSync(storeDir, { recursive: true });
+  fs.mkdirSync(path.join(policyRoot, 'Policies'), { recursive: true });
+  fs.writeFileSync(path.join(policyRoot, 'values.yaml'), '---\n');
+  fs.writeFileSync(
+    path.join(typeDir, 'Tags.yaml'),
+    `---
+type: KPSType
+fields:
+  name: Tags
+children:
+- type: KPSTypeProperty
+  fields:
+    name: name
+    type: java.lang.String
+    key: ""
+    value: ""
+- type: KPSTypeProperty
+  fields:
+    name: codes
+    type: java.util.List
+    key: ""
+    value: ${elementType}
+`,
+  );
+  fs.writeFileSync(
+    path.join(storeDir, 'Tags.yaml'),
+    `---
+type: KPSReadWriteStore
+fields:
+  aliases: T_Tags
+  type: Environment Configuration/Key Property Stores/JWT_Collection/Type Group/Tags.yaml
+`,
+  );
+  const stageDir = path.join(root, 'KPS', 'DEVL');
+  fs.mkdirSync(stageDir, { recursive: true });
+  fs.writeFileSync(path.join(stageDir, 'T_Tags.json'), JSON.stringify(rows));
+  return { kpsRoot: path.join(root, 'KPS') };
+}
+
 describe('kps discovery', () => {
   it('resolves sibling KPS next to the policy project', () => {
     expect(resolveSiblingKpsRoot(policyRoot)).toBe(kpsRoot);
@@ -398,6 +458,22 @@ describe('kps panel html', () => {
     expect(html).toContain('>Store Group<');
     expect(html).toContain('>Type Group<');
   });
+
+  it('renders a list cell as JSON array text', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kps-list-html-'));
+    const { kpsRoot: tagsKps } = writeTagsBundle(tmp, 'java.lang.String', [
+      { name: 'row', codes: ['a', 'b'] },
+    ]);
+    const session = loadKpsSession(tagsKps);
+    const html = renderKpsEditorHtml(session, {
+      cspSource: 'https://example',
+      tableName: 'T_Tags.json',
+      stageId: 'DEVL',
+      nonce: 'testnonce',
+    });
+    expect(html).toContain('value="[&quot;a&quot;,&quot;b&quot;]"');
+    expect(html).not.toContain('value="a,b"');
+  });
 });
 
 describe('kps type schema', () => {
@@ -526,5 +602,272 @@ describe('kps type schema', () => {
     expect(session.warnings.some((warning) => warning.includes('T_CC_Sample_Missing.json'))).toBe(
       true,
     );
+  });
+
+  it('maps java.util.List and its fields.value element type', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kps-list-schema-'));
+    const typeDir = path.join(
+      tmp,
+      'Environment Configuration',
+      'Key Property Stores',
+      'JWT_Collection',
+      'Type Group',
+    );
+    const storeDir = path.join(
+      tmp,
+      'Environment Configuration',
+      'Key Property Stores',
+      'JWT_Collection',
+      'Store Group',
+    );
+    fs.mkdirSync(typeDir, { recursive: true });
+    fs.mkdirSync(storeDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(typeDir, 'Tags.yaml'),
+      `---
+type: KPSType
+fields:
+  name: Tags
+children:
+- type: KPSTypeProperty
+  fields:
+    name: codes
+    type: java.util.List
+    key: ""
+    value: java.lang.Integer
+- type: KPSTypeProperty
+  fields:
+    name: labels
+    type: List
+    key: ""
+    value: java.lang.String
+- type: KPSTypeProperty
+  fields:
+    name: unchecked
+    type: java.util.List
+    key: ""
+    value: ""
+- type: KPSTypeProperty
+  fields:
+    name: custom
+    type: java.util.List
+    key: ""
+    value: com.example.Widget
+`,
+    );
+    fs.writeFileSync(
+      path.join(storeDir, 'Tags.yaml'),
+      `---
+type: KPSReadWriteStore
+fields:
+  aliases: T_Tags
+  type: Environment Configuration/Key Property Stores/JWT_Collection/Type Group/Tags.yaml
+`,
+    );
+
+    const schema = loadKpsTypeSchemas(tmp);
+    expect(schema.columnTypesByTable['T_Tags.json']).toEqual({
+      codes: 'list',
+      labels: 'list',
+      unchecked: 'list',
+      custom: 'list',
+    });
+    expect(schema.listElementTypesByTable['T_Tags.json']).toEqual({
+      codes: 'integer',
+      labels: 'string',
+    });
+    expect(schema.schemaColumnsByTable['T_Tags.json']).toEqual([
+      'codes',
+      'labels',
+      'unchecked',
+      'custom',
+    ]);
+    expect(schema.warnings.some((warning) => warning.includes('unchecked'))).toBe(true);
+    expect(schema.warnings.some((warning) => warning.includes('com.example.Widget'))).toBe(true);
+    expect(schema.warnings.some((warning) => /treating as string/i.test(warning))).toBe(false);
+  });
+
+  it('loads a flat list as an editable array and warns on element mismatch', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kps-list-load-'));
+    const { kpsRoot: tagsKps } = writeTagsBundle(tmp, 'java.lang.Integer', [
+      { name: 'row', codes: [3, 5] },
+      { name: 'bad', codes: [3, '5'] },
+      { name: 'text', codes: '[3,5]' },
+      { name: 'deep', codes: [{ nested: true }] },
+    ]);
+
+    const session = loadKpsSession(tagsKps);
+    const rows = session.tables['T_Tags.json'].stages.DEVL.rows;
+
+    expect(rows[0].cells.codes?.editable).toBe(true);
+    expect(rows[0].cells.codes?.value).toEqual([3, 5]);
+    expect(rows[0].extra.codes).toBeUndefined();
+    expect(rows[0].cells.codes?.warning).toBeUndefined();
+
+    expect(rows[1].cells.codes?.value).toEqual([3, '5']);
+    expect(rows[1].cells.codes?.warning).toBe('List element is not a valid integer');
+    expect(
+      session.warnings.some((warning) => warning.includes('codes') && warning.includes('integer list')),
+    ).toBe(true);
+
+    expect(rows[2].cells.codes?.editable).toBe(true);
+    expect(rows[2].cells.codes?.value).toBe('[3,5]');
+    expect(rows[2].cells.codes?.warning).toBe('Value is not a list');
+
+    expect(rows[3].cells.codes?.editable).toBe(false);
+    expect(rows[3].extra.codes).toEqual([{ nested: true }]);
+  });
+
+  it('fills a missing list property with an empty array', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kps-list-missing-'));
+    const { kpsRoot: tagsKps } = writeTagsBundle(tmp, 'java.lang.String', [{ name: 'only-name' }]);
+    const session = loadKpsSession(tagsKps);
+    const cell = session.tables['T_Tags.json'].stages.DEVL.rows[0].cells.codes;
+    expect(cell?.value).toEqual([]);
+    expect(cell?.editable).toBe(true);
+  });
+
+  it('keeps a JSON array locked when the column is not a list', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kps-list-locked-'));
+    const { kpsRoot: tagsKps } = writeTagsBundle(tmp, 'java.lang.String', [
+      { name: ['not-a-list-column'] },
+    ]);
+    const session = loadKpsSession(tagsKps);
+    const cell = session.tables['T_Tags.json'].stages.DEVL.rows[0].cells.name;
+    expect(cell?.editable).toBe(false);
+    expect(session.tables['T_Tags.json'].stages.DEVL.rows[0].extra.name).toEqual([
+      'not-a-list-column',
+    ]);
+  });
+
+  it('stores list edits as parsed JSON and warns on element mismatch', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kps-list-edit-'));
+    const { kpsRoot: tagsKps } = writeTagsBundle(tmp, 'java.lang.Integer', [
+      { name: 'row', codes: [1] },
+    ]);
+    const session = loadKpsSession(tagsKps);
+    const table = 'T_Tags.json';
+
+    setCell(session, table, 'DEVL', 0, 'codes', '[3,5]');
+    expect(session.tables[table].stages.DEVL.rows[0].cells.codes?.value).toEqual([3, 5]);
+    expect(session.tables[table].stages.DEVL.rows[0].cells.codes?.warning).toBeUndefined();
+    expect(session.tables[table].stages.DEVL.dirty).toBe(true);
+
+    setCell(session, table, 'DEVL', 0, 'codes', '["3","5"]');
+    expect(session.tables[table].stages.DEVL.rows[0].cells.codes?.value).toEqual(['3', '5']);
+    expect(session.tables[table].stages.DEVL.rows[0].cells.codes?.warning).toBe(
+      'List element is not a valid integer',
+    );
+    expect(session.editWarning).toBeUndefined();
+
+    setCell(session, table, 'DEVL', 0, 'codes', '[1.5]');
+    expect(session.tables[table].stages.DEVL.rows[0].cells.codes?.value).toEqual([1.5]);
+    expect(session.tables[table].stages.DEVL.rows[0].cells.codes?.warning).toBe(
+      'List element is not a valid integer',
+    );
+  });
+
+  it('rejects list text that is not a flat scalar array', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kps-list-reject-'));
+    const { kpsRoot: tagsKps } = writeTagsBundle(tmp, 'java.lang.String', [
+      { name: 'row', codes: ['keep'] },
+    ]);
+    const session = loadKpsSession(tagsKps);
+    const table = 'T_Tags.json';
+    const cell = () => session.tables[table].stages.DEVL.rows[0].cells.codes;
+
+    setCell(session, table, 'DEVL', 0, 'codes', '[3,');
+    expect(cell()?.value).toEqual(['keep']);
+    expect(session.tables[table].stages.DEVL.dirty).toBe(false);
+    expect(session.editWarning).toMatch(/codes/);
+
+    setCell(session, table, 'DEVL', 0, 'codes', '{"a":1}');
+    expect(cell()?.value).toEqual(['keep']);
+    expect(session.tables[table].stages.DEVL.dirty).toBe(false);
+
+    setCell(session, table, 'DEVL', 0, 'codes', '[{"a":1}]');
+    expect(cell()?.value).toEqual(['keep']);
+    expect(session.tables[table].stages.DEVL.dirty).toBe(false);
+
+    setCell(session, table, 'DEVL', 0, 'codes', '[[1]]');
+    expect(cell()?.value).toEqual(['keep']);
+    expect(session.tables[table].stages.DEVL.dirty).toBe(false);
+  });
+
+  it('accepts an integer inside a number list and warns on null', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kps-list-number-'));
+    const { kpsRoot: tagsKps } = writeTagsBundle(tmp, 'java.lang.Double', [
+      { name: 'row', codes: [] },
+    ]);
+    const session = loadKpsSession(tagsKps);
+    setCell(session, 'T_Tags.json', 'DEVL', 0, 'codes', '[3,5.5]');
+    const cell = session.tables['T_Tags.json'].stages.DEVL.rows[0].cells.codes;
+    expect(cell?.value).toEqual([3, 5.5]);
+    expect(cell?.warning).toBeUndefined();
+
+    setCell(session, 'T_Tags.json', 'DEVL', 0, 'codes', '[null]');
+    expect(session.tables['T_Tags.json'].stages.DEVL.rows[0].cells.codes?.value).toEqual([null]);
+    expect(session.tables['T_Tags.json'].stages.DEVL.rows[0].cells.codes?.warning).toBe(
+      'List element is not a valid number',
+    );
+  });
+
+  it('defaults a new list cell to an empty array', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kps-list-add-'));
+    const { kpsRoot: tagsKps } = writeTagsBundle(tmp, 'java.lang.String', [{ name: 'row', codes: ['a'] }]);
+    const session = loadKpsSession(tagsKps);
+    addRow(session, 'T_Tags.json', 'DEVL');
+    const row = session.tables['T_Tags.json'].stages.DEVL.rows[1];
+    expect(row.cells.codes?.value).toEqual([]);
+    expect(row.cells.name?.value).toBe('');
+    setCell(session, 'T_Tags.json', 'DEVL', 1, 'codes', '[]');
+    expect(row.cells.codes?.value).toEqual([]);
+    expect(row.cells.codes?.warning).toBeUndefined();
+  });
+
+  it('does not warn when a list has no element type', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kps-list-unchecked-'));
+    const { kpsRoot: tagsKps } = writeTagsBundle(tmp, '""', [{ name: 'row', codes: [] }]);
+    const session = loadKpsSession(tagsKps);
+    expect(session.tables['T_Tags.json'].listElementTypes.codes).toBeUndefined();
+    setCell(session, 'T_Tags.json', 'DEVL', 0, 'codes', '[3,"5",true]');
+    const cell = session.tables['T_Tags.json'].stages.DEVL.rows[0].cells.codes;
+    expect(cell?.value).toEqual([3, '5', true]);
+    expect(cell?.warning).toBeUndefined();
+  });
+
+  it('warns when a boolean list contains a string', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kps-list-bool-'));
+    const { kpsRoot: tagsKps } = writeTagsBundle(tmp, 'java.lang.Boolean', [{ name: 'row', codes: [] }]);
+    const session = loadKpsSession(tagsKps);
+    setCell(session, 'T_Tags.json', 'DEVL', 0, 'codes', '[true,"true"]');
+    const cell = session.tables['T_Tags.json'].stages.DEVL.rows[0].cells.codes;
+    expect(cell?.value).toEqual([true, 'true']);
+    expect(cell?.warning).toBe('List element is not a valid boolean');
+  });
+
+  it('writes a list as a JSON array and leaves an untouched string unchanged', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kps-list-write-'));
+    const { kpsRoot: tagsKps } = writeTagsBundle(tmp, 'java.lang.Integer', [
+      { name: 'edited', codes: [1] },
+      { name: 'untouched', codes: '[3,5]' },
+    ]);
+    const session = loadKpsSession(tagsKps);
+    const table = 'T_Tags.json';
+    setCell(session, table, 'DEVL', 0, 'codes', '[3,5]');
+    session.tables[table].stages.DEVL.rows[0].extra.codes = [1];
+    setCell(session, table, 'DEVL', 1, 'name', 'renamed');
+    writeDirtyKpsTables(session);
+
+    const written = JSON.parse(
+      fs.readFileSync(session.tables[table].stages.DEVL.filePath, 'utf8'),
+    );
+    expect(written[0].codes).toEqual([3, 5]);
+    expect(typeof written[0].codes).not.toBe('string');
+    expect(written[1].codes).toBe('[3,5]');
+    expect(written[1].name).toBe('renamed');
+    const raw = fs.readFileSync(session.tables[table].stages.DEVL.filePath, 'utf8');
+    expect(raw.endsWith(']')).toBe(true);
+    expect(raw.endsWith('\n')).toBe(false);
   });
 });

@@ -1,5 +1,7 @@
-export type KpsColumnType = 'string' | 'boolean' | 'integer' | 'number';
+export type KpsScalarColumnType = 'string' | 'boolean' | 'integer' | 'number';
+export type KpsColumnType = KpsScalarColumnType | 'list';
 export type KpsScalar = string | number | boolean | null;
+export type KpsValue = KpsScalar | KpsScalar[];
 
 export interface KpsStage {
   id: string;
@@ -15,7 +17,7 @@ export interface KpsStageDiscovery {
 
 export interface KpsCell {
   editable: boolean;
-  value?: KpsScalar;
+  value?: KpsValue;
   nested?: unknown;
   warning?: string;
 }
@@ -44,6 +46,7 @@ export interface KpsTableModel {
   columns: string[];
   schemaColumns: string[];
   columnTypes: Record<string, KpsColumnType>;
+  listElementTypes: Record<string, KpsScalarColumnType>;
   storeGroupPath?: string;
   typeGroupPath?: string;
   stages: Record<string, KpsStageTable>;

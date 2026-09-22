@@ -25,7 +25,7 @@ As a Policy Studio developer, I want to see and edit all stage copies of a KPS d
 - **Monorepo KPS switcher:** When multiple projects in scope have a sibling `KPS/`, the user picks which KPS set to edit via a searchable Quick Pick. The webview toolbar exposes **Switch KPS…** and **Open KPS folder…**.
 - **Stage folders:** Every immediate child directory of `KPS/` that contains at least one `*.json`.
 - **Table files:** Union of `*.json` basenames across stages. Each file is a single JSON array of objects (datatable).
-- **JSON shape (v1):** Array of objects with scalar leaf values (string/number/boolean/null). Nested objects/arrays are non-editable (warned).
+- **JSON shape:** Array of objects. Leaf values are scalars (string/number/boolean/null) or, for a `java.util.List` column, a flat JSON array of those scalars. Nested objects and arrays that are not a flat list on a list column are non-editable (warned).
 - **Type schema:** Sibling Policy Studio project `Environment Configuration/Key Property Stores/**/*.yaml` Store Group (`type: KPSReadWriteStore`) + Type Group (`KPSType` / `KPSTypeProperty`). Match `fields.aliases` to the JSON basename without `.json`; follow `fields.type` to the Type Group file.
 - VS Code command: `policyStudioTools.openKpsEditor`.
 - Tools sidebar registration via `ToolsHubService.registerTool` (`009-tools-sidebar.md`).
@@ -35,8 +35,8 @@ As a Policy Studio developer, I want to see and edit all stage copies of a KPS d
 - Webview panel **KPS Editor** (layout B):
   - **Table tabs:** One tab per discovered JSON basename.
   - **Stage tabs:** One tab per discovered stage for the selected table.
-  - **Grid:** Columns = field names; rows = entries of the active stage; inline editable scalar cells.
-  - **Warnings:** Stage file missing; invalid JSON; nested non-scalar fields.
+  - **Grid:** Columns = field names; rows = entries of the active stage; inline editable scalar cells and flat list cells.
+  - **Warnings:** Stage file missing; invalid JSON; nested non-scalar fields; list element type mismatch.
   - **Actions:** Save, Reload, Add row, Remove row, Create missing (per stage), Switch KPS…, Open KPS folder…, **Open JSON**, **Open Store Group**, **Open Type Group** (current table; JSON is the active stage file).
 - On Save: write updated JSON only to stage files that changed.
 
@@ -69,19 +69,20 @@ As a Policy Studio developer, I want to see and edit all stage copies of a KPS d
    - Type Group property missing from a JSON row → warning; cell filled with the typed default so it can be corrected
    - JSON key not in the Type Group → warning on that extra column
    - Value not coercible to the Type Group type → warning; keep the loaded value so it can be edited
-6. Cells that are nested objects/arrays are marked non-editable with a warning; scalar cells (including empty string / null) are editable.
-7. Row lists are **independent per stage** (different lengths and values are allowed).
+6. Cells that are nested objects, or arrays on a column that is not a list, are marked non-editable with a warning. Scalar cells (including empty string / null) are editable. A `java.util.List` column whose value is a flat array of scalars is editable and holds that array. A list column whose value contains an object or nested array stays non-editable. A list column whose value is a scalar stays editable and warns that it is not a list; load and Save do not turn that scalar into an array until the user commits text that parses as a flat scalar array.
+7. Rows are **independent per stage** (different lengths and values are allowed).
 
 ### Editor UI (layout B)
 
 - Dual tabs: table basename tabs + stage tabs; full-width editable grid for the active stage.
 - Switching table keeps in-session dirty state for other tables until Save or Reload of the session (or discard on Switch KPS / follow-project).
 - Scalar cells: single-line text input showing the value’s string form. On cell commit:
-  - If the column has a Type Group type, coerce to that JSON type (`java.lang.String`/`String` → string; `Boolean`/`java.lang.Boolean` → boolean; `Integer`/`Long`/`Short`/`Byte` and `java.lang.*` of those → integer number; `Double`/`Float`/`Number` and `java.lang.Double`/`Float` → number). Other Java types → string plus a session warning.
+  - If the column has a scalar Type Group type, coerce to that JSON type (`java.lang.String`/`String` → string; `Boolean`/`java.lang.Boolean` → boolean; `Integer`/`Long`/`Short`/`Byte` and `java.lang.*` of those → integer number; `Double`/`Float`/`Number` and `java.lang.Double`/`Float` → number). Other Java types that are not a list → string plus a session warning. List columns follow the list rule below and are not coerced to string.
   - Else preserve the prior JSON type when compatible: previous `number` + parseable numeric text → number; previous `boolean` + `true`/`false` → boolean; previous `null` + empty text → null; otherwise store a string (including `""`).
   - Invalid schema/previous-type input **keeps the previous cell value**, does not mark dirty, and shows a warning in the banner.
-- **Add row:** Appends a row to the **active stage only**. Columns with a schema default to `""` (string), `false` (boolean), or `0` (integer/number); columns without a schema default to `""`.
-- On load and Save, coerce compatible existing cells to the schema type so booleans/integers are written as JSON booleans/numbers, not strings.
+- **List cells:** A Type Group property with `fields.type` of `java.util.List` or `List` is a list column. `fields.value` is the element type, mapped with the same Java scalar rules as other columns. The input shows `JSON.stringify` of the array. On commit, the text is parsed as JSON and stored as that value with no coercion: `[3,5]` stays numbers, `["3","5"]` stays strings. A known element type that does not match (including `null`, and a non-integer in an integer list; an integer in a `Double`/`Float`/`Number` list does match) keeps the parsed array, warns on the cell, and marks the stage dirty. Invalid JSON, a non-array, or an array containing an object or nested array keeps the previous value, does not mark dirty, and shows the banner warning. Missing or unknown `fields.value` still edits as a list, warns once at schema load, and does not check elements. A new row and a missing list property default to `[]`. The array is stored on the cell, not in the preserved non-scalar bag, so Save writes a JSON array.
+- **Add row:** Appends a row to the **active stage only**. Columns with a schema default to `""` (string), `false` (boolean), `0` (integer/number), or `[]` (list); columns without a schema default to `""`.
+- On load and Save, coerce compatible existing scalar cells to the schema type so booleans/integers are written as JSON booleans/numbers, not strings. List elements are not coerced. A loaded flat list whose elements do not match a known element type keeps the array, sets the cell warning, and adds a session warning.
 - **Remove row:** Removes that row from the **active stage only** (confirm optional; confirm for v1).
 - **Create missing:** Creates `[]` for that stage’s file path for the selected table basename, then allows editing.
 - **Open JSON / Store Group / Type Group:** Open the current table’s active-stage JSON, Store Group YAML, and Type Group YAML in the editor. If a path is unknown or the file is missing, show a warning instead of failing silently.
@@ -107,6 +108,8 @@ As a Policy Studio developer, I want to see and edit all stage copies of a KPS d
 - **No Type Group for a table:** Fall back to JSON key union and previous-JSON-type coercion; warn once if Store/Type Group YAML is missing or unreadable.
 - **JSON missing or not matching Type Group:** Warn (missing file, missing properties, extra keys, type mismatch). Keep the grid editable so the user can correct and Save.
 - **Invalid typed edit:** Keep previous value; banner warning; do not write a wrong JSON type.
+- **List type mismatch:** Keep the parsed array (numbers stay numbers, strings stay strings); cell warning; stage dirty.
+- **List column with nested values:** Non-editable; do not flatten or stringify them.
 
 ## Acceptance Criteria
 
@@ -117,7 +120,8 @@ As a Policy Studio developer, I want to see and edit all stage copies of a KPS d
 - [ ] Missing stage files show a warning and support Create missing (`[]`).
 - [ ] User can edit scalar cells, add/remove rows on the active stage; Save writes changed JSON files.
 - [ ] Type Group properties define grid columns and JSON types; mismatched or missing JSON shows a warning and remains editable so it can be corrected; extra JSON keys are shown as unexpected columns. Unknown tables without a Type Group keep JSON-key union and previous-type fallback.
-- [ ] Nested non-scalar values are warned and not silently overwritten as scalars.
+- [ ] Nested objects, and arrays that are not a flat list on a `java.util.List` column, are warned and not silently overwritten as scalars.
+- [ ] A `java.util.List` cell edited as `[3,5]` or `["3","5"]` is saved as a JSON array of those values, not as a string. An element that does not match `fields.value` is kept and warned. Invalid list text keeps the previous value.
 - [ ] Invalid JSON in one stage does not block loading other stages.
 - [ ] Unit tests cover discovery, column union, mutations, and write-back using fixtures under `test/fixtures/kps-editor/`.
 - [ ] Toolbar/source actions can open the current table’s JSON (active stage), Store Group YAML, and Type Group YAML.
@@ -126,11 +130,14 @@ As a Policy Studio developer, I want to see and edit all stage copies of a KPS d
 
 - Cross-stage row sync or equality/diff highlighting
 - Add/remove columns
-- Nested object/array cell editing
+- Nested object editing, and editing arrays that contain objects or nested arrays
+- Coercing list elements to the Type Group element type
+- A per-item add/remove control for list cells
 - Editing ENV or Certificate Store from this panel
 - Live bidirectional sync with open text editors
 
 ## Notes
 
 - Design discussion: `docs/superpowers/specs/2026-08-11-kps-editor-design.md`
+- List columns: `docs/superpowers/specs/2026-09-22-kps-list-editor-design.md`
 - Pattern reference: `specs/011-env-values-editor.md`

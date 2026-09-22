@@ -5,11 +5,12 @@ import type {
   KpsColumnType,
   KpsRow,
   KpsScalar,
+  KpsScalarColumnType,
   KpsSession,
   KpsStageTable,
   KpsTableModel,
 } from './types';
-import { coerceLoadedScalar, defaultValueForColumnType } from './kpsTypeSchema';
+import { coerceLoadedScalar, defaultValueForColumnType, listElementMismatch } from './kpsTypeSchema';
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -73,14 +74,49 @@ function collectColumns(
 function applyColumnTypes(
   rows: KpsRow[],
   columnTypes: Record<string, KpsColumnType>,
+  listElementTypes: Record<string, KpsScalarColumnType>,
   tableName: string,
   stageId: string,
   warnings: string[],
 ): void {
   for (const row of rows) {
     for (const [column, columnType] of Object.entries(columnTypes)) {
+      if (columnType === 'list') {
+        const cell = row.cells[column];
+        if (!cell) {
+          continue;
+        }
+        if (Array.isArray(cell.nested) && cell.nested.every(isScalar)) {
+          cell.editable = true;
+          cell.value = cell.nested as KpsScalar[];
+          cell.nested = undefined;
+          delete row.extra[column];
+          cell.warning = undefined;
+          const elementType = listElementTypes[column];
+          const mismatch = listElementMismatch(cell.value, elementType);
+          if (mismatch) {
+            cell.warning = mismatch;
+            warnings.push(
+              `Could not coerce ${tableName} ${stageId} column "${column}" to ${elementType} list`,
+            );
+          }
+          continue;
+        }
+        if (cell.nested !== undefined) {
+          continue;
+        }
+        if (cell.editable && !Array.isArray(cell.value)) {
+          cell.warning = cell.warning ?? 'Value is not a list';
+          warnings.push(`Could not coerce ${tableName} ${stageId} column "${column}" to list`);
+        }
+        continue;
+      }
+
       const cell = row.cells[column];
       if (!cell?.editable || cell.value === undefined) {
+        continue;
+      }
+      if (Array.isArray(cell.value)) {
         continue;
       }
       const coerced = coerceLoadedScalar(cell.value, columnType);
@@ -153,6 +189,7 @@ export function buildKpsSession(
   columnTypesByTable: Record<string, Record<string, KpsColumnType>> = {},
   schemaColumnsByTable: Record<string, string[]> = {},
   schemaFilesByTable: Record<string, { storeGroupPath: string; typeGroupPath: string }> = {},
+  listElementTypesByTable: Record<string, Record<string, KpsScalarColumnType>> = {},
 ): KpsSession {
   const warnings: string[] = [];
   const stageIds = discovery.stages.map((stage) => stage.id);
@@ -161,6 +198,7 @@ export function buildKpsSession(
   for (const tableName of discovery.tableNames) {
     const stageTables: Record<string, KpsStageTable> = {};
     const columnTypes = columnTypesByTable[tableName] ?? {};
+    const listElementTypes = listElementTypesByTable[tableName] ?? {};
     const schemaColumns = schemaColumnsByTable[tableName] ?? [];
 
     for (const stage of discovery.stages) {
@@ -194,7 +232,7 @@ export function buildKpsSession(
           rows.push(parseRow(item));
         }
 
-        applyColumnTypes(rows, columnTypes, tableName, stage.id, warnings);
+        applyColumnTypes(rows, columnTypes, listElementTypes, tableName, stage.id, warnings);
 
         stageTables[stage.id] = {
           stageId: stage.id,
@@ -242,6 +280,7 @@ export function buildKpsSession(
       columns,
       schemaColumns,
       columnTypes,
+      listElementTypes,
       storeGroupPath: schemaFilesByTable[tableName]?.storeGroupPath,
       typeGroupPath: schemaFilesByTable[tableName]?.typeGroupPath,
       stages: stageTables,

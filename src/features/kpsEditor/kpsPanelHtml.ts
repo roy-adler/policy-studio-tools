@@ -15,6 +15,9 @@ function escapeHtml(value: string): string {
 }
 
 function scalarToInputValue(value: unknown): string {
+  if (Array.isArray(value)) {
+    return JSON.stringify(value);
+  }
   if (value === null || value === undefined) {
     return '';
   }
