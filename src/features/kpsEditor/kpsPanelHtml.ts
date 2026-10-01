@@ -198,10 +198,10 @@ function getStyles(): string {
       padding: 4px 8px;
       font-size: 11px;
       line-height: 1.35;
-      border: 1px solid var(--vscode-panel-border);
+      border: 1px solid var(--vscode-inputValidation-errorBorder, #be1100);
       border-radius: 4px;
-      background: var(--vscode-inputValidation-warningBackground, #fff3cd);
-      color: var(--vscode-foreground);
+      background: var(--vscode-inputValidation-errorBackground, #f8d7da);
+      color: var(--vscode-inputValidation-errorForeground, var(--vscode-errorForeground, #be1100));
       box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
       pointer-events: none;
     }
