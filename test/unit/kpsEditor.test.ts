@@ -578,6 +578,7 @@ describe('kps panel html', () => {
       nonce: 'testnonce',
     });
     expect(html).toContain('id="banners"');
+    expect(html).toMatch(/#banners\s*\{[^}]*position:\s*absolute/);
     expect(html).toContain('id="stage-tab-buttons"');
     expect(html).toContain("message.type !== 'cellPatch'");
     expect(html).toContain('applyCellPatch');
@@ -589,7 +590,7 @@ describe('kps panel html', () => {
       rowIndex: 0,
       column: 'path',
     });
-    expect(dirty?.bannersHtml).toContain('1 dirty stage file(s)');
+    expect(dirty?.bannersHtml).not.toContain('dirty stage');
     expect(dirty?.saveLabel).toBe('Save (1)');
     expect(dirty?.cell?.value).toBe('/edited');
 
@@ -598,8 +599,11 @@ describe('kps panel html', () => {
       rowIndex: 0,
       column: 'enabled',
     });
-    expect(invalid?.bannersHtml).toMatch(/enabled/i);
+    expect(invalid?.editWarning).toMatch(/enabled/i);
+    expect(invalid?.bannersHtml ?? '').not.toMatch(/enabled/i);
     expect(invalid?.cell?.value).toBe('true');
+    expect(html).toContain("'cell-notice'");
+    expect(html).toContain('data-warning');
   });
 });
 

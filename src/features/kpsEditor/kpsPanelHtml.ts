@@ -6,7 +6,6 @@ import {
   type KpsStageTarget,
 } from './kpsStageGroups';
 import type { KpsSession, KpsStageTable } from './types';
-import { isSessionDirty } from './kpsTableMutations';
 
 function createNonce(): string {
   return crypto.randomBytes(16).toString('hex');
@@ -49,6 +48,7 @@ export interface KpsCellPatch {
   target: KpsStageTarget;
   gridStageId: string;
   openJsonDisabled: boolean;
+  editWarning: string | null;
   cell: {
     rowIndex: number;
     column: string;
@@ -59,13 +59,6 @@ export interface KpsCellPatch {
 
 function renderBanners(session: KpsSession, tableName: string, stage: KpsStageTable): string {
   const banners: string[] = [];
-  const dirtyCount = countDirty(session);
-  if (isSessionDirty(session)) {
-    banners.push(`<div class="banner">${dirtyCount} dirty stage file(s)</div>`);
-  }
-  if (session.editWarning) {
-    banners.push(`<div class="banner">${escapeHtml(session.editWarning)}</div>`);
-  }
   for (const warning of session.warnings) {
     if (warning.includes(tableName)) {
       banners.push(`<div class="banner">${escapeHtml(warning)}</div>`);
@@ -133,6 +126,7 @@ export function buildKpsCellPatch(
     target,
     gridStageId,
     openJsonDisabled: target.kind === 'group' || stage.status === 'missing',
+    editWarning: session.editWarning ?? null,
     cell: modelCell
       ? {
           rowIndex: edited.rowIndex,
@@ -157,6 +151,7 @@ function getStyles(): string {
       flex-direction: column;
       height: 100vh;
       overflow: hidden;
+      position: relative;
     }
     header {
       flex: none;
@@ -182,12 +177,41 @@ function getStyles(): string {
       opacity: 0.5;
       cursor: default;
     }
+    #banners {
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      bottom: 12px;
+      z-index: 5;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 40%;
+      overflow: auto;
+      pointer-events: none;
+    }
+    #banners:empty { display: none; }
+    .cell-notice {
+      position: fixed;
+      z-index: 6;
+      max-width: 280px;
+      padding: 4px 8px;
+      font-size: 11px;
+      line-height: 1.35;
+      border: 1px solid var(--vscode-panel-border);
+      border-radius: 4px;
+      background: var(--vscode-inputValidation-warningBackground, #fff3cd);
+      color: var(--vscode-foreground);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
+      pointer-events: none;
+    }
     .banner {
-      flex: none;
       padding: 6px 12px;
       font-size: 12px;
-      border-bottom: 1px solid var(--vscode-panel-border);
+      border: 1px solid var(--vscode-panel-border);
+      border-radius: 4px;
       background: var(--vscode-inputValidation-warningBackground, #fff3cd);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
     }
     .banner.error {
       background: var(--vscode-inputValidation-errorBackground, #f8d7da);
@@ -306,8 +330,8 @@ function renderStageBody(
       .map((column) => {
         const unexpected = schemaSet.size > 0 && !schemaSet.has(column);
         const cls = unexpected ? ' class="unexpected"' : '';
-        const title = unexpected ? ' title="Not in Type Group"' : '';
-        return `<th${cls}${title}>${escapeHtml(column)}</th>`;
+        const warning = unexpected ? ' data-warning="Not in Type Group"' : '';
+        return `<th${cls}${warning}>${escapeHtml(column)}</th>`;
       })
       .join('') + '<th></th>';
   const rows = stage.rows
@@ -320,11 +344,12 @@ function renderStageBody(
               cell?.nested !== undefined
                 ? JSON.stringify(cell.nested)
                 : scalarToInputValue(cell?.value);
-            return `<td class="locked" title="${escapeHtml(cell?.warning ?? 'Non-editable')}">${escapeHtml(preview)}</td>`;
+            const lockedWarning = cell?.warning ?? 'Non-editable';
+            return `<td class="locked" data-warning="${escapeHtml(lockedWarning)}">${escapeHtml(preview)}</td>`;
           }
           const warnClass = cell.warning ? ' class="warn"' : '';
-          const title = cell.warning ? ` title="${escapeHtml(cell.warning)}"` : '';
-          return `<td${warnClass}${title}><input data-row="${rowIndex}" data-column="${escapeHtml(column)}" value="${escapeHtml(scalarToInputValue(cell.value))}" /></td>`;
+          const warning = cell.warning ? ` data-warning="${escapeHtml(cell.warning)}"` : '';
+          return `<td${warnClass}${warning}><input data-row="${rowIndex}" data-column="${escapeHtml(column)}" value="${escapeHtml(scalarToInputValue(cell.value))}" /></td>`;
         })
         .join('');
       return `<tr>${cells}<td class="row-actions"><button class="remove-row" data-row="${rowIndex}">−</button></td></tr>`;
@@ -644,6 +669,85 @@ export function renderKpsEditorHtml(
       });
     }
 
+    let stickyNotice = null;
+    let hoverNotice = null;
+
+    function cellNoticeElement() {
+      let notice = document.getElementById('cell-notice');
+      if (!notice) {
+        notice = document.createElement('div');
+        notice.id = 'cell-notice';
+        notice.className = 'cell-notice';
+        notice.hidden = true;
+        document.body.appendChild(notice);
+      }
+      return notice;
+    }
+
+    function findCellAnchor(rowIndex, column) {
+      return Array.from(document.querySelectorAll('table.grid input')).find((candidate) =>
+        candidate.getAttribute('data-row') === String(rowIndex) &&
+        candidate.getAttribute('data-column') === column
+      ) || null;
+    }
+
+    function placeCellNotice(anchor, message) {
+      const notice = cellNoticeElement();
+      if (!anchor || !message) {
+        notice.hidden = true;
+        return;
+      }
+      notice.hidden = false;
+      notice.textContent = message;
+      const rect = anchor.getBoundingClientRect();
+      notice.style.left = Math.max(8, rect.left) + 'px';
+      let top = rect.bottom + 4;
+      notice.style.top = top + 'px';
+      const height = notice.offsetHeight;
+      if (top + height > window.innerHeight - 8) {
+        top = Math.max(8, rect.top - height - 4);
+        notice.style.top = top + 'px';
+      }
+    }
+
+    function refreshCellNotice() {
+      if (hoverNotice) {
+        placeCellNotice(hoverNotice.anchor, hoverNotice.message);
+        return;
+      }
+      if (stickyNotice) {
+        placeCellNotice(findCellAnchor(stickyNotice.rowIndex, stickyNotice.column), stickyNotice.message);
+        return;
+      }
+      placeCellNotice(null, '');
+    }
+
+    function bindCellNotice() {
+      const wrap = document.querySelector('.grid-wrap');
+      if (!wrap || wrap.dataset.noticeBound === 'true') return;
+      wrap.dataset.noticeBound = 'true';
+      wrap.addEventListener('pointerover', (event) => {
+        const cell = event.target instanceof Element ? event.target.closest('td, th') : null;
+        const message = cell?.getAttribute('data-warning');
+        if (!cell || !message) {
+          hoverNotice = null;
+          refreshCellNotice();
+          return;
+        }
+        hoverNotice = { anchor: cell, message };
+        refreshCellNotice();
+      });
+      wrap.addEventListener('pointerout', (event) => {
+        const cell = event.target instanceof Element ? event.target.closest('td, th') : null;
+        if (!hoverNotice || hoverNotice.anchor !== cell) return;
+        const next = event.relatedTarget;
+        if (next instanceof Node && cell.contains(next)) return;
+        hoverNotice = null;
+        refreshCellNotice();
+      });
+      wrap.addEventListener('scroll', () => refreshCellNotice());
+    }
+
     function applyCellPatch(patch) {
       const wrap = document.querySelector('.grid-wrap');
       const top = wrap ? wrap.scrollTop : 0;
@@ -672,14 +776,26 @@ export function renderKpsEditorHtml(
         const cellElement = input instanceof HTMLInputElement ? input.closest('td') : null;
         if (cellElement) {
           cellElement.classList.toggle('warn', Boolean(patch.cell.warning));
-          if (patch.cell.warning) cellElement.title = patch.cell.warning;
-          else cellElement.removeAttribute('title');
+          if (patch.cell.warning) cellElement.setAttribute('data-warning', patch.cell.warning);
+          else cellElement.removeAttribute('data-warning');
         }
+        if (patch.editWarning) {
+          stickyNotice = {
+            rowIndex: patch.cell.rowIndex,
+            column: patch.cell.column,
+            message: patch.editWarning,
+          };
+        } else {
+          stickyNotice = null;
+        }
+      } else {
+        stickyNotice = null;
       }
       if (wrap) {
         wrap.scrollTop = top;
         wrap.scrollLeft = left;
       }
+      refreshCellNotice();
     }
 
     window.addEventListener('message', (event) => {
@@ -718,6 +834,7 @@ export function renderKpsEditorHtml(
       });
     });
     bindStageTabButtons();
+    bindCellNotice();
     document.querySelectorAll('.remove-row').forEach((button) => {
       button.addEventListener('click', () => {
         const rowIndex = Number(button.getAttribute('data-row'));
