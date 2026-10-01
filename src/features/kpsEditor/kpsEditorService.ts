@@ -18,6 +18,7 @@ import {
   setCell,
 } from './kpsTableMutations';
 import {
+  buildKpsCellPatch,
   getKpsPanelShellHtml,
   renderKpsEditorHtml,
   type KpsGridFocus,
@@ -434,10 +435,18 @@ export class KpsEditorService {
           );
           if (result.applied) {
             this.stageTarget = result.target;
-            this.render({
-              preserveGridScroll: true,
-              focusCell: focusCellFromMessage(message),
+            const patch = buildKpsCellPatch(this.session, message.tableName, result.target, {
+              rowIndex: message.rowIndex,
+              column: message.column,
             });
+            if (patch && this.panel) {
+              void this.panel.webview.postMessage({ type: 'cellPatch', patch });
+            } else {
+              this.render({
+                preserveGridScroll: true,
+                focusCell: focusCellFromMessage(message),
+              });
+            }
           }
         }
         break;

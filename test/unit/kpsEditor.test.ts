@@ -33,7 +33,7 @@ import {
   resolveKpsOpenDecision,
 } from '../../src/features/kpsEditor/resolveKpsSelection';
 import { KPS_EDITOR_TOOL } from '../../src/features/kpsEditor/toolDescriptor';
-import { renderKpsEditorHtml } from '../../src/features/kpsEditor/kpsPanelHtml';
+import { buildKpsCellPatch, renderKpsEditorHtml } from '../../src/features/kpsEditor/kpsPanelHtml';
 import type { PolicyStudioProject } from '../../src/features/projectRegistry/types';
 
 const sampleRoot = path.join(__dirname, '..', 'fixtures', 'kps-editor', 'sample');
@@ -519,7 +519,7 @@ describe('kps panel html', () => {
     expect(single).toContain('"kind":"stage"');
     expect(single).toContain('const gridStageId = "DEVL";');
     expect(single).toContain('id="openJson">JSON');
-    expect(single).toContain('source: \'json\', tableName, stageId: gridStageId');
+    expect(single).toContain('source: \'json\', tableName, stageId: activeGridStageId');
   });
 
   it('keeps the grid scroll position and focused cell across a re-render', () => {
@@ -567,6 +567,39 @@ describe('kps panel html', () => {
     expect(html).toContain('suppressGridScroll');
     expect(html).toContain("addEventListener('pointerdown'");
     expect(html).not.toContain('gridWrap.scrollTop = 0');
+  });
+
+  it('applies a cell commit in place so a new warning banner does not reload the grid', () => {
+    const session = loadKpsSession(kpsRoot);
+    const html = renderKpsEditorHtml(session, {
+      cspSource: 'https://example',
+      tableName: 'T_CC_Sample_Routes.json',
+      stageId: 'DEVL',
+      nonce: 'testnonce',
+    });
+    expect(html).toContain('id="banners"');
+    expect(html).toContain('id="stage-tab-buttons"');
+    expect(html).toContain("message.type !== 'cellPatch'");
+    expect(html).toContain('applyCellPatch');
+    expect(html).toContain('document.activeElement !== input');
+
+    const table = 'T_CC_Sample_Routes.json';
+    setCell(session, table, 'DEVL', 0, 'path', '/edited');
+    const dirty = buildKpsCellPatch(session, table, { kind: 'stage', stageId: 'DEVL' }, {
+      rowIndex: 0,
+      column: 'path',
+    });
+    expect(dirty?.bannersHtml).toContain('1 dirty stage file(s)');
+    expect(dirty?.saveLabel).toBe('Save (1)');
+    expect(dirty?.cell?.value).toBe('/edited');
+
+    setCell(session, table, 'DEVL', 0, 'enabled', 'not-a-boolean');
+    const invalid = buildKpsCellPatch(session, table, { kind: 'stage', stageId: 'DEVL' }, {
+      rowIndex: 0,
+      column: 'enabled',
+    });
+    expect(invalid?.bannersHtml).toMatch(/enabled/i);
+    expect(invalid?.cell?.value).toBe('true');
   });
 });
 

@@ -42,6 +42,108 @@ function countDirty(session: KpsSession): number {
   return count;
 }
 
+export interface KpsCellPatch {
+  bannersHtml: string;
+  saveLabel: string;
+  stageTabsHtml: string;
+  target: KpsStageTarget;
+  gridStageId: string;
+  openJsonDisabled: boolean;
+  cell: {
+    rowIndex: number;
+    column: string;
+    value: string;
+    warning?: string;
+  } | null;
+}
+
+function renderBanners(session: KpsSession, tableName: string, stage: KpsStageTable): string {
+  const banners: string[] = [];
+  const dirtyCount = countDirty(session);
+  if (isSessionDirty(session)) {
+    banners.push(`<div class="banner">${dirtyCount} dirty stage file(s)</div>`);
+  }
+  if (session.editWarning) {
+    banners.push(`<div class="banner">${escapeHtml(session.editWarning)}</div>`);
+  }
+  for (const warning of session.warnings) {
+    if (warning.includes(tableName)) {
+      banners.push(`<div class="banner">${escapeHtml(warning)}</div>`);
+    }
+  }
+  if (stage.status === 'error') {
+    banners.push(`<div class="banner error">${escapeHtml(stage.parseError ?? 'Parse error')}</div>`);
+  }
+  return banners.join('');
+}
+
+function renderStageTabButtons(
+  session: KpsSession,
+  tableName: string,
+  target: KpsStageTarget,
+  gridStageId: string,
+): string {
+  const table = session.tables[tableName];
+  const groups = findStageGroups(table, session.stageIds);
+  const groupTabs = groups
+    .map((group) => {
+      const active =
+        target.kind === 'group' &&
+        group.memberIds.length === target.memberIds.length &&
+        group.memberIds.every((id) => target.memberIds.includes(id))
+          ? ' active'
+          : '';
+      return `<button class="stage-group${active}" data-group="${escapeHtml(group.memberIds.join(','))}">${escapeHtml(group.label)}</button>`;
+    })
+    .join('');
+  const stageTabs = session.stageIds
+    .map((id) => {
+      const st = table.stages[id];
+      const active = target.kind === 'stage' && id === gridStageId ? ' active' : '';
+      const member =
+        target.kind === 'group' && target.memberIds.includes(id) ? ' member' : '';
+      const missing = st?.status === 'missing' ? ' missing' : '';
+      return `<button class="stage-tab${active}${member}${missing}" data-stage="${escapeHtml(id)}">${escapeHtml(id)}</button>`;
+    })
+    .join('');
+  return groupTabs + stageTabs;
+}
+
+export function buildKpsCellPatch(
+  session: KpsSession,
+  tableName: string,
+  stageTarget: KpsStageTarget,
+  edited: { rowIndex: number; column: string },
+): KpsCellPatch | undefined {
+  const table = session.tables[tableName];
+  if (!table) {
+    return undefined;
+  }
+  const target = resolveStageTarget(stageTarget, table, session.stageIds);
+  const gridStageId = target.kind === 'group' ? target.memberIds[0] : target.stageId;
+  const stage = table.stages[gridStageId];
+  if (!stage) {
+    return undefined;
+  }
+  const modelCell = stage.status === 'present' ? stage.rows[edited.rowIndex]?.cells[edited.column] : undefined;
+  return {
+    bannersHtml: renderBanners(session, tableName, stage),
+    saveLabel: `Save${countDirty(session) > 0 ? ` (${countDirty(session)})` : ''}`,
+    stageTabsHtml: renderStageTabButtons(session, tableName, target, gridStageId),
+    target,
+    gridStageId,
+    openJsonDisabled: target.kind === 'group' || stage.status === 'missing',
+    cell: modelCell
+      ? {
+          rowIndex: edited.rowIndex,
+          column: edited.column,
+          value: scalarToInputValue(modelCell.value),
+          warning: modelCell.warning,
+        }
+      : null,
+  };
+}
+
 function getStyles(): string {
   return `<style>
     * { box-sizing: border-box; }
@@ -474,7 +576,6 @@ export function renderKpsEditorHtml(
   const target = resolveStageTarget(requested, table, session.stageIds);
   const gridStageId = target.kind === 'group' ? target.memberIds[0] : target.stageId;
   const stage = table.stages[gridStageId];
-  const groups = findStageGroups(table, session.stageIds);
   const dirtyCount = countDirty(session);
   const title = options.kpsLabel
     ? `KPS — ${escapeHtml(options.kpsLabel)}`
@@ -488,44 +589,8 @@ export function renderKpsEditorHtml(
     })
     .join('');
 
-  const groupTabs = groups
-    .map((group) => {
-      const active =
-        target.kind === 'group' &&
-        group.memberIds.length === target.memberIds.length &&
-        group.memberIds.every((id) => target.memberIds.includes(id))
-          ? ' active'
-          : '';
-      return `<button class="stage-group${active}" data-group="${escapeHtml(group.memberIds.join(','))}">${escapeHtml(group.label)}</button>`;
-    })
-    .join('');
-
-  const stageTabs = session.stageIds
-    .map((id) => {
-      const st = table.stages[id];
-      const active = target.kind === 'stage' && id === gridStageId ? ' active' : '';
-      const member =
-        target.kind === 'group' && target.memberIds.includes(id) ? ' member' : '';
-      const missing = st?.status === 'missing' ? ' missing' : '';
-      return `<button class="stage-tab${active}${member}${missing}" data-stage="${escapeHtml(id)}">${escapeHtml(id)}</button>`;
-    })
-    .join('');
-
-  const banners: string[] = [];
-  if (isSessionDirty(session)) {
-    banners.push(`<div class="banner">${dirtyCount} dirty stage file(s)</div>`);
-  }
-  if (session.editWarning) {
-    banners.push(`<div class="banner">${escapeHtml(session.editWarning)}</div>`);
-  }
-  for (const warning of session.warnings) {
-    if (warning.includes(tableName)) {
-      banners.push(`<div class="banner">${escapeHtml(warning)}</div>`);
-    }
-  }
-  if (stage.status === 'error') {
-    banners.push(`<div class="banner error">${escapeHtml(stage.parseError ?? 'Parse error')}</div>`);
-  }
+  const stageTabs = renderStageTabButtons(session, tableName, target, gridStageId);
+  const banners = renderBanners(session, tableName, stage);
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -545,10 +610,10 @@ export function renderKpsEditorHtml(
       <button id="pickKps">Open KPS folder…</button>
     </div>
   </header>
-  ${banners.join('')}
+  <div id="banners">${banners}</div>
   <div id="main">
     <div class="tabs"><span class="label">Tables</span>${tableTabs}</div>
-    <div class="tabs"><span class="label">Stages</span>${groupTabs}${stageTabs}</div>
+    <div class="tabs" id="stage-tabs"><span class="label">Stages</span><span id="stage-tab-buttons">${stageTabs}</span></div>
     <div class="tabs">
       <span class="label">Open</span>
       <button id="openJson"${target.kind === 'group' || stage.status === 'missing' ? ' disabled' : ''}>JSON</button>
@@ -560,24 +625,84 @@ export function renderKpsEditorHtml(
   <script nonce="${nonce}">
     ${gridViewScript(options)}
     const tableName = ${JSON.stringify(tableName)};
-    const target = ${JSON.stringify(target)};
+    const initialTarget = ${JSON.stringify(target)};
+    let activeTarget = initialTarget;
     const gridStageId = ${JSON.stringify(gridStageId)};
+    let activeGridStageId = gridStageId;
+
+    function bindStageTabButtons() {
+      document.querySelectorAll('#stage-tab-buttons .stage-group').forEach((button) => {
+        button.addEventListener('click', () => {
+          const memberIds = (button.getAttribute('data-group') ?? '').split(',').filter(Boolean);
+          vscode.postMessage({ type: 'selectGroup', memberIds });
+        });
+      });
+      document.querySelectorAll('#stage-tab-buttons .stage-tab').forEach((button) => {
+        button.addEventListener('click', () => {
+          vscode.postMessage({ type: 'selectStage', stageId: button.getAttribute('data-stage') });
+        });
+      });
+    }
+
+    function applyCellPatch(patch) {
+      const wrap = document.querySelector('.grid-wrap');
+      const top = wrap ? wrap.scrollTop : 0;
+      const left = wrap ? wrap.scrollLeft : 0;
+      const banners = document.getElementById('banners');
+      if (banners) banners.innerHTML = patch.bannersHtml;
+      const save = document.getElementById('save');
+      if (save) save.textContent = patch.saveLabel;
+      const buttons = document.getElementById('stage-tab-buttons');
+      if (buttons) {
+        buttons.innerHTML = patch.stageTabsHtml;
+        bindStageTabButtons();
+      }
+      activeTarget = patch.target;
+      activeGridStageId = patch.gridStageId;
+      const openJson = document.getElementById('openJson');
+      if (openJson) openJson.disabled = Boolean(patch.openJsonDisabled);
+      if (patch.cell) {
+        const input = Array.from(document.querySelectorAll('table.grid input')).find((candidate) =>
+          candidate.getAttribute('data-row') === String(patch.cell.rowIndex) &&
+          candidate.getAttribute('data-column') === patch.cell.column
+        );
+        if (input instanceof HTMLInputElement && document.activeElement !== input) {
+          input.value = patch.cell.value;
+        }
+        const cellElement = input instanceof HTMLInputElement ? input.closest('td') : null;
+        if (cellElement) {
+          cellElement.classList.toggle('warn', Boolean(patch.cell.warning));
+          if (patch.cell.warning) cellElement.title = patch.cell.warning;
+          else cellElement.removeAttribute('title');
+        }
+      }
+      if (wrap) {
+        wrap.scrollTop = top;
+        wrap.scrollLeft = left;
+      }
+    }
+
+    window.addEventListener('message', (event) => {
+      const message = event.data;
+      if (!message || message.type !== 'cellPatch' || !message.patch) return;
+      applyCellPatch(message.patch);
+    });
 
     document.getElementById('save')?.addEventListener('click', () => vscode.postMessage({ type: 'save' }));
     document.getElementById('reload')?.addEventListener('click', () => vscode.postMessage({ type: 'reload' }));
     document.getElementById('switchKps')?.addEventListener('click', () => vscode.postMessage({ type: 'switchKps' }));
     document.getElementById('pickKps')?.addEventListener('click', () => vscode.postMessage({ type: 'pickKps' }));
     document.getElementById('openJson')?.addEventListener('click', () => {
-      vscode.postMessage({ type: 'openSource', source: 'json', tableName, stageId: gridStageId });
+      vscode.postMessage({ type: 'openSource', source: 'json', tableName, stageId: activeGridStageId });
     });
     document.getElementById('openStoreGroup')?.addEventListener('click', () => {
-      vscode.postMessage({ type: 'openSource', source: 'storeGroup', tableName, gridStageId });
+      vscode.postMessage({ type: 'openSource', source: 'storeGroup', tableName, activeGridStageId });
     });
     document.getElementById('openTypeGroup')?.addEventListener('click', () => {
-      vscode.postMessage({ type: 'openSource', source: 'typeGroup', tableName, gridStageId });
+      vscode.postMessage({ type: 'openSource', source: 'typeGroup', tableName, activeGridStageId });
     });
     document.getElementById('addRow')?.addEventListener('click', () => {
-      vscode.postMessage({ type: 'addRow', tableName, target });
+      vscode.postMessage({ type: 'addRow', tableName, target: activeTarget });
     });
     document.getElementById('createMissing')?.addEventListener('click', (event) => {
       const button = event.currentTarget;
@@ -592,21 +717,11 @@ export function renderKpsEditorHtml(
         vscode.postMessage({ type: 'selectTable', tableName: button.getAttribute('data-table') });
       });
     });
-    document.querySelectorAll('.stage-group').forEach((button) => {
-      button.addEventListener('click', () => {
-        const memberIds = (button.getAttribute('data-group') ?? '').split(',').filter(Boolean);
-        vscode.postMessage({ type: 'selectGroup', memberIds });
-      });
-    });
-    document.querySelectorAll('.stage-tab').forEach((button) => {
-      button.addEventListener('click', () => {
-        vscode.postMessage({ type: 'selectStage', stageId: button.getAttribute('data-stage') });
-      });
-    });
+    bindStageTabButtons();
     document.querySelectorAll('.remove-row').forEach((button) => {
       button.addEventListener('click', () => {
         const rowIndex = Number(button.getAttribute('data-row'));
-        vscode.postMessage({ type: 'removeRow', tableName, target, rowIndex });
+        vscode.postMessage({ type: 'removeRow', tableName, target: activeTarget, rowIndex });
       });
     });
     document.querySelectorAll('table.grid input').forEach((input) => {
@@ -614,7 +729,7 @@ export function renderKpsEditorHtml(
         vscode.postMessage({
           type: 'setCell',
           tableName,
-          target,
+          target: activeTarget,
           rowIndex: Number(input.getAttribute('data-row')),
           column: input.getAttribute('data-column'),
           value: input.value,
