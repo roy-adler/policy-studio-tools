@@ -123,6 +123,7 @@ function getStyles(): string {
     .grid-wrap {
       flex: 1;
       overflow: auto;
+      overflow-anchor: none;
       border: 1px solid var(--vscode-panel-border);
       border-radius: 3px;
     }
@@ -239,6 +240,141 @@ function renderStageBody(
   </div>`;
 }
 
+export interface KpsGridFocus {
+  rowIndex: number;
+  column: string;
+  selectionStart?: number;
+  selectionEnd?: number;
+}
+
+function gridViewScript(options: {
+  gridScrollTop?: number;
+  gridScrollLeft?: number;
+  scrollGridToEnd?: boolean;
+  focusCell?: KpsGridFocus;
+}): string {
+  const scrollTop =
+    typeof options.gridScrollTop === 'number' && Number.isFinite(options.gridScrollTop)
+      ? Math.max(0, Math.trunc(options.gridScrollTop))
+      : undefined;
+  const scrollLeft =
+    typeof options.gridScrollLeft === 'number' && Number.isFinite(options.gridScrollLeft)
+      ? Math.max(0, Math.trunc(options.gridScrollLeft))
+      : 0;
+  const focus =
+    options.focusCell &&
+    Number.isInteger(options.focusCell.rowIndex) &&
+    options.focusCell.rowIndex >= 0 &&
+    options.focusCell.column
+      ? options.focusCell
+      : undefined;
+  const selectionStart = Number.isInteger(focus?.selectionStart) ? focus?.selectionStart : undefined;
+  const selectionEnd = Number.isInteger(focus?.selectionEnd) ? focus?.selectionEnd : undefined;
+
+  const applyScroll = options.scrollGridToEnd
+    ? `if (gridWrap) {
+        gridWrap.scrollTop = gridWrap.scrollHeight;
+        gridWrap.scrollLeft = ${scrollLeft};
+      }`
+    : scrollTop !== undefined
+      ? `if (gridWrap) {
+          gridWrap.scrollTop = ${scrollTop};
+          gridWrap.scrollLeft = ${scrollLeft};
+        }`
+      : '';
+
+  const focusScript = focus
+    ? `const focusInput = Array.from(document.querySelectorAll('table.grid input')).find((input) =>
+        input.getAttribute('data-row') === ${JSON.stringify(String(focus.rowIndex))} &&
+        input.getAttribute('data-column') === ${JSON.stringify(focus.column)}
+      );
+      if (focusInput instanceof HTMLInputElement) {
+        focusInput.focus({ preventScroll: true });
+        ${
+          selectionStart !== undefined && selectionEnd !== undefined
+            ? `focusInput.setSelectionRange(${selectionStart}, ${selectionEnd});`
+            : ''
+        }
+        applyGridScroll();
+      }`
+    : '';
+
+  return `
+    const gridWrap = document.querySelector('.grid-wrap');
+    const applyGridScroll = () => {
+      ${applyScroll}
+    };
+    applyGridScroll();
+    requestAnimationFrame(() => {
+      applyGridScroll();
+      requestAnimationFrame(applyGridScroll);
+    });
+    let savedGridScroll = gridWrap ? gridWrap.scrollTop : 0;
+    let savedGridScrollLeft = gridWrap ? gridWrap.scrollLeft : 0;
+    let suppressGridScroll = false;
+    const keepGridScroll = () => {
+      if (!gridWrap) {
+        return;
+      }
+      gridWrap.scrollTop = savedGridScroll;
+      gridWrap.scrollLeft = savedGridScrollLeft;
+    };
+    gridWrap?.addEventListener('pointerdown', (event) => {
+      const target = event.target;
+      if (!(target instanceof Element) || !target.closest('input')) {
+        return;
+      }
+      suppressGridScroll = true;
+      savedGridScroll = gridWrap.scrollTop;
+      savedGridScrollLeft = gridWrap.scrollLeft;
+    }, true);
+    gridWrap?.addEventListener('focusin', () => {
+      if (!suppressGridScroll) {
+        return;
+      }
+      keepGridScroll();
+      requestAnimationFrame(() => {
+        keepGridScroll();
+        requestAnimationFrame(() => {
+          keepGridScroll();
+          suppressGridScroll = false;
+        });
+      });
+    });
+    ${focusScript}
+    function gridScrollPayload() {
+      const wrap = document.querySelector('.grid-wrap');
+      if (!wrap) {
+        return { gridScrollTop: 0, gridScrollLeft: 0, gridAtBottom: false };
+      }
+      return {
+        gridScrollTop: wrap.scrollTop,
+        gridScrollLeft: wrap.scrollLeft,
+        gridAtBottom: wrap.scrollTop + wrap.clientHeight >= wrap.scrollHeight - 4,
+      };
+    }
+    const vscodeApi = acquireVsCodeApi();
+    const vscode = {
+      postMessage(message) {
+        const active = document.activeElement;
+        const focusCell = active instanceof HTMLInputElement && active.matches('table.grid input')
+          ? {
+              rowIndex: Number(active.getAttribute('data-row')),
+              column: active.getAttribute('data-column'),
+              selectionStart: active.selectionStart,
+              selectionEnd: active.selectionEnd,
+            }
+          : undefined;
+        const payload = Object.assign({}, message, gridScrollPayload());
+        if (focusCell && focusCell.column) {
+          payload.focusCell = focusCell;
+        }
+        vscodeApi.postMessage(payload);
+      },
+    };
+  `;
+}
+
 export function getKpsPanelShellHtml(nonce: string): string {
   return `<!DOCTYPE html>
 <html lang="en">
@@ -276,6 +412,10 @@ export function renderKpsEditorHtml(
     stageTarget?: KpsStageTarget;
     kpsLabel?: string;
     nonce?: string;
+    gridScrollTop?: number;
+    gridScrollLeft?: number;
+    scrollGridToEnd?: boolean;
+    focusCell?: KpsGridFocus;
   },
 ): string {
   const nonce = options.nonce ?? createNonce();
@@ -418,7 +558,7 @@ export function renderKpsEditorHtml(
     ${renderStageBody(stage, table, tableName, gridStageId)}
   </div>
   <script nonce="${nonce}">
-    const vscode = acquireVsCodeApi();
+    ${gridViewScript(options)}
     const tableName = ${JSON.stringify(tableName)};
     const target = ${JSON.stringify(target)};
     const gridStageId = ${JSON.stringify(gridStageId)};

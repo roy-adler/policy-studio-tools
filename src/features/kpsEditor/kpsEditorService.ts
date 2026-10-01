@@ -17,7 +17,11 @@ import {
   removeRow,
   setCell,
 } from './kpsTableMutations';
-import { getKpsPanelShellHtml, renderKpsEditorHtml } from './kpsPanelHtml';
+import {
+  getKpsPanelShellHtml,
+  renderKpsEditorHtml,
+  type KpsGridFocus,
+} from './kpsPanelHtml';
 import { listKpsRootsForProjects, type KpsRootCandidate } from './listKpsRoots';
 import { loadKpsSession } from './loadKpsSession';
 import { resolveKpsFollowActiveProject, resolveKpsOpenDecision } from './resolveKpsSelection';
@@ -33,7 +37,12 @@ const BROWSE_KPS_FOLDER_LABEL = 'Browse KPS folder…';
 const DISCARD_ACTION = 'Discard';
 const REMOVE_ACTION = 'Remove';
 
-type IncomingMessage =
+type IncomingMessage = {
+  gridScrollTop?: number;
+  gridScrollLeft?: number;
+  gridAtBottom?: boolean;
+  focusCell?: KpsGridFocus;
+} & (
   | { type: 'ready' }
   | { type: 'selectTable'; tableName: string }
   | { type: 'selectStage'; stageId: string }
@@ -53,7 +62,8 @@ type IncomingMessage =
   | { type: 'reload' }
   | { type: 'pickKps' }
   | { type: 'switchKps' }
-  | { type: 'openSource'; source: 'json' | 'storeGroup' | 'typeGroup'; tableName: string; stageId: string };
+  | { type: 'openSource'; source: 'json' | 'storeGroup' | 'typeGroup'; tableName: string; stageId: string }
+);
 
 type KpsQuickPickItem = vscode.QuickPickItem & {
   kind?: vscode.QuickPickItemKind;
@@ -68,6 +78,9 @@ export class KpsEditorService {
   private stageTarget: KpsStageTarget | undefined;
   private kpsLabel: string | undefined;
   private followInFlight = false;
+  private gridScrollTop = 0;
+  private gridScrollLeft = 0;
+  private gridAtBottom = false;
 
   constructor(private readonly context: vscode.ExtensionContext) {}
 
@@ -248,6 +261,7 @@ export class KpsEditorService {
     const sameKps =
       previousRoot !== undefined && path.resolve(previousRoot) === path.resolve(kpsRoot);
 
+    this.resetGridScroll();
     try {
       this.session = loadKpsSession(kpsRoot);
       this.kpsLabel = label ?? path.basename(path.dirname(kpsRoot)) ?? path.basename(kpsRoot);
@@ -317,7 +331,29 @@ export class KpsEditorService {
     });
   }
 
-  private render(): void {
+  private resetGridScroll(): void {
+    this.gridScrollTop = 0;
+    this.gridScrollLeft = 0;
+    this.gridAtBottom = false;
+  }
+
+  private rememberGridScroll(message: IncomingMessage): void {
+    if (typeof message.gridScrollTop === 'number' && Number.isFinite(message.gridScrollTop)) {
+      this.gridScrollTop = Math.max(0, Math.trunc(message.gridScrollTop));
+    }
+    if (typeof message.gridScrollLeft === 'number' && Number.isFinite(message.gridScrollLeft)) {
+      this.gridScrollLeft = Math.max(0, Math.trunc(message.gridScrollLeft));
+    }
+    if (typeof message.gridAtBottom === 'boolean') {
+      this.gridAtBottom = message.gridAtBottom;
+    }
+  }
+
+  private render(view?: {
+    preserveGridScroll?: boolean;
+    scrollGridToEnd?: boolean;
+    focusCell?: KpsGridFocus;
+  }): void {
     if (!this.panel || !this.session) {
       return;
     }
@@ -328,10 +364,16 @@ export class KpsEditorService {
       tableName: this.selectedTableName,
       stageTarget: this.stageTarget,
       kpsLabel: titleLabel,
+      gridScrollTop: view?.preserveGridScroll ? this.gridScrollTop : undefined,
+      gridScrollLeft: view?.preserveGridScroll ? this.gridScrollLeft : undefined,
+      scrollGridToEnd: view?.scrollGridToEnd,
+      focusCell: view?.focusCell,
     });
   }
 
   private async handleMessage(message: IncomingMessage): Promise<void> {
+    this.rememberGridScroll(message);
+
     if (!this.session && message.type !== 'switchKps' && message.type !== 'pickKps') {
       return;
     }
@@ -341,6 +383,7 @@ export class KpsEditorService {
         this.render();
         break;
       case 'selectTable':
+        this.resetGridScroll();
         this.selectedTableName = message.tableName;
         if (this.session && this.session.tables[message.tableName]) {
           this.stageTarget = defaultStageTarget(
@@ -351,10 +394,12 @@ export class KpsEditorService {
         this.render();
         break;
       case 'selectStage':
+        this.resetGridScroll();
         this.stageTarget = { kind: 'stage', stageId: message.stageId };
         this.render();
         break;
       case 'selectGroup':
+        this.resetGridScroll();
         if (!this.session || !this.selectedTableName) {
           return;
         }
@@ -389,7 +434,10 @@ export class KpsEditorService {
           );
           if (result.applied) {
             this.stageTarget = result.target;
-            this.render();
+            this.render({
+              preserveGridScroll: true,
+              focusCell: focusCellFromMessage(message),
+            });
           }
         }
         break;
@@ -408,7 +456,10 @@ export class KpsEditorService {
           );
           if (result.applied) {
             this.stageTarget = result.target;
-            this.render();
+            this.render({
+              preserveGridScroll: true,
+              scrollGridToEnd: this.gridAtBottom,
+            });
           }
         }
         break;
@@ -421,7 +472,7 @@ export class KpsEditorService {
         }
         createMissing(this.session, message.tableName, message.stageId);
         this.stageTarget = { kind: 'stage', stageId: message.stageId };
-        this.render();
+        this.render({ preserveGridScroll: true });
         break;
       case 'save':
         await this.handleSave();
@@ -508,7 +559,7 @@ export class KpsEditorService {
     });
     if (result.applied) {
       this.stageTarget = result.target;
-      this.render();
+      this.render({ preserveGridScroll: true });
     }
   }
 
@@ -538,7 +589,7 @@ export class KpsEditorService {
 
     try {
       const result = writeDirtyKpsTables(this.session);
-      this.render();
+      this.render({ preserveGridScroll: true });
 
       if (result.written.length > 0) {
         void vscode.window.showInformationMessage(
@@ -580,6 +631,22 @@ export class KpsEditorService {
 
     this.loadAndShow(folder);
   }
+}
+
+function focusCellFromMessage(message: IncomingMessage): KpsGridFocus | undefined {
+  const cell = message.focusCell;
+  if (!cell || typeof cell.column !== 'string' || cell.column.length === 0) {
+    return undefined;
+  }
+  if (!Number.isInteger(cell.rowIndex) || cell.rowIndex < 0) {
+    return undefined;
+  }
+  const focus: KpsGridFocus = { rowIndex: cell.rowIndex, column: cell.column };
+  if (Number.isInteger(cell.selectionStart) && Number.isInteger(cell.selectionEnd)) {
+    focus.selectionStart = cell.selectionStart;
+    focus.selectionEnd = cell.selectionEnd;
+  }
+  return focus;
 }
 
 function formatCandidateLabel(candidate: KpsRootCandidate): string {

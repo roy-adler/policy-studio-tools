@@ -521,6 +521,53 @@ describe('kps panel html', () => {
     expect(single).toContain('id="openJson">JSON');
     expect(single).toContain('source: \'json\', tableName, stageId: gridStageId');
   });
+
+  it('keeps the grid scroll position and focused cell across a re-render', () => {
+    const session = loadKpsSession(kpsRoot);
+    const html = renderKpsEditorHtml(session, {
+      cspSource: 'https://example',
+      tableName: 'T_CC_Sample_Routes.json',
+      stageId: 'DEVL',
+      nonce: 'testnonce',
+      gridScrollTop: 240,
+      gridScrollLeft: 16,
+      focusCell: { rowIndex: 0, column: 'name', selectionStart: 2, selectionEnd: 2 },
+    });
+    expect(html).toContain('gridWrap.scrollTop = 240');
+    expect(html).toContain('gridWrap.scrollLeft = 16');
+    expect(html).toContain('focus({ preventScroll: true })');
+    expect(html).toContain('setSelectionRange(2, 2)');
+    expect(html).toContain('gridScrollTop: wrap.scrollTop');
+    expect(html).toContain('gridScrollLeft: wrap.scrollLeft');
+    expect(html).toContain('suppressGridScroll');
+  });
+
+  it('pins the grid to the end when asked, without restoring the previous offset', () => {
+    const session = loadKpsSession(kpsRoot);
+    const html = renderKpsEditorHtml(session, {
+      cspSource: 'https://example',
+      tableName: 'T_CC_Sample_Routes.json',
+      stageId: 'DEVL',
+      nonce: 'testnonce',
+      gridScrollTop: 240,
+      scrollGridToEnd: true,
+    });
+    expect(html).toContain('gridWrap.scrollTop = gridWrap.scrollHeight');
+    expect(html).not.toContain('gridWrap.scrollTop = 240');
+  });
+
+  it('guards cell focus from scrolling the grid even before the first edit', () => {
+    const session = loadKpsSession(kpsRoot);
+    const html = renderKpsEditorHtml(session, {
+      cspSource: 'https://example',
+      tableName: 'T_CC_Sample_Routes.json',
+      stageId: 'DEVL',
+      nonce: 'testnonce',
+    });
+    expect(html).toContain('suppressGridScroll');
+    expect(html).toContain("addEventListener('pointerdown'");
+    expect(html).not.toContain('gridWrap.scrollTop = 0');
+  });
 });
 
 describe('kps type schema', () => {
