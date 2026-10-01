@@ -67,7 +67,7 @@ Usage kind is `cache-field` or `caching-filter`. Unused caches stay in the inven
 ### Panel
 
 - Open when `policyStudio.projectDetected` is true (command + Tools → Analyze → Caches).
-- Selecting a list row fills the right pane.
+- Selecting a list row fills the right pane and starts that pane at the top. Search, Refresh, and the All projects toggle keep the inventory scroll position. When the same cache stays selected, they also keep the detail pane scroll position. Focusing the search box does not move the inventory.
 - **Open YAML** opens the selected cache file at its recorded range (XML projects open the entity-store file at the entity range).
 - Clicking a usage row opens that policy file at the match.
 - Refresh rebuilds discovery, parse, and usage from disk. No live file watcher in v1.

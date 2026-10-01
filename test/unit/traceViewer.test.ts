@@ -2,6 +2,7 @@ import * as fs from 'fs/promises';
 import path from 'path';
 import { describe, expect, it } from 'vitest';
 import { parseTrace } from '../../src/features/traceViewer/parseTrace';
+import { getTraceViewerHtml } from '../../src/features/traceViewer/traceViewerHtml';
 import { searchTrace } from '../../src/features/traceViewer/searchTrace';
 import { TRACE_VIEWER_TOOL } from '../../src/features/traceViewer/toolDescriptor';
 import type { TraceEntry } from '../../src/features/traceViewer/types';
@@ -140,5 +141,14 @@ describe('trace viewer tool descriptor', () => {
     expect(TRACE_VIEWER_TOOL.group).toBe('traces');
     expect(TRACE_VIEWER_TOOL.command).toBe('policyStudioTools.openTraceFile');
     expect(TRACE_VIEWER_TOOL.available).toBe(true);
+  });
+});
+
+describe('trace viewer html', () => {
+  it('keeps the tree pane in place when the tree is redrawn', () => {
+    const html = getTraceViewerHtml('nonce');
+    expect(html).toContain('panel.scrollTop = top');
+    expect(html).toContain("scrollIntoView({ block: 'nearest', inline: 'nearest' })");
+    expect(html).toContain("panel.setAttribute('data-entry', entry.id)");
   });
 });

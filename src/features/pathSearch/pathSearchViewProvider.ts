@@ -159,6 +159,7 @@ export class PathSearchViewProvider implements vscode.WebviewViewProvider {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     body {
+      overflow-anchor: none;
       font-family: var(--vscode-font-family);
       font-size: var(--vscode-font-size);
       color: var(--vscode-foreground);
@@ -233,6 +234,7 @@ export class PathSearchViewProvider implements vscode.WebviewViewProvider {
     const statusEl = document.getElementById('status');
     const resultsEl = document.getElementById('results');
     const summaryEl = document.getElementById('summary');
+    let lastRenderedQuery = null;
 
     queryInput.addEventListener('input', () => {
       vscode.postMessage({ type: 'search', query: queryInput.value });
@@ -253,9 +255,18 @@ export class PathSearchViewProvider implements vscode.WebviewViewProvider {
     });
 
     function renderState(state) {
+      const scrolling = document.scrollingElement;
+      const top = scrolling ? scrolling.scrollTop : 0;
+      const left = scrolling ? scrolling.scrollLeft : 0;
+      const nextQuery = state.query || '';
+      const queryChanged = lastRenderedQuery !== null && nextQuery !== lastRenderedQuery;
+      lastRenderedQuery = nextQuery;
+      if (queryInput.value !== nextQuery) {
+        queryInput.value = nextQuery;
+      }
+      try {
       resultsEl.innerHTML = '';
       summaryEl.textContent = '';
-      queryInput.value = state.query || '';
       const results = state.results || [];
 
       if (!state.projectDetected) {
@@ -330,6 +341,12 @@ export class PathSearchViewProvider implements vscode.WebviewViewProvider {
         parts.push(state.warningCount + ' warnings');
       }
       summaryEl.textContent = parts.join(' · ');
+      } finally {
+        if (scrolling) {
+          scrolling.scrollTop = queryChanged ? 0 : top;
+          scrolling.scrollLeft = queryChanged ? 0 : left;
+        }
+      }
     }
 
     vscode.postMessage({ type: 'ready' });

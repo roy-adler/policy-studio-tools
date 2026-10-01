@@ -4,6 +4,7 @@ import { buildCircuitIndex } from '../../src/features/circuitSearch/circuitIndex
 import { buildCircuitReferenceGraph } from '../../src/features/circuitGraph/buildCircuitReferenceGraph';
 import { filterGraph } from '../../src/features/circuitGraph/filterGraph';
 import { layoutCircuitGraph } from '../../src/features/circuitGraph/circuitGraphLayout';
+import { getCircuitGraphPanelHtml } from '../../src/features/circuitGraph/circuitGraphPanelHtml';
 import type { PolicyStudioProject } from '../../src/features/projectRegistry/types';
 
 const fixturesDir = path.join(__dirname, '..', 'fixtures', 'circuit-graph');
@@ -107,5 +108,12 @@ describe('layoutCircuitGraph', () => {
     expect(layout.positions.size).toBe(graph.nodes.length);
     expect(layout.width).toBeGreaterThan(0);
     expect(layout.height).toBeGreaterThan(0);
+  });
+});
+
+describe('circuit graph html', () => {
+  it('does not refit the canvas while a name filter is active', () => {
+    const html = getCircuitGraphPanelHtml('nonce');
+    expect(html).toContain('if (!data.searchQuery && nodeKey !== lastNodeKey)');
   });
 });

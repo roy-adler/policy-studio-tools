@@ -36,6 +36,7 @@ As an API Gateway developer, I want to open trace files and explore execution st
   - Errors and warnings distinguished from informational fields
   - Large body content collapsed by default with expand action
 - In-trace **search results** — matching nodes listed or filtered in the tree with match highlighting.
+- Expanding, collapsing, or selecting an entry keeps the tree pane’s scroll position. Selecting a different entry starts the detail pane at the top. Moving between search matches reveals that match without jumping the tree to the top.
 - Read-only guarantee — no write-back to the `.trc` file.
 - Loading progress for large files; cancellable parse if user closes the viewer.
 

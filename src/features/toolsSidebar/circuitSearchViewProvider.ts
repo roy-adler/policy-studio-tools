@@ -217,6 +217,7 @@ export class CircuitSearchViewProvider implements vscode.WebviewViewProvider, Ci
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     body {
+      overflow-anchor: none;
       font-family: var(--vscode-font-family);
       font-size: var(--vscode-font-size);
       color: var(--vscode-foreground);
@@ -280,6 +281,7 @@ export class CircuitSearchViewProvider implements vscode.WebviewViewProvider, Ci
     const resultsEl = document.getElementById('results');
     const summaryEl = document.getElementById('summary');
     let lastResults = [];
+    let lastRenderedQuery = null;
 
     queryInput.addEventListener('input', () => {
       vscode.postMessage({ type: 'search', query: queryInput.value });
@@ -301,6 +303,13 @@ export class CircuitSearchViewProvider implements vscode.WebviewViewProvider, Ci
     });
 
     function renderState(state) {
+      const scrolling = document.scrollingElement;
+      const top = scrolling ? scrolling.scrollTop : 0;
+      const left = scrolling ? scrolling.scrollLeft : 0;
+      const nextQuery = queryInput.value;
+      const queryChanged = lastRenderedQuery !== null && nextQuery !== lastRenderedQuery;
+      lastRenderedQuery = nextQuery;
+      try {
       resultsEl.innerHTML = '';
       summaryEl.textContent = '';
       lastResults = state.results || [];
@@ -397,6 +406,12 @@ export class CircuitSearchViewProvider implements vscode.WebviewViewProvider, Ci
         }
         parts.push(state.summary.durationMs + 'ms');
         summaryEl.textContent = parts.join(' · ');
+      }
+      } finally {
+        if (scrolling) {
+          scrolling.scrollTop = queryChanged ? 0 : top;
+          scrolling.scrollLeft = queryChanged ? 0 : left;
+        }
       }
     }
 

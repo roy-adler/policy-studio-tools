@@ -2,6 +2,7 @@ import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 import { getSharedProjectRegistryStore } from '../projectRegistry/projectRegistryService';
 import { renderCacheBrowserHtml } from './cachePanelHtml';
+import { searchCaches } from './searchCaches';
 import { loadCacheSession } from './loadCacheSession';
 import { shouldRevealCacheBrowserPanel } from './panelShowMode';
 import { resolveCacheBrowserProjects } from './resolveCacheBrowserProjects';
@@ -18,13 +19,15 @@ type IncomingMessage =
       selectionStart: number | null;
       selectionEnd: number | null;
       inventoryScrollTop: number;
+      detailScrollTop: number;
     }
-  | { type: 'select'; cacheId: string; inventoryScrollTop: number }
-  | { type: 'refresh'; inventoryScrollTop: number }
+  | { type: 'select'; cacheId: string; inventoryScrollTop: number; detailScrollTop: number }
+  | { type: 'refresh'; inventoryScrollTop: number; detailScrollTop: number }
   | {
       type: 'setInventoryScope';
       scope: CacheInventoryScope;
       inventoryScrollTop: number;
+      detailScrollTop: number;
     }
   | { type: 'openCache'; cacheId: string }
   | { type: 'openUsage'; cacheId: string; usageIndex: number };
@@ -40,6 +43,7 @@ export class CacheBrowserService {
   private searchSelectionStart: number | undefined;
   private searchSelectionEnd: number | undefined;
   private inventoryScrollTop = 0;
+  private detailScrollTop = 0;
   private nonce = '';
 
   constructor(private readonly context: vscode.ExtensionContext) {}
@@ -72,7 +76,7 @@ export class CacheBrowserService {
     this.reloadSession();
   }
 
-  private reloadSession(): void {
+  private reloadSession(preserveDetailScroll = false): void {
     const store = getSharedProjectRegistryStore();
     const projects = resolveCacheBrowserProjects(store, this.inventoryScope);
     this.session = loadCacheSession(projects, { inventoryScope: this.inventoryScope });
@@ -83,7 +87,7 @@ export class CacheBrowserService {
       this.selectedId = undefined;
     }
 
-    this.render();
+    this.render({ preserveDetailScroll: preserveDetailScroll && this.selectedStillVisible() });
   }
 
   private ensurePanel(mode: 'open' | 'reload'): void {
@@ -113,11 +117,15 @@ export class CacheBrowserService {
       this.searchSelectionStart = undefined;
       this.searchSelectionEnd = undefined;
       this.inventoryScrollTop = 0;
+      this.detailScrollTop = 0;
       this.nonce = '';
     });
   }
 
-  private render(restoreSearchFocus = false): void {
+  private render(options?: {
+    restoreSearchFocus?: boolean;
+    preserveDetailScroll?: boolean;
+  }): void {
     if (!this.panel || !this.session) {
       return;
     }
@@ -130,9 +138,25 @@ export class CacheBrowserService {
       searchSelectionStart: this.searchSelectionStart,
       searchSelectionEnd: this.searchSelectionEnd,
       inventoryScrollTop: this.inventoryScrollTop,
-      restoreSearchFocus,
+      detailScrollTop: options?.preserveDetailScroll ? this.detailScrollTop : undefined,
+      restoreSearchFocus: options?.restoreSearchFocus,
       inventoryScope: this.inventoryScope,
     });
+  }
+
+  private selectedStillVisible(): boolean {
+    if (!this.session || !this.selectedId) {
+      return false;
+    }
+    return searchCaches(this.session.caches, this.query).some(
+      (cache) => cacheId(cache) === this.selectedId,
+    );
+  }
+
+  private rememberDetailScroll(scrollTop: number): void {
+    if (typeof scrollTop === 'number' && Number.isFinite(scrollTop)) {
+      this.detailScrollTop = Math.max(0, Math.trunc(scrollTop));
+    }
   }
 
   private async handleMessage(message: IncomingMessage): Promise<void> {
@@ -148,21 +172,30 @@ export class CacheBrowserService {
         this.searchSelectionStart = message.selectionStart ?? message.query.length;
         this.searchSelectionEnd = message.selectionEnd ?? message.query.length;
         this.inventoryScrollTop = message.inventoryScrollTop;
-        this.render(true);
+        this.rememberDetailScroll(message.detailScrollTop);
+        this.render({
+          restoreSearchFocus: true,
+          preserveDetailScroll: this.selectedStillVisible(),
+        });
         break;
-      case 'select':
+      case 'select': {
+        const sameCache = message.cacheId === this.selectedId;
         this.selectedId = message.cacheId;
         this.inventoryScrollTop = message.inventoryScrollTop;
-        this.render();
+        this.rememberDetailScroll(message.detailScrollTop);
+        this.render({ preserveDetailScroll: sameCache });
         break;
+      }
       case 'refresh':
         this.inventoryScrollTop = message.inventoryScrollTop;
-        this.reloadSession();
+        this.rememberDetailScroll(message.detailScrollTop);
+        this.reloadSession(true);
         break;
       case 'setInventoryScope':
         this.inventoryScope = message.scope;
         this.inventoryScrollTop = message.inventoryScrollTop;
-        this.reloadSession();
+        this.rememberDetailScroll(message.detailScrollTop);
+        this.reloadSession(true);
         break;
       case 'openCache': {
         const selected = this.session.caches.find(

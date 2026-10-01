@@ -737,9 +737,19 @@ describe('cache panel html', () => {
     expect(html).toContain('selectionStart: search.selectionStart');
     expect(html).toContain('selectionEnd: search.selectionEnd');
     expect(html).toContain('inventoryScrollTop: inventory?.scrollTop ?? 0');
-    expect(html).toContain('search.focus()');
+    expect(html).toContain('detailScrollTop: detail?.scrollTop ?? 0');
+    expect(html).toContain('search.focus({ preventScroll: true })');
     expect(html).toContain('search.setSelectionRange(2, 4)');
     expect(html).toContain('inventory.scrollTop = 37');
+  });
+
+  it('restores detail scroll when the same cache stays selected', () => {
+    const session = loadCacheSession([yamlProject()]);
+    const html = renderCacheBrowserHtml(session, {
+      ...htmlOpts,
+      detailScrollTop: 64,
+    });
+    expect(html).toContain('detail.scrollTop = 64');
   });
 
   it('caps overflowing warning banners', () => {

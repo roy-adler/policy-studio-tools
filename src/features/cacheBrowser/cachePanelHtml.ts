@@ -173,7 +173,7 @@ function styles(): string {
       background: var(--vscode-inputValidation-warningBackground);
     }
     main { display: grid; grid-template-columns: minmax(220px, 34%) 1fr; flex: 1; min-height: 0; }
-    .inventory { overflow: auto; padding: 8px; border-right: 1px solid var(--vscode-panel-border); }
+    .inventory { overflow: auto; overflow-anchor: none; padding: 8px; border-right: 1px solid var(--vscode-panel-border); }
     .cache-group h2 { margin: 10px 6px 5px; font-size: 12px; text-transform: uppercase; opacity: 0.75; }
     .cache-row, .usage-row {
       display: flex;
@@ -191,7 +191,7 @@ function styles(): string {
     }
     .cache-name { font-weight: 600; }
     .cache-meta, .cache-project, .usage-file, .entity-type { opacity: 0.72; font-size: 11px; }
-    .detail-pane { overflow: auto; padding: 16px; }
+    .detail-pane { overflow: auto; overflow-anchor: none; padding: 16px; }
     .details h2 { margin-top: 0; }
     .details h3 { margin: 20px 0 8px; font-size: 13px; }
     table { width: 100%; border-collapse: collapse; }
@@ -217,6 +217,7 @@ export function renderCacheBrowserHtml(
     searchSelectionStart?: number;
     searchSelectionEnd?: number;
     inventoryScrollTop?: number;
+    detailScrollTop?: number;
     restoreSearchFocus?: boolean;
     inventoryScope?: CacheInventoryScope;
   },
@@ -247,12 +248,16 @@ export function renderCacheBrowserHtml(
       ? Math.max(selectionStart, Math.trunc(options.searchSelectionEnd))
       : selectionStart;
   const restoreSearch = options.restoreSearchFocus
-    ? `search.focus();
+    ? `search.focus({ preventScroll: true });
     search.setSelectionRange(${selectionStart}, ${selectionEnd});`
     : '';
   const restoreInventory =
     typeof options.inventoryScrollTop === 'number' && Number.isFinite(options.inventoryScrollTop)
       ? `inventory.scrollTop = ${Math.max(0, Math.trunc(options.inventoryScrollTop))};`
+      : '';
+  const restoreDetail =
+    typeof options.detailScrollTop === 'number' && Number.isFinite(options.detailScrollTop)
+      ? `if (detail) { detail.scrollTop = ${Math.max(0, Math.trunc(options.detailScrollTop))}; }`
       : '';
 
   const inventoryScope = options.inventoryScope ?? session.inventoryScope;
@@ -285,8 +290,10 @@ export function renderCacheBrowserHtml(
     const selectedCacheId = document.querySelector('main')?.getAttribute('data-selected-id') ?? '';
     const search = document.getElementById('search');
     const inventory = document.querySelector('.inventory');
+    const detail = document.querySelector('.detail-pane');
     ${restoreSearch}
     ${restoreInventory}
+    ${restoreDetail}
     let searchTimer;
     search?.addEventListener('input', () => {
       clearTimeout(searchTimer);
@@ -297,6 +304,7 @@ export function renderCacheBrowserHtml(
           selectionStart: search.selectionStart,
           selectionEnd: search.selectionEnd,
           inventoryScrollTop: inventory?.scrollTop ?? 0,
+          detailScrollTop: detail?.scrollTop ?? 0,
         });
       }, 300);
     });
@@ -306,11 +314,16 @@ export function renderCacheBrowserHtml(
           type: 'select',
           cacheId: row.getAttribute('data-id'),
           inventoryScrollTop: inventory?.scrollTop ?? 0,
+          detailScrollTop: detail?.scrollTop ?? 0,
         });
       });
     });
     document.getElementById('refresh')?.addEventListener('click', () => {
-      vscode.postMessage({ type: 'refresh', inventoryScrollTop: inventory?.scrollTop ?? 0 });
+      vscode.postMessage({
+        type: 'refresh',
+        inventoryScrollTop: inventory?.scrollTop ?? 0,
+        detailScrollTop: detail?.scrollTop ?? 0,
+      });
     });
     document.getElementById('allProjects')?.addEventListener('change', (event) => {
       const target = event.target;
@@ -318,6 +331,7 @@ export function renderCacheBrowserHtml(
         type: 'setInventoryScope',
         scope: target instanceof HTMLInputElement && target.checked ? 'allProjects' : 'inScope',
         inventoryScrollTop: inventory?.scrollTop ?? 0,
+        detailScrollTop: detail?.scrollTop ?? 0,
       });
     });
     document.getElementById('openCache')?.addEventListener('click', () => {

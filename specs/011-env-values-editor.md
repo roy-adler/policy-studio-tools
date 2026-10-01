@@ -75,6 +75,7 @@ As a Policy Studio developer, I want to see where a selected ENV key is referenc
 - Missing cells show a warning affordance and **Create missing** (inserts `""` for scalar leaves, or `[]` when any other stage has a list at that path).
 - **Missing highlight:** Leaves missing in any stage are marked in **yellow** in the tree; ancestor branches that contain a missing descendant also show a yellow cue.
 - **Tree persistence:** Save, Reload, and in-place re-renders keep the **selected leaf**, **expanded branch paths**, and **tree scroll position**. Expansion resets only when switching to a different ENV root. Selecting a leaf is an in-place update (selected class + detail pane), not a full-panel re-render.
+- **Detail position:** Re-rendering after a value edit, list edit, Create missing, or Save keeps the detail pane’s scroll position and the focused input, including its caret. Adding a list item while the detail pane is scrolled to the end stays at the end. Clicking an input does not move the detail pane. Selecting a different leaf, or switching ENV root, starts the detail pane at the top.
 - **Search/filter:** A search box above the tree filters to leaves whose **key path** (variable / segment / filename-like segment) **or** any stage **value** (scalar or list item) matches the query (case-insensitive substring). Matching leaves and their ancestors remain; clear query restores the full tree. Filtering runs in the webview (no full-panel re-render on each keystroke).
 - **Smart auto-expand:** When a branch is opened (or the filtered tree leaves a single chain), keep expanding while a node has **exactly one child**, until a **leaf** or a node with **2+ children**.
 - **Add key:** User supplies a key path (relative to current node or absolute). Key is created in **all** discovered stages (empty string initially).
@@ -141,6 +142,7 @@ Show where the selected ENV leaf is referenced in sibling Policy Studio project 
 - [ ] Certificate Store is not edited in v1.
 - [ ] Unit tests cover discovery, merge (missing vs empty), mutations, and write-back using fixtures under `test/fixtures/env-values-editor/`.
 - [ ] Tool appears in the Tools sidebar and uses project scope APIs from `000`.
+- [ ] Editing a value, editing a list, or adding a list item keeps the detail pane where it was. Clicking a field does not jump the pane to the top.
 - [ ] Selecting an ENV leaf shows a usage count badge and either a clickable “Used in” list or “Not used in any policy.”
 - [ ] Usages come from the ENV key path appearing in sibling policy YAML/XML text (braces optional); click opens the file at that range.
 - [ ] Unused keys show a red `0 usages` badge. Reload rescans usages.

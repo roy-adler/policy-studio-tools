@@ -44,6 +44,7 @@ As a Policy Studio developer, I want to search all circuits in my project by nam
 
 - Activate only when `policyStudio.projectDetected` is true.
 - On command invocation, prompt the user for a search query (or focus an input in a dedicated search view if one exists).
+- Replacing the result list keeps the view’s scroll position when the query is unchanged. A new query starts at the top.
 - Resolve target projects via `getProjectsInScope()`; search each project index and merge results.
 - Build or refresh a **per-project circuit index** that maps:
   - Circuit name → definition location(s)

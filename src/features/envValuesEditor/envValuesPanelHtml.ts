@@ -22,10 +22,23 @@ function escapeHtml(value: string): string {
     .replace(/"/g, '&quot;');
 }
 
+export interface EnvFocusField {
+  kind: 'value' | 'list' | 'search';
+  path?: string;
+  stageId?: string;
+  index?: number;
+  selectionStart?: number;
+  selectionEnd?: number;
+}
+
 export interface EnvValuesPanelViewState {
   expandedPaths?: Iterable<string>;
   searchQuery?: string;
   treeScrollTop?: number;
+  detailScrollTop?: number;
+  detailScrollLeft?: number;
+  scrollDetailToEnd?: boolean;
+  focusField?: EnvFocusField;
   usages?: EnvAttributeUsage[];
   usageWarnings?: string[];
 }
@@ -115,11 +128,13 @@ function getStyles(): string {
     #tree {
       flex: 1;
       overflow: auto;
+      overflow-anchor: none;
       padding: 4px 8px 8px;
     }
     #detail {
       flex: 1;
       overflow: auto;
+      overflow-anchor: none;
       padding: 12px 16px;
     }
     ul.tree, ul.tree ul { list-style: none; margin: 0; padding-left: 14px; }
@@ -537,6 +552,94 @@ function renderBanner(model: EnvValuesModel, usageWarnings: string[] = []): stri
   return parts.join('');
 }
 
+function detailViewScript(viewState: EnvValuesPanelViewState): string {
+  const scrollTop =
+    typeof viewState.detailScrollTop === 'number' && Number.isFinite(viewState.detailScrollTop)
+      ? Math.max(0, Math.trunc(viewState.detailScrollTop))
+      : undefined;
+  const scrollLeft =
+    typeof viewState.detailScrollLeft === 'number' && Number.isFinite(viewState.detailScrollLeft)
+      ? Math.max(0, Math.trunc(viewState.detailScrollLeft))
+      : 0;
+  const focus = viewState.focusField;
+  const selectionStart = Number.isInteger(focus?.selectionStart) ? focus?.selectionStart : undefined;
+  const selectionEnd = Number.isInteger(focus?.selectionEnd) ? focus?.selectionEnd : undefined;
+  const applyScroll = viewState.scrollDetailToEnd
+    ? `if (detail) {
+        detail.scrollTop = detail.scrollHeight;
+        detail.scrollLeft = ${scrollLeft};
+      }`
+    : scrollTop !== undefined
+      ? `if (detail) {
+          detail.scrollTop = ${scrollTop};
+          detail.scrollLeft = ${scrollLeft};
+        }`
+      : '';
+  const focusScript = focus
+    ? `const focusInput = Array.from(document.querySelectorAll('input.value-input, input.list-item-input, #tree-search')).find((input) => {
+        if (${JSON.stringify(focus.kind)} === 'search') {
+          return input.id === 'tree-search';
+        }
+        if (input.getAttribute('data-path') !== ${JSON.stringify(focus.path ?? '')}) return false;
+        if (input.getAttribute('data-stage') !== ${JSON.stringify(focus.stageId ?? '')}) return false;
+        if (${JSON.stringify(focus.kind)} === 'list') {
+          return input.getAttribute('data-index') === ${JSON.stringify(
+            focus.index === undefined ? '' : String(focus.index),
+          )};
+        }
+        return input.classList.contains('value-input');
+      });
+      if (focusInput instanceof HTMLInputElement) {
+        focusInput.focus({ preventScroll: true });
+        ${
+          selectionStart !== undefined && selectionEnd !== undefined
+            ? `focusInput.setSelectionRange(${selectionStart}, ${selectionEnd});`
+            : ''
+        }
+        applyDetailScroll();
+      }`
+    : '';
+
+  return `
+    const detail = document.getElementById('detail');
+    const applyDetailScroll = () => {
+      ${applyScroll}
+    };
+    applyDetailScroll();
+    requestAnimationFrame(() => {
+      applyDetailScroll();
+      requestAnimationFrame(applyDetailScroll);
+    });
+    let savedDetailScroll = detail ? detail.scrollTop : 0;
+    let savedDetailScrollLeft = detail ? detail.scrollLeft : 0;
+    let suppressDetailScroll = false;
+    const keepDetailScroll = () => {
+      if (!detail) return;
+      detail.scrollTop = savedDetailScroll;
+      detail.scrollLeft = savedDetailScrollLeft;
+    };
+    detail?.addEventListener('pointerdown', (event) => {
+      const target = event.target;
+      if (!(target instanceof Element) || !target.closest('input')) return;
+      suppressDetailScroll = true;
+      savedDetailScroll = detail.scrollTop;
+      savedDetailScrollLeft = detail.scrollLeft;
+    }, true);
+    detail?.addEventListener('focusin', () => {
+      if (!suppressDetailScroll) return;
+      keepDetailScroll();
+      requestAnimationFrame(() => {
+        keepDetailScroll();
+        requestAnimationFrame(() => {
+          keepDetailScroll();
+          suppressDetailScroll = false;
+        });
+      });
+    });
+    ${focusScript}
+  `;
+}
+
 function ancestorsOfPath(path: string): string[] {
   const parts = path.split('.');
   const ancestors: string[] = [];
@@ -611,12 +714,44 @@ export function renderEnvValuesEditorHtml(
       const treeEl = document.getElementById('tree');
       return treeEl ? treeEl.scrollTop : 0;
     }
+    function detailScrollPayload() {
+      const detailEl = document.getElementById('detail');
+      if (!detailEl) {
+        return { detailScrollTop: 0, detailScrollLeft: 0, detailAtBottom: false };
+      }
+      return {
+        detailScrollTop: detailEl.scrollTop,
+        detailScrollLeft: detailEl.scrollLeft,
+        detailAtBottom: detailEl.scrollTop + detailEl.clientHeight >= detailEl.scrollHeight - 4,
+      };
+    }
+    function readFocusField() {
+      const active = document.activeElement;
+      if (!(active instanceof HTMLInputElement)) return undefined;
+      const selection = { selectionStart: active.selectionStart, selectionEnd: active.selectionEnd };
+      if (active.id === 'tree-search') {
+        return Object.assign({ kind: 'search' }, selection);
+      }
+      if (active.classList.contains('value-input') || active.classList.contains('list-item-input')) {
+        return Object.assign({
+          kind: active.classList.contains('list-item-input') ? 'list' : 'value',
+          path: active.dataset.path,
+          stageId: active.dataset.stage,
+          index: active.classList.contains('list-item-input') ? Number(active.dataset.index) : undefined,
+        }, selection);
+      }
+      return undefined;
+    }
     const vscode = {
       postMessage(message) {
-        vscodeApi.postMessage(Object.assign({}, message, { treeScrollTop: treeScrollTop() }));
+        const focusField = readFocusField();
+        const payload = Object.assign({}, message, detailScrollPayload(), { treeScrollTop: treeScrollTop() });
+        if (focusField && focusField.kind) payload.focusField = focusField;
+        vscodeApi.postMessage(payload);
       },
     };
     ${restoreTreeScroll}
+    ${detailViewScript(viewState)}
 
     function autoExpandSingletons(detailsEl) {
       let current = detailsEl;
@@ -743,8 +878,8 @@ export function renderEnvValuesEditorHtml(
       return Array.from(editor.querySelectorAll('.list-item-input')).map((input) => input.value);
     }
 
-    function postList(path, stageId, values) {
-      vscode.postMessage({ type: 'setList', path, stageId, values });
+    function postList(path, stageId, values, pinDetailToEnd) {
+      vscode.postMessage({ type: 'setList', path, stageId, values, pinDetailToEnd: Boolean(pinDetailToEnd) });
     }
 
     const detailPane = document.getElementById('detail');
@@ -815,7 +950,11 @@ export function renderEnvValuesEditorHtml(
           }
           const values = collectListValues(editor);
           values.push('');
-          postList(editor.dataset.path, editor.dataset.stage, values);
+          const detailEl = document.getElementById('detail');
+          const atBottom = detailEl
+            ? detailEl.scrollTop + detailEl.clientHeight >= detailEl.scrollHeight - 4
+            : false;
+          postList(editor.dataset.path, editor.dataset.stage, values, atBottom);
           return;
         }
         if (el.classList.contains('create-missing')) {

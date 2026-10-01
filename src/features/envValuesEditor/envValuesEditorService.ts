@@ -16,6 +16,7 @@ import {
   getEnvValuesPanelShellHtml,
   renderEnvValuesDetailHtml,
   renderEnvValuesEditorHtml,
+  type EnvFocusField,
 } from './envValuesPanelHtml';
 import { collectEnvLeafPaths, scanEnvAttributeUsages } from './findEnvAttributeUsages';
 import { writeDirtyEnvDocuments } from './envValuesWriter';
@@ -44,6 +45,11 @@ const REMOVE_ACTION = 'Remove';
 
 type IncomingMessage = {
   treeScrollTop?: number;
+  detailScrollTop?: number;
+  detailScrollLeft?: number;
+  detailAtBottom?: boolean;
+  pinDetailToEnd?: boolean;
+  focusField?: EnvFocusField;
 } & (
   | { type: 'ready' }
   | { type: 'select'; path: string }
@@ -78,6 +84,8 @@ export class EnvValuesEditorService {
   private expandedPaths = new Set<string>();
   private searchQuery = '';
   private treeScrollTop = 0;
+  private detailScrollTop = 0;
+  private detailScrollLeft = 0;
   private usageScan: EnvUsageScan = { byKey: {}, warnings: [], projectCount: 0 };
 
   constructor(private readonly context: vscode.ExtensionContext) {}
@@ -289,6 +297,8 @@ export class EnvValuesEditorService {
         this.expandedPaths.clear();
         this.searchQuery = '';
         this.treeScrollTop = 0;
+        this.detailScrollTop = 0;
+        this.detailScrollLeft = 0;
       } else if (this.selectedPath && !findTreeNode(this.model.tree, this.selectedPath)) {
         this.selectedPath = undefined;
       }
@@ -329,7 +339,7 @@ export class EnvValuesEditorService {
     });
   }
 
-  private render(): void {
+  private render(view?: { focusField?: EnvFocusField; scrollDetailToEnd?: boolean }): void {
     if (!this.panel || !this.model) {
       return;
     }
@@ -343,6 +353,10 @@ export class EnvValuesEditorService {
         expandedPaths: this.expandedPaths,
         searchQuery: this.searchQuery,
         treeScrollTop: this.treeScrollTop,
+        detailScrollTop: this.detailScrollTop,
+        detailScrollLeft: this.detailScrollLeft,
+        scrollDetailToEnd: view?.scrollDetailToEnd,
+        focusField: view?.focusField,
         usages: this.usagesForSelection(this.selectedPath),
         usageWarnings: this.usageScan.warnings,
       },
@@ -358,10 +372,20 @@ export class EnvValuesEditorService {
     return this.usageScan.byKey[selectedPath] ?? [];
   }
 
-  private async handleMessage(message: IncomingMessage): Promise<void> {
+  private rememberViewPosition(message: IncomingMessage): void {
     if (typeof message.treeScrollTop === 'number' && Number.isFinite(message.treeScrollTop)) {
       this.treeScrollTop = Math.max(0, Math.trunc(message.treeScrollTop));
     }
+    if (typeof message.detailScrollTop === 'number' && Number.isFinite(message.detailScrollTop)) {
+      this.detailScrollTop = Math.max(0, Math.trunc(message.detailScrollTop));
+    }
+    if (typeof message.detailScrollLeft === 'number' && Number.isFinite(message.detailScrollLeft)) {
+      this.detailScrollLeft = Math.max(0, Math.trunc(message.detailScrollLeft));
+    }
+  }
+
+  private async handleMessage(message: IncomingMessage): Promise<void> {
+    this.rememberViewPosition(message);
 
     if (!this.model && message.type !== 'switchEnv' && message.type !== 'pickEnv') {
       return;
@@ -375,6 +399,8 @@ export class EnvValuesEditorService {
         if (!this.model) {
           return;
         }
+        this.detailScrollTop = 0;
+        this.detailScrollLeft = 0;
         this.selectedPath = message.path;
         // Update the detail pane in place. Replacing webview.html resets tree scroll.
         void this.panel?.webview.postMessage({
@@ -399,21 +425,24 @@ export class EnvValuesEditorService {
           return;
         }
         this.model = setLeafValue(this.model, message.path, message.stageId, message.value);
-        this.render();
+        this.render({ focusField: focusFieldFromMessage(message) });
         break;
       case 'setList':
         if (!this.model) {
           return;
         }
         this.model = setListValue(this.model, message.path, message.stageId, message.values);
-        this.render();
+        this.render({
+          focusField: focusFieldFromMessage(message),
+          scrollDetailToEnd: message.pinDetailToEnd === true,
+        });
         break;
       case 'createMissing':
         if (!this.model) {
           return;
         }
         this.model = createMissing(this.model, message.path, message.stageId);
-        this.render();
+        this.render({ focusField: focusFieldFromMessage(message) });
         break;
       case 'addKey':
         await this.handleAddKey();
@@ -509,6 +538,8 @@ export class EnvValuesEditorService {
 
     this.model = nextModel;
     this.selectedPath = targetPath;
+    this.detailScrollTop = 0;
+    this.detailScrollLeft = 0;
     this.render();
   }
 
@@ -531,6 +562,8 @@ export class EnvValuesEditorService {
 
     this.model = removeKey(this.model, targetPath);
     this.selectedPath = undefined;
+    this.detailScrollTop = 0;
+    this.detailScrollLeft = 0;
     this.render();
   }
 
@@ -601,6 +634,29 @@ export class EnvValuesEditorService {
       void vscode.window.showErrorMessage(`Could not open policy usage: ${message}`);
     }
   }
+}
+
+function focusFieldFromMessage(message: IncomingMessage): EnvFocusField | undefined {
+  const field = message.focusField;
+  if (!field || (field.kind !== 'value' && field.kind !== 'list' && field.kind !== 'search')) {
+    return undefined;
+  }
+  if (field.kind !== 'search' && (typeof field.path !== 'string' || typeof field.stageId !== 'string')) {
+    return undefined;
+  }
+  const focus: EnvFocusField = {
+    kind: field.kind,
+    path: field.path,
+    stageId: field.stageId,
+  };
+  if (field.kind === 'list' && Number.isInteger(field.index) && (field.index ?? -1) >= 0) {
+    focus.index = field.index;
+  }
+  if (Number.isInteger(field.selectionStart) && Number.isInteger(field.selectionEnd)) {
+    focus.selectionStart = field.selectionStart;
+    focus.selectionEnd = field.selectionEnd;
+  }
+  return focus;
 }
 
 function formatCandidateLabel(candidate: EnvRootCandidate): string {

@@ -1082,6 +1082,38 @@ describe('env tree view helpers', () => {
     expect(html).toContain('tree.scrollTop = 37');
     expect(html).toContain('treeScrollTop: treeScrollTop()');
   });
+
+  it('keeps the detail pane position and focused field across a re-render', () => {
+    const model = loadEnvValuesSession(envRoot);
+    const html = renderEnvValuesEditorHtml(model, 'A.AA', 'sample', {
+      detailScrollTop: 180,
+      detailScrollLeft: 12,
+      focusField: {
+        kind: 'value',
+        path: 'A.AA',
+        stageId: 'DEVL',
+        selectionStart: 1,
+        selectionEnd: 3,
+      },
+    });
+    expect(html).toContain('detail.scrollTop = 180');
+    expect(html).toContain('detail.scrollLeft = 12');
+    expect(html).toContain('focus({ preventScroll: true })');
+    expect(html).toContain('setSelectionRange(1, 3)');
+    expect(html).toContain('detailScrollTop: detailEl.scrollTop');
+    expect(html).toContain('suppressDetailScroll');
+    expect(html).toContain('pinDetailToEnd');
+  });
+
+  it('pins the detail pane to the end when a list item is added from the bottom', () => {
+    const model = loadEnvValuesSession(envRoot);
+    const html = renderEnvValuesEditorHtml(model, 'A.AA', 'sample', {
+      detailScrollTop: 180,
+      scrollDetailToEnd: true,
+    });
+    expect(html).toContain('detail.scrollTop = detail.scrollHeight');
+    expect(html).not.toContain('detail.scrollTop = 180');
+  });
 });
 
 describe('ENV key usage list HTML', () => {

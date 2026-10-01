@@ -340,7 +340,7 @@ export function getCircuitGraphPanelHtml(nonce: string): string {
       }
 
       const nodeKey = data.nodes.map((n) => n.id).sort().join('|');
-      if (nodeKey !== lastNodeKey) {
+      if (!data.searchQuery && nodeKey !== lastNodeKey) {
         lastNodeKey = nodeKey;
         fitToScreen();
       }

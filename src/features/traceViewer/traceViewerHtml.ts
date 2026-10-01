@@ -76,6 +76,7 @@ export function getTraceViewerHtml(nonce: string): string {
     }
     #tree-panel, #detail-panel {
       overflow: auto;
+      overflow-anchor: none;
       min-height: 0;
     }
     #tree-panel {
@@ -310,11 +311,22 @@ export function getTraceViewerHtml(nonce: string): string {
         .map(({ entry, path }) => ({ entryId: entry.id, path }));
     }
 
-    function renderTree() {
+    function renderTree(revealSelected) {
+      const panel = document.getElementById('tree-panel');
+      const top = panel ? panel.scrollTop : 0;
+      const left = panel ? panel.scrollLeft : 0;
       const entries = state.filteredEntries;
       els.empty.style.display = entries.length ? 'none' : 'block';
       els.tree.innerHTML = entries.map((entry) => renderNode(entry, 0)).join('');
       bindTreeEvents();
+      if (panel) {
+        panel.scrollTop = top;
+        panel.scrollLeft = left;
+        if (revealSelected && state.selectedId) {
+          const row = panel.querySelector('.tree-row.selected');
+          if (row) row.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        }
+      }
     }
 
     function renderNode(entry, depth) {
@@ -396,6 +408,10 @@ export function getTraceViewerHtml(nonce: string): string {
     }
 
     function renderDetail(entry) {
+      const panel = document.getElementById('detail-panel');
+      const sameEntry = panel && panel.getAttribute('data-entry') === entry.id;
+      const top = sameEntry && panel ? panel.scrollTop : 0;
+      const left = sameEntry && panel ? panel.scrollLeft : 0;
       els.detailEmpty.hidden = true;
       els.detail.hidden = false;
       const query = state.searchQuery;
@@ -414,6 +430,11 @@ export function getTraceViewerHtml(nonce: string): string {
         renderFieldList('Attributes', entry.attributes, query),
       ];
       els.detail.innerHTML = parts.filter(Boolean).join('');
+      if (panel) {
+        panel.setAttribute('data-entry', entry.id);
+        panel.scrollTop = top;
+        panel.scrollLeft = left;
+      }
     }
 
     function applySearch(query) {
@@ -430,7 +451,7 @@ export function getTraceViewerHtml(nonce: string): string {
           }
         }
       }
-      renderTree();
+      renderTree(true);
       const selected = state.selectedId ? findEntryById(state.document.entries, state.selectedId) : null;
       if (selected) renderDetail(selected);
       else {
@@ -460,7 +481,7 @@ export function getTraceViewerHtml(nonce: string): string {
         const ancestor = findEntryByPath(state.document.entries, match.path.slice(0, i));
         if (ancestor) state.expanded.add(ancestor.id);
       }
-      renderTree();
+      renderTree(true);
       const entry = findEntryById(state.document.entries, match.entryId);
       if (entry) renderDetail(entry);
       els.status.textContent = 'Match ' + (state.matchIndex + 1) + ' of ' + state.matches.length;

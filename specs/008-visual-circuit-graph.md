@@ -28,7 +28,7 @@ As a Policy Studio developer, I want to see a graph of circuits and how they cal
   - **Missing references** — edge or stub node styled as broken when reference target has no definition in project
   - **Circular references** — cycles highlighted (edge colour, badge, or cycle list panel)
 - **Side panel or legend** explaining colours and listing detected cycles and missing refs.
-- **Filter/search state:** only matching nodes and their connected neighbours shown when filter active (configurable depth).
+- **Filter/search state:** only matching nodes and their connected neighbours shown when filter active (configurable depth). Filtering does not reset zoom or pan. Fit to screen runs on the first graph and when the unfiltered circuit set changes, and when the user clicks Fit to screen.
 - **Node click action:** invokes `jumpToCircuit` (`003-jump-to-circuit.md`) for the circuit definition.
 
 ## Behaviour

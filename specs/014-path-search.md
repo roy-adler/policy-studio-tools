@@ -54,6 +54,7 @@ Each inventory entry includes at least: `uriPrefix`, `projectId`, `projectDispla
 - Missing or blank `uriprefix`: skip; may record a warning.
 - Duplicate prefixes across projects: one row per file; project name disambiguates.
 - Selecting **Go to circuit** must not replace the primary open-YAML behaviour of a normal click.
+- Replacing the result list keeps the view’s scroll position when the query is unchanged. A new query starts at the top. Echoing the same query from the host does not move the search caret.
 
 ## Edge Cases
 
