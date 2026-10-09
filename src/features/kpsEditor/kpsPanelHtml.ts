@@ -307,15 +307,27 @@ function getStyles(): string {
       opacity: 0.5;
       background-color: var(--vscode-list-inactiveSelectionBackground, #338eff33);
     }
-    .drag-handle-header::before {
-      content: "⋮⋮";
-      display: block;
-    }
     .drag-handle {
-      cursor: grab;
+      width: 24px;
+      text-align: center;
+      padding: 4px 2px;
+      user-select: none;
     }
-    .drag-handle:active {
-      cursor: grabbing;
+    .drag-grip {
+      display: inline-block;
+      cursor: grab;
+      font-size: 14px;
+      line-height: 1;
+      color: var(--vscode-charts-gray, #6e7681);
+      letter-spacing: -2px;
+    }
+    .drag-grip:hover { color: var(--vscode-foreground); }
+    .drag-grip:active { cursor: grabbing; }
+    table.grid tbody tr.drag-over-top td {
+      box-shadow: inset 0 2px 0 0 var(--vscode-focusBorder, #007fd4);
+    }
+    table.grid tbody tr.drag-over-bottom td {
+      box-shadow: inset 0 -2px 0 0 var(--vscode-focusBorder, #007fd4);
     }
   </style>`;
 }
@@ -343,6 +355,7 @@ function renderStageBody(
 
   const schemaSet = new Set(table.schemaColumns);
   const header =
+    '<th class="drag-handle-header" style="width:24px;text-align:center;"></th>' +
     table.columns
       .map((column) => {
         const unexpected = schemaSet.size > 0 && !schemaSet.has(column);
@@ -350,7 +363,7 @@ function renderStageBody(
         const warning = unexpected ? ' data-warning="Not in Type Group"' : '';
         return `<th${cls}${warning}>${escapeHtml(column)}</th>`;
       })
-      .join('') + '<th class="drag-handle-header" style="width:24px;text-align:center;"></th>';
+      .join('') + '<th></th>';
   const rows = stage.rows
     .map((row, rowIndex) => {
       const cells = table.columns
@@ -369,7 +382,7 @@ function renderStageBody(
           return `<td${warnClass}${warning}><input data-row="${rowIndex}" data-column="${escapeHtml(column)}" value="${escapeHtml(scalarToInputValue(cell.value))}" /></td>`;
         })
         .join('');
-      return `<tr data-row-index="${rowIndex}" class="draggable-row"><td class="drag-handle" style="cursor:grab;text-align:center;font-size:14px;color:var(--vscode-charts-gray, #6e7681);" title="Drag to reorder">⋮⋮</td>${cells}<td class="row-actions"><button class="remove-row" data-row="${rowIndex}">−</button></td></tr>`;
+      return `<tr data-row-index="${rowIndex}" class="draggable-row"><td class="drag-handle"><span class="drag-grip" draggable="true" data-row-index="${rowIndex}" title="Drag to reorder">⋮⋮</span></td>${cells}<td class="row-actions"><button class="remove-row" data-row="${rowIndex}">−</button></td></tr>`;
     })
     .join('');
 
@@ -447,71 +460,113 @@ function gridViewScript(options: {
     const gridTable = document.querySelector('table.grid');
     let draggedRow = null;
     let dragOverRow = null;
+    let dragGhost = null;
 
     function bindDragEvents() {
-      document.querySelectorAll('.draggable-row').forEach(row => {
-        row.addEventListener('dragstart', handleDragStart);
-        row.addEventListener('dragover', handleDragOver);
-        row.addEventListener('dragleave', handleDragLeave);
-        row.addEventListener('drop', handleDrop);
-        row.addEventListener('dragend', handleDragEnd);
+      document.querySelectorAll('.drag-grip').forEach((grip) => {
+        if (grip.dataset.dragBound === 'true') return;
+        grip.dataset.dragBound = 'true';
+        grip.addEventListener('dragstart', handleDragStart);
       });
+      document.querySelectorAll('.draggable-row').forEach(row => {
+        if (row.dataset.dragBound === 'true') return;
+        row.dataset.dragBound = 'true';
+        row.addEventListener('dragover', handleDragOver);
+        row.addEventListener('drop', handleDrop);
+      });
+      const tbody = document.querySelector('table.grid tbody');
+      if (tbody && tbody.dataset.dragEndBound !== 'true') {
+        tbody.dataset.dragEndBound = 'true';
+        tbody.addEventListener('dragend', handleDragEnd);
+      }
     }
 
     function handleDragStart(event) {
-      draggedRow = event.currentTarget;
+      const grip = event.currentTarget;
+      draggedRow = grip instanceof Element ? grip.closest('.draggable-row') : null;
+      if (!draggedRow) {
+        event.preventDefault();
+        return;
+      }
       event.dataTransfer.effectAllowed = 'move';
       event.dataTransfer.setData('text/plain', draggedRow.getAttribute('data-row-index'));
-      setTimeout(() => draggedRow.classList.add('dragging'), 0);
+      // Use the full row as the drag ghost, not just the grip.
+      const ghost = draggedRow.cloneNode(true);
+      ghost.style.width = draggedRow.offsetWidth + 'px';
+      ghost.style.opacity = '0.8';
+      ghost.style.position = 'absolute';
+      ghost.style.top = '-9999px';
+      ghost.style.left = '-9999px';
+      ghost.style.pointerEvents = 'none';
+      document.body.appendChild(ghost);
+      dragGhost = ghost;
+      event.dataTransfer.setDragImage(ghost, 12, Math.min(16, draggedRow.offsetHeight / 2));
+      draggedRow.classList.add('dragging');
+    }
+
+    function clearDragIndicators() {
+      document.querySelectorAll('.drag-over-top, .drag-over-bottom').forEach((row) => {
+        row.classList.remove('drag-over-top', 'drag-over-bottom');
+      });
     }
 
     function handleDragOver(event) {
       event.preventDefault();
       event.dataTransfer.dropEffect = 'move';
-      
-      const targetRow = event.currentTarget;
-      if (targetRow !== draggedRow && targetRow.classList.contains('draggable-row')) {
-        dragOverRow = targetRow;
-        const rowRect = targetRow.getBoundingClientRect();
-        const mouseY = event.clientY;
-        const midpoint = rowRect.top + rowRect.height / 2;
-        
-        if (mouseY > midpoint) {
-          targetRow.parentNode?.insertBefore(draggedRow, targetRow.nextSibling);
-        } else {
-          targetRow.parentNode?.insertBefore(draggedRow, targetRow);
-        }
-      }
-    }
 
-    function handleDragLeave(event) {
-      if (event.currentTarget === dragOverRow) {
-        dragOverRow = null;
+      const targetRow = event.target instanceof Element ? event.target.closest('.draggable-row') : null;
+      clearDragIndicators();
+      if (!targetRow || targetRow === draggedRow) {
+        return;
       }
+      dragOverRow = targetRow;
+      const rect = targetRow.getBoundingClientRect();
+      const before = event.clientY < rect.top + rect.height / 2;
+      targetRow.classList.add(before ? 'drag-over-top' : 'drag-over-bottom');
     }
 
     function handleDrop(event) {
       event.preventDefault();
-     dragOverRow = null;
-      
-      if (draggedRow) {
-        const fromIndex = parseInt(draggedRow.getAttribute('data-row-index') || '-1', 10);
-        const rows = Array.from(document.querySelectorAll('.draggable-row'));
-        const toIndex = rows.indexOf(draggedRow);
-        
-        if (fromIndex !== -1 && toIndex !== -1 && fromIndex !== toIndex) {
-          vscode.postMessage({
-            type: 'moveRow',
-            tableName,
-            target: initialTarget,
-            fromRowIndex: fromIndex,
-            toRowIndex: toIndex
-          });
-        }
+      clearDragIndicators();
+      dragOverRow = null;
+
+      if (!draggedRow) {
+        return;
       }
+      const fromIndex = parseInt(draggedRow.getAttribute('data-row-index') || '-1', 10);
+      const targetRow = event.target instanceof Element ? event.target.closest('.draggable-row') : null;
+      if (fromIndex === -1 || !targetRow || targetRow === draggedRow) {
+        return;
+      }
+      const targetIndex = parseInt(targetRow.getAttribute('data-row-index') || '-1', 10);
+      if (targetIndex === -1) {
+        return;
+      }
+      const rect = targetRow.getBoundingClientRect();
+      const dropAfter = event.clientY >= rect.top + rect.height / 2;
+      let toIndex = dropAfter ? targetIndex + 1 : targetIndex;
+      // Adjust for the source row being removed before insertion.
+      if (fromIndex < toIndex) {
+        toIndex -= 1;
+      }
+      if (toIndex === fromIndex) {
+        return;
+      }
+      vscode.postMessage({
+        type: 'moveRow',
+        tableName,
+        target: activeTarget,
+        fromRowIndex: fromIndex,
+        toRowIndex: toIndex
+      });
     }
 
     function handleDragEnd(event) {
+      clearDragIndicators();
+      if (dragGhost) {
+        dragGhost.remove();
+        dragGhost = null;
+      }
       draggedRow = null;
       dragOverRow = null;
       document.querySelectorAll('.draggable-row').forEach(row => row.classList.remove('dragging'));

@@ -495,6 +495,23 @@ describe('kps panel html', () => {
     expect(html).toContain('>Type Group<');
   });
 
+  it('renders draggable row grips wired to the moveRow message', () => {
+    const session = loadKpsSession(kpsRoot);
+    const html = renderKpsEditorHtml(session, {
+      cspSource: 'https://example',
+      tableName: 'T_CC_Sample_WebServices.json',
+      stageId: 'DEVL',
+      kpsLabel: 'sample',
+      nonce: 'testnonce',
+    });
+    // A grip must be draggable=true, otherwise the browser never fires dragstart.
+    expect(html).toMatch(/class="drag-grip" draggable="true"/);
+    expect(html).toContain('data-row-index="0"');
+    expect(html).toContain("type: 'moveRow'");
+    expect(html).toContain('fromRowIndex');
+    expect(html).toContain('toRowIndex');
+  });
+
   it('renders a list cell as JSON array text', () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'kps-list-html-'));
     const { kpsRoot: tagsKps } = writeTagsBundle(tmp, 'java.lang.String', [
