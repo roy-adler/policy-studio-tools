@@ -14,6 +14,7 @@ import {
   addRow,
   createMissing,
   isSessionDirty,
+  moveRow,
   removeRow,
   setCell,
 } from './kpsTableMutations';
@@ -58,6 +59,7 @@ type IncomingMessage = {
     }
   | { type: 'addRow'; tableName: string; target: KpsStageTarget }
   | { type: 'removeRow'; tableName: string; target: KpsStageTarget; rowIndex: number }
+  | { type: 'moveRow'; tableName: string; target: KpsStageTarget; fromRowIndex: number; toRowIndex: number }
   | { type: 'createMissing'; tableName: string; stageId: string }
   | { type: 'save' }
   | { type: 'reload' }
@@ -475,6 +477,9 @@ export class KpsEditorService {
       case 'removeRow':
         await this.handleRemoveRow(message.tableName, message.target, message.rowIndex);
         break;
+      case 'moveRow':
+        this.handleMoveRow(message.tableName, message.target, message.fromRowIndex, message.toRowIndex);
+        break;
       case 'createMissing':
         if (!this.session) {
           return;
@@ -538,6 +543,30 @@ export class KpsEditorService {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       void vscode.window.showErrorMessage(`Could not open ${filePath}: ${message}`);
+    }
+  }
+
+  private handleMoveRow(
+    tableName: string,
+    target: KpsStageTarget,
+    fromRowIndex: number,
+    toRowIndex: number,
+  ): void {
+    if (!this.session) {
+      return;
+    }
+
+    const result = applyKpsTargetEdit(
+      this.session,
+      tableName,
+      target,
+      (stageId) => {
+        moveRow(this.session!, tableName, stageId, fromRowIndex, toRowIndex);
+      },
+    );
+    if (result.applied) {
+      this.stageTarget = result.target;
+      this.render({ preserveGridScroll: true });
     }
   }
 

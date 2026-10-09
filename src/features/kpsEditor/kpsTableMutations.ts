@@ -134,6 +134,28 @@ export function removeRow(
   stage.dirty = true;
 }
 
+export function moveRow(
+  session: KpsSession,
+  tableName: string,
+  stageId: string,
+  fromRowIndex: number,
+  toRowIndex: number,
+): void {
+  const stage = requirePresentStage(session, tableName, stageId);
+  if (fromRowIndex < 0 || fromRowIndex >= stage.rows.length) {
+    throw new Error(`Source row index out of range: ${fromRowIndex}`);
+  }
+  if (toRowIndex < 0 || toRowIndex >= stage.rows.length) {
+    throw new Error(`Target row index out of range: ${toRowIndex}`);
+  }
+  if (fromRowIndex === toRowIndex) {
+    return;
+  }
+  const [row] = stage.rows.splice(fromRowIndex, 1);
+  stage.rows.splice(toRowIndex, 0, row);
+  stage.dirty = true;
+}
+
 export function createMissing(session: KpsSession, tableName: string, stageId: string): void {
   const table = session.tables[tableName];
   if (!table) {

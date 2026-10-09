@@ -300,6 +300,23 @@ function getStyles(): string {
       padding: 8px 12px;
       overflow: auto;
     }
+    .draggable-row {
+      transition: background-color 0.15s;
+    }
+    .draggable-row.dragging {
+      opacity: 0.5;
+      background-color: var(--vscode-list-inactiveSelectionBackground, #338eff33);
+    }
+    .drag-handle-header::before {
+      content: "⋮⋮";
+      display: block;
+    }
+    .drag-handle {
+      cursor: grab;
+    }
+    .drag-handle:active {
+      cursor: grabbing;
+    }
   </style>`;
 }
 
@@ -333,7 +350,7 @@ function renderStageBody(
         const warning = unexpected ? ' data-warning="Not in Type Group"' : '';
         return `<th${cls}${warning}>${escapeHtml(column)}</th>`;
       })
-      .join('') + '<th></th>';
+      .join('') + '<th class="drag-handle-header" style="width:24px;text-align:center;"></th>';
   const rows = stage.rows
     .map((row, rowIndex) => {
       const cells = table.columns
@@ -352,7 +369,7 @@ function renderStageBody(
           return `<td${warnClass}${warning}><input data-row="${rowIndex}" data-column="${escapeHtml(column)}" value="${escapeHtml(scalarToInputValue(cell.value))}" /></td>`;
         })
         .join('');
-      return `<tr>${cells}<td class="row-actions"><button class="remove-row" data-row="${rowIndex}">−</button></td></tr>`;
+      return `<tr data-row-index="${rowIndex}" class="draggable-row"><td class="drag-handle" style="cursor:grab;text-align:center;font-size:14px;color:var(--vscode-charts-gray, #6e7681);" title="Drag to reorder">⋮⋮</td>${cells}<td class="row-actions"><button class="remove-row" data-row="${rowIndex}">−</button></td></tr>`;
     })
     .join('');
 
@@ -426,6 +443,86 @@ function gridViewScript(options: {
       }`
     : '';
 
+  const dragDropScript = `
+    const gridTable = document.querySelector('table.grid');
+    let draggedRow = null;
+    let dragOverRow = null;
+
+    function bindDragEvents() {
+      document.querySelectorAll('.draggable-row').forEach(row => {
+        row.addEventListener('dragstart', handleDragStart);
+        row.addEventListener('dragover', handleDragOver);
+        row.addEventListener('dragleave', handleDragLeave);
+        row.addEventListener('drop', handleDrop);
+        row.addEventListener('dragend', handleDragEnd);
+      });
+    }
+
+    function handleDragStart(event) {
+      draggedRow = event.currentTarget;
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', draggedRow.getAttribute('data-row-index'));
+      setTimeout(() => draggedRow.classList.add('dragging'), 0);
+    }
+
+    function handleDragOver(event) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'move';
+      
+      const targetRow = event.currentTarget;
+      if (targetRow !== draggedRow && targetRow.classList.contains('draggable-row')) {
+        dragOverRow = targetRow;
+        const rowRect = targetRow.getBoundingClientRect();
+        const mouseY = event.clientY;
+        const midpoint = rowRect.top + rowRect.height / 2;
+        
+        if (mouseY > midpoint) {
+          targetRow.parentNode?.insertBefore(draggedRow, targetRow.nextSibling);
+        } else {
+          targetRow.parentNode?.insertBefore(draggedRow, targetRow);
+        }
+      }
+    }
+
+    function handleDragLeave(event) {
+      if (event.currentTarget === dragOverRow) {
+        dragOverRow = null;
+      }
+    }
+
+    function handleDrop(event) {
+      event.preventDefault();
+     dragOverRow = null;
+      
+      if (draggedRow) {
+        const fromIndex = parseInt(draggedRow.getAttribute('data-row-index') || '-1', 10);
+        const rows = Array.from(document.querySelectorAll('.draggable-row'));
+        const toIndex = rows.indexOf(draggedRow);
+        
+        if (fromIndex !== -1 && toIndex !== -1 && fromIndex !== toIndex) {
+          vscode.postMessage({
+            type: 'moveRow',
+            tableName,
+            target: initialTarget,
+            fromRowIndex: fromIndex,
+            toRowIndex: toIndex
+          });
+        }
+      }
+    }
+
+    function handleDragEnd(event) {
+      draggedRow = null;
+      dragOverRow = null;
+      document.querySelectorAll('.draggable-row').forEach(row => row.classList.remove('dragging'));
+    }
+
+    // Re-bind drag events on refresh
+    bindDragEvents();
+    
+    window.addEventListener('bindDragEvents', bindDragEvents);
+  `;
+
   return `
     const gridWrap = document.querySelector('.grid-wrap');
     const applyGridScroll = () => {
@@ -469,6 +566,7 @@ function gridViewScript(options: {
       });
     });
     ${focusScript}
+    ${dragDropScript}
     function gridScrollPayload() {
       const wrap = document.querySelector('.grid-wrap');
       if (!wrap) {
@@ -795,6 +893,8 @@ export function renderKpsEditorHtml(
         wrap.scrollTop = top;
         wrap.scrollLeft = left;
       }
+      // Re-bind drag events after DOM update
+      window.dispatchEvent(new Event('bindDragEvents'));
       refreshCellNotice();
     }
 

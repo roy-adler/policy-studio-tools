@@ -20,6 +20,7 @@ import {
   addRow,
   createMissing,
   isSessionDirty,
+  moveRow,
   removeRow,
   setCell,
 } from '../../src/features/kpsEditor/kpsTableMutations';
@@ -223,6 +224,33 @@ describe('kps mutations and writer', () => {
     expect(newRow.cells.name?.value).toBe('');
     removeRow(session, table, 'DEVL', 2);
     expect(session.tables[table].stages.DEVL.rows).toHaveLength(2);
+  });
+
+  it('moves rows within a stage and marks dirty', () => {
+    const session = cloneSession();
+    const table = 'T_CC_Sample_WebServices.json';
+    // Rename rows to identify them easily
+    session.tables[table].stages.DEVL.rows[0].cells.name!.value = 'first';
+    session.tables[table].stages.DEVL.rows[1].cells.name!.value = 'second';
+    // Move 'second' to position 0
+    moveRow(session, table, 'DEVL', 1, 0);
+    expect(session.tables[table].stages.DEVL.rows[0].cells.name?.value).toBe('second');
+    expect(session.tables[table].stages.DEVL.rows[1].cells.name?.value).toBe('first');
+    expect(session.tables[table].stages.DEVL.dirty).toBe(true);
+    // Move 'second' back to position 1 (same effect, just swapped order)
+    moveRow(session, table, 'DEVL', 0, 1);
+    expect(session.tables[table].stages.DEVL.rows[0].cells.name?.value).toBe('first');
+    expect(session.tables[table].stages.DEVL.rows[1].cells.name?.value).toBe('second');
+    expect(session.tables[table].stages.DEVL.dirty).toBe(true);
+  });
+
+  it('ignores moveRow when from and to indices are the same (no-op)', () => {
+    const session = cloneSession();
+    const table = 'T_CC_Sample_WebServices.json';
+    const original = session.tables[table].stages.DEVL.rows.map((r) => r.cells.name?.value);
+    moveRow(session, table, 'DEVL', 0, 0);
+    expect(session.tables[table].stages.DEVL.rows.map((r) => r.cells.name?.value)).toEqual(original);
+    expect(session.tables[table].stages.DEVL.dirty).toBe(false);
   });
 
   it('creates a missing stage file as empty array and marks dirty', () => {
