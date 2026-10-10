@@ -1372,4 +1372,34 @@ describe('kps stage group edits', () => {
     expect(session.tables[tableName].stages.DEVL.rows).toHaveLength(2);
     expect(session.tables[tableName].stages.TEST.rows).toHaveLength(2);
   });
+
+  it('moves a row on every member', () => {
+    const { session, tableName } = loadGroups();
+    const applied = applyStageGroupEdit(session, tableName, ['DEVL', 'TEST'], (stageId) => {
+      moveRow(session, tableName, stageId, 0, 1);
+    });
+    expect(applied).toBe(true);
+    for (const stageId of ['DEVL', 'TEST']) {
+      const stage = session.tables[tableName].stages[stageId];
+      expect(stage.dirty).toBe(true);
+      expect(stage.rows.map((row) => row.cells.name?.value)).toEqual(['b', 'a']);
+    }
+    expect(session.tables[tableName].stages.HUTL.dirty).toBe(false);
+    expect(session.tables[tableName].stages.HUTL.rows.map((row) => row.cells.name?.value)).toEqual(['a', 'b']);
+  });
+
+  it('keeps group membership unchanged after a reorder', () => {
+    const { session, tableName } = loadGroups();
+    const before = findStageGroups(session.tables[tableName], session.stageIds);
+    const result = applyKpsTargetEdit(
+      session,
+      tableName,
+      { kind: 'group', memberIds: ['DEVL', 'TEST'] },
+      (stageId) => {
+        moveRow(session, tableName, stageId, 0, 1);
+      },
+    );
+    expect(result).toEqual({ applied: true, target: { kind: 'group', memberIds: ['DEVL', 'TEST'] } });
+    expect(findStageGroups(session.tables[tableName], session.stageIds)).toEqual(before);
+  });
 });
