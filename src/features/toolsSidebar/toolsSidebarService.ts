@@ -47,7 +47,9 @@ export class ToolsSidebarService {
     void vscode.commands.executeCommand('setContext', PROJECTS_VIEW_MODE_CONTEXT, initialMode);
 
     this.context.subscriptions.push(
-      vscode.window.registerTreeDataProvider('policyStudio.projects', this.projectsProvider),
+      vscode.window.registerWebviewViewProvider('policyStudio.projects', this.projectsProvider, {
+        webviewOptions: { retainContextWhenHidden: true },
+      }),
       vscode.window.registerTreeDataProvider('policyStudio.tools', this.toolsProvider),
       vscode.window.registerWebviewViewProvider(
         'policyStudio.circuitSearch',

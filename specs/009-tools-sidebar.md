@@ -53,9 +53,9 @@ As a Policy Studio developer, I want to click the Policy Studio icon in the VS C
 
 Three views under the container, top to bottom:
 
-#### 1. `policyStudio.projects` — Projects (TreeView)
+#### 1. `policyStudio.projects` — Projects (tree)
 
-Shows discovery and scope at a glance. Supports two **view modes** (see `docs/superpowers/specs/2026-09-07-projects-path-tree-design.md`):
+Shows discovery and scope at a glance. The view is a sidebar webview tree so each nesting level can indent by a fixed **20px** (`PROJECTS_TREE_INDENT_PX`). The twistie, icon, and label move together. This step does not follow `workbench.tree.indent` (the native tree default is 8px). Supports two **view modes** (see `docs/superpowers/specs/2026-09-07-projects-path-tree-design.md`):
 
 - **Tree (default):** projects nested under compact path folders derived from each project’s `relativePath` (single-child **folder** chains collapsed; a folder with only one project child stays a folder with that project as its child). For YAML `POLICYNAME/POLICYNAME_yaml` bundles (`000`), omit the inner `_yaml` folder so the project leaf sits at `POLICYNAME` (label = `displayName`). Multi-root workspaces wrap each tree under a workspace-folder node.
 - **List:** flat project rows (original behaviour).

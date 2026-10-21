@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { buildProjectsTree, formatScopeSummary } from '../../src/features/toolsSidebar/projectsTreeModel';
+import {
+  PROJECTS_TREE_INDENT_PX,
+  renderProjectsTreeRows,
+} from '../../src/features/toolsSidebar/projectsTreeView';
 import type { PolicyStudioProject, ProjectRegistry, ProjectScope } from '../../src/features/projectRegistry/types';
 import {
   buildToolsTree,
@@ -194,6 +198,75 @@ describe('buildProjectsTree path tree', () => {
     );
     expect(roots.some((n) => n.kind === 'project' && n.label === 'root-proj')).toBe(true);
     expect(roots.some((n) => n.kind === 'folder')).toBe(false);
+  });
+});
+
+describe('renderProjectsTreeRows', () => {
+  it('indents each nesting level by 20px', () => {
+    const html = renderProjectsTreeRows(
+      [
+        {
+          id: 'workspace-repo',
+          label: 'repo',
+          kind: 'workspaceFolder',
+          children: [
+            {
+              id: 'folder-policies',
+              label: 'policies',
+              kind: 'folder',
+              children: [
+                {
+                  id: 'project-auth',
+                  label: 'AUTH_GATEWAY',
+                  kind: 'project',
+                  projectId: 'auth',
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      new Set(),
+    );
+
+    expect(PROJECTS_TREE_INDENT_PX).toBe(20);
+    expect(html).toContain('data-id="workspace-repo"');
+    expect(html).toContain('data-depth="0"');
+    expect(html).toContain('style="width:0px"');
+    expect(html).toContain('data-id="folder-policies"');
+    expect(html).toContain('data-depth="1"');
+    expect(html).toContain('style="width:20px"');
+    expect(html).toContain('data-id="project-auth"');
+    expect(html).toContain('data-depth="2"');
+    expect(html).toContain('style="width:40px"');
+  });
+
+  it('hides descendants of a collapsed folder', () => {
+    const html = renderProjectsTreeRows(
+      [
+        {
+          id: 'folder-policies',
+          label: 'policies',
+          kind: 'folder',
+          children: [{ id: 'project-auth', label: 'AUTH_GATEWAY', kind: 'project', projectId: 'auth' }],
+        },
+      ],
+      new Set(['folder-policies']),
+    );
+
+    expect(html).toContain('policies');
+    expect(html).not.toContain('AUTH_GATEWAY');
+    expect(html).toContain('data-expanded="false"');
+  });
+
+  it('escapes labels before inserting them into the row', () => {
+    const html = renderProjectsTreeRows(
+      [{ id: 'warning-0', label: '<script>alert(1)</script>', kind: 'warning' }],
+      new Set(),
+    );
+
+    expect(html).not.toContain('<script>');
+    expect(html).toContain('&lt;script&gt;');
   });
 });
 

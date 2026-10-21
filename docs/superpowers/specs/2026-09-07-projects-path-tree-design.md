@@ -56,6 +56,7 @@ repo-b/
 
 - **Project leaf:** click → `policyStudioTools.setActiveProject` (unchanged).
 - **Folder / workspace folder nodes:** expand/collapse only; no scope command.
+- **Indent:** each nesting level is offset by 20px so the hierarchy stays visible in a narrow sidebar.
 - **List mode:** flat project rows identical to current behaviour (label, type/path description, active marker).
 
 Toolbar: `policyStudioTools.toggleProjectsViewMode` on `view/title` for `policyStudio.projects`. Icon reflects current mode via context key `policyStudio.projects.viewMode`.

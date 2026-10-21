@@ -89,7 +89,8 @@
       "policy-studio": [
         {
           "id": "policyStudio.projects",
-          "name": "Projects"
+          "name": "Projects",
+          "type": "webview"
         },
         {
           "id": "policyStudio.tools",

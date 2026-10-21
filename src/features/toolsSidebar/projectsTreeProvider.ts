@@ -1,16 +1,21 @@
+import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 import { getSharedProjectRegistryStore } from '../projectRegistry/projectRegistryService';
-import {
-  buildProjectsTree,
-  type ProjectsTreeNode,
-  type ProjectsViewMode,
-} from './projectsTreeModel';
+import { buildProjectsTree, type ProjectsViewMode } from './projectsTreeModel';
+import { projectsTreeShell, renderProjectsTreeRows } from './projectsTreeView';
 
-export class ProjectsTreeProvider implements vscode.TreeDataProvider<ProjectsTreeNode> {
-  private readonly emitter = new vscode.EventEmitter<ProjectsTreeNode | undefined | void>();
+interface ProjectsTreeMessage {
+  type?: string;
+  id?: string;
+  command?: string;
+  projectId?: string;
+  kind?: string;
+}
+
+export class ProjectsTreeProvider implements vscode.WebviewViewProvider {
+  private readonly collapsed = new Set<string>();
+  private view: vscode.WebviewView | undefined;
   private viewMode: ProjectsViewMode = 'tree';
-
-  readonly onDidChangeTreeData = this.emitter.event;
 
   constructor() {
     const store = getSharedProjectRegistryStore();
@@ -28,51 +33,55 @@ export class ProjectsTreeProvider implements vscode.TreeDataProvider<ProjectsTre
   }
 
   refresh(): void {
-    this.emitter.fire();
-  }
-
-  getTreeItem(element: ProjectsTreeNode): vscode.TreeItem {
-    const collapsible =
-      element.kind === 'folder' || element.kind === 'workspaceFolder'
-        ? vscode.TreeItemCollapsibleState.Expanded
-        : vscode.TreeItemCollapsibleState.None;
-
-    const item = new vscode.TreeItem(element.label, collapsible);
-    item.id = element.id;
-    item.description = element.description;
-    item.tooltip = element.tooltip;
-    if (element.iconId) {
-      item.iconPath = new vscode.ThemeIcon(element.iconId);
-    }
-
-    if (element.command) {
-      item.command = {
-        command: element.command,
-        title: element.label,
-      };
-    } else if (element.kind === 'project' && element.projectId) {
-      const projectId = element.projectId;
-      item.command = {
-        command: 'policyStudioTools.setActiveProject',
-        title: 'Set active project',
-        arguments: [projectId],
-      };
-    }
-
-    if (element.kind === 'warning') {
-      item.contextValue = 'warning';
-    }
-
-    return item;
-  }
-
-  getChildren(element?: ProjectsTreeNode): ProjectsTreeNode[] {
-    if (element) {
-      return element.children ?? [];
+    if (!this.view) {
+      return;
     }
 
     const store = getSharedProjectRegistryStore();
-    return buildProjectsTree(store.getProjectRegistry(), store.getScope(), this.viewMode);
+    const nodes = buildProjectsTree(store.getProjectRegistry(), store.getScope(), this.viewMode);
+    void this.view.webview.postMessage({
+      type: 'render',
+      html: renderProjectsTreeRows(nodes, this.collapsed),
+    });
+  }
+
+  resolveWebviewView(webviewView: vscode.WebviewView): void {
+    this.view = webviewView;
+    const nonce = crypto.randomBytes(16).toString('hex');
+    webviewView.webview.options = { enableScripts: true };
+    webviewView.webview.onDidReceiveMessage((message: ProjectsTreeMessage) => {
+      this.onMessage(message);
+    });
+    webviewView.webview.html = projectsTreeShell(webviewView.webview.cspSource, nonce);
+  }
+
+  private onMessage(message: ProjectsTreeMessage): void {
+    if (message.type === 'ready') {
+      this.refresh();
+      return;
+    }
+    if (message.type !== 'activate' || !message.id) {
+      return;
+    }
+
+    if (message.kind === 'folder' || message.kind === 'workspaceFolder') {
+      if (this.collapsed.has(message.id)) {
+        this.collapsed.delete(message.id);
+      } else {
+        this.collapsed.add(message.id);
+      }
+      this.refresh();
+      return;
+    }
+
+    if (!message.command) {
+      return;
+    }
+    if (message.projectId) {
+      void vscode.commands.executeCommand(message.command, message.projectId);
+      return;
+    }
+    void vscode.commands.executeCommand(message.command);
   }
 }
 
