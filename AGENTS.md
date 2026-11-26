@@ -50,4 +50,4 @@ Practical rules for every feature:
 ## Commands
 
 - `npm test` — vitest suite
-- `npm run compile` / `npx tsc -p ./ --noEmit` — build / type-check
+- `npm run compile` — type-check (`npm run check-types`) and bundle with esbuild into `dist/extension.js`

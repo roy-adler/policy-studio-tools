@@ -9,7 +9,7 @@
         "--extensionDevelopmentPath=${workspaceFolder}"
       ],
       "outFiles": [
-        "${workspaceFolder}/out/**/*.js"
+        "${workspaceFolder}/dist/**/*.js"
       ],
       "preLaunchTask": "npm: compile",
       "stopOnEntry": false,
@@ -25,7 +25,7 @@
         "${workspaceFolder}/test/fixtures/sample-policy-project"
       ],
       "outFiles": [
-        "${workspaceFolder}/out/**/*.js"
+        "${workspaceFolder}/dist/**/*.js"
       ],
       "preLaunchTask": "npm: compile",
       "stopOnEntry": false,

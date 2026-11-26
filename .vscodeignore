@@ -1,15 +1,26 @@
+# Only the bundled extension (dist/extension.js), media/, package.json,
+# README.md and LICENSE go into the VSIX. Everything else is excluded.
 .vscode/**
 .vscode-test/**
-src/**
+.cursor/**
+.superpowers/**
+.worktrees/**
 .git/**
 .github/**
+.gitattributes
+.gitignore
+src/**
+out/**
 test/**
 specs/**
-.cursor/**
+docs/**
 node_modules/**
 **/*.ts
 **/*.map
+AGENTS.md
+esbuild.js
 vitest.config.ts
 tsconfig.json
-.gitignore
+package-lock.json
+*.vsix
 **/.DS_Store
