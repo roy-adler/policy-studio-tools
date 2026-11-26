@@ -32,8 +32,59 @@ function readFval(content: string, fieldName: string): string | undefined {
   return pattern.exec(content)?.[1]?.trim() || undefined;
 }
 
+/**
+ * Reads a filter-reference field (`start`, `successNode`, `failureNode`).
+ *
+ * Policy Studio exports store these as entity references, not plain text:
+ *
+ *   <fval name="start"><value contentType="reference">
+ *     <key type="CircuitContainer"><id field="name" value="Policies"/>
+ *       <key type="FilterCircuit"><id field="name" value="Health Check"/>
+ *         <key type="ChangeMessageFilter"><id field="name" value="Set Message"/></key>
+ *   …</value></fval>
+ *
+ * The referenced filter is the innermost key. A plain `<value>Name</value>`
+ * (or a `Policies/…/Name` path) is still accepted.
+ */
 function readFlowNodeFval(content: string, fieldName: string): string | undefined {
-  return normalizeFilterNodeRef(readFval(content, fieldName));
+  const plain = readFval(content, fieldName);
+  if (plain) {
+    return normalizeFilterNodeRef(plain);
+  }
+  const pattern = new RegExp(
+    `<fval\\s+name\\s*=\\s*["']${fieldName}["'][^>]*>\\s*<value\\b[^>]*>([\\s\\S]*?)</value>`,
+    'i',
+  );
+  const reference = pattern.exec(content)?.[1];
+  if (!reference) {
+    return undefined;
+  }
+  const ids = [
+    ...reference.matchAll(/<id\s+[^>]*field\s*=\s*["']name["'][^>]*value\s*=\s*["']([^"']+)["']/gi),
+    ...reference.matchAll(/<id\s+[^>]*value\s*=\s*["']([^"']+)["'][^>]*field\s*=\s*["']name["']/gi),
+  ].sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+  if (ids.length === 0) {
+    const text = reference.trim();
+    return text && !text.includes('<') ? normalizeFilterNodeRef(decodeXmlEntities(text)) : undefined;
+  }
+  const innermost = ids[ids.length - 1]?.[1];
+  return normalizeFilterNodeRef(innermost ? decodeXmlEntities(innermost) : undefined);
+}
+
+/** Blanks out `<value contentType="reference">…</value>` so their key ids are not read as names. */
+function stripReferenceValues(body: string): string {
+  return body.replace(/<value\b[^>]*contentType\s*=\s*["']reference["'][^>]*>[\s\S]*?<\/value>/gi, (match) =>
+    ' '.repeat(match.length),
+  );
+}
+
+function decodeXmlEntities(value: string): string {
+  return value
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
 }
 
 function lastPathSegment(value: string): string {
@@ -201,8 +252,17 @@ function extractFiltersFromEntityBody(
   const childEntities = findAllEntityBlocks(body);
 
   for (const child of childEntities) {
-    const names = collectNameMatches(child.openTag + child.body, bodyStartOffset + child.start);
-    const filterName = names.find((entry) => entry.name !== circuitName)?.name ?? names[0]?.name;
+    // Prefer the filter's own `name` field; fall back to its `<key>` id. Names
+    // inside reference values (success/failure links) must never win.
+    const ownName = readFval(stripReferenceValues(child.body), 'name');
+    const names = collectNameMatches(
+      child.openTag + stripReferenceValues(child.body),
+      bodyStartOffset + child.start,
+    );
+    const filterName =
+      (ownName ? decodeXmlEntities(ownName) : undefined) ??
+      names.find((entry) => entry.name !== circuitName)?.name ??
+      names[0]?.name;
     if (!filterName) {
       continue;
     }
@@ -307,15 +367,6 @@ function parseAxwayEntityStoreXml(content: string): ParsedCircuit[] {
       continue;
     }
 
-    const names = collectNameMatches(entity.openTag + entity.body, entity.start);
-    const circuitName = names[0]?.name;
-    if (!circuitName) {
-      continue;
-    }
-
-    const bodyStart = entity.start + entity.openTag.length;
-    const filters = extractFiltersFromEntityBody(entity.body, bodyStart, circuitName);
-
     // Read circuit-level fields from the body with child entities removed so a
     // child filter's fields are not mistaken for the circuit's.
     let circuitOwnBody = entity.body;
@@ -325,6 +376,19 @@ function parseAxwayEntityStoreXml(content: string): ParsedCircuit[] {
         ' '.repeat(child.end - child.start) +
         circuitOwnBody.slice(child.end);
     }
+
+    const ownName = readFval(circuitOwnBody, 'name');
+    const names = collectNameMatches(
+      entity.openTag + stripReferenceValues(circuitOwnBody),
+      entity.start,
+    );
+    const circuitName = (ownName ? decodeXmlEntities(ownName) : undefined) ?? names[0]?.name;
+    if (!circuitName) {
+      continue;
+    }
+
+    const bodyStart = entity.start + entity.openTag.length;
+    const filters = extractFiltersFromEntityBody(entity.body, bodyStart, circuitName);
 
     circuits.push({
       name: circuitName,

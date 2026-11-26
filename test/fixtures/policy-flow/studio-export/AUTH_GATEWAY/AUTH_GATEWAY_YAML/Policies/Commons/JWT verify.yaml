@@ -1,0 +1,15 @@
+---
+type: FilterCircuit
+fields:
+  name: JWT verify
+  start:
+    ./Verify Signature
+children:
+- type: JWTVerifyFilter
+  fields:
+    name: Verify Signature
+  routing:
+    success: ../Done
+- type: TrueFilter
+  fields:
+    name: Done

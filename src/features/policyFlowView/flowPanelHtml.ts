@@ -17,10 +17,64 @@ export function getFlowPanelHtml(nonce: string): string {
       background: var(--vscode-editor-background);
       margin: 0;
       display: flex;
-      flex-direction: column;
+      flex-direction: row;
       height: 100vh;
       overflow: hidden;
     }
+    #main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    #tree-pane {
+      flex: none;
+      width: 260px;
+      max-width: 45vw;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--vscode-panel-border);
+      background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+    }
+    body.tree-collapsed #tree-pane { display: none; }
+    .tree-head { display: flex; gap: 4px; padding: 8px; border-bottom: 1px solid var(--vscode-panel-border); align-items: center; }
+    .tree-head .tree-title { font-weight: 600; font-size: 11px; text-transform: uppercase; opacity: 0.8; margin-right: auto; }
+    #tree-filter {
+      width: 100%;
+      box-sizing: border-box;
+      background: var(--vscode-input-background);
+      color: var(--vscode-input-foreground);
+      border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+      border-radius: 3px;
+      padding: 3px 8px;
+      font-size: 12px;
+    }
+    .tree-filter-row { padding: 6px 8px; }
+    #tree { flex: 1; overflow: auto; padding: 2px 0 8px; font-size: 13px; }
+    #tree ul { list-style: none; margin: 0; padding: 0; }
+    #tree .row {
+      display: flex; align-items: center; gap: 4px;
+      padding: 2px 8px 2px calc(8px + var(--depth, 0) * 12px);
+      cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      border: 1px solid transparent;
+    }
+    #tree .row:hover { background: var(--vscode-list-hoverBackground); }
+    #tree .row:focus { outline: none; border-color: var(--vscode-focusBorder); }
+    #tree .row.selected {
+      background: var(--vscode-list-activeSelectionBackground);
+      color: var(--vscode-list-activeSelectionForeground);
+    }
+    #tree .twisty { width: 12px; flex: none; text-align: center; opacity: 0.8; font-size: 10px; }
+    #tree .icon { flex: none; opacity: 0.8; font-size: 11px; }
+    #tree .label { overflow: hidden; text-overflow: ellipsis; }
+    #tree li.collapsed > ul { display: none; }
+    #tree-message { padding: 8px 12px; opacity: 0.75; font-size: 12px; }
+    .icon-button {
+      background: transparent;
+      color: var(--vscode-foreground);
+      border: 1px solid transparent;
+      border-radius: 3px;
+      padding: 0 6px;
+      cursor: pointer;
+      font-size: 13px;
+      line-height: 20px;
+    }
+    .icon-button:hover { background: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,0.2)); }
     header {
       padding: 8px 12px;
       border-bottom: 1px solid var(--vscode-panel-border);
@@ -112,7 +166,21 @@ export function getFlowPanelHtml(nonce: string): string {
   </style>
 </head>
 <body>
+  <aside id="tree-pane" aria-label="Policies">
+    <div class="tree-head">
+      <span class="tree-title">Policies</span>
+      <button class="icon-button" id="tree-refresh" title="Reload policies">&#x21bb;</button>
+      <button class="icon-button" id="tree-hide" title="Hide policy tree">&laquo;</button>
+    </div>
+    <div class="tree-filter-row">
+      <input id="tree-filter" type="search" aria-label="Filter policies" placeholder="Filter policies…" />
+    </div>
+    <div id="tree" role="tree"></div>
+    <div id="tree-message"></div>
+  </aside>
+  <div id="main">
   <header>
+    <button class="icon-button" id="tree-show" title="Show policy tree" style="display:none">&raquo;</button>
     <span class="title" id="title"></span>
     <span class="project" id="project"></span>
     <input id="flow-search" type="search" aria-label="Search filters" placeholder="Search filters…" />
@@ -141,6 +209,7 @@ export function getFlowPanelHtml(nonce: string): string {
     <span class="legend-item"><span class="legend-box missing"></span>Missing target</span>
     <span class="legend-item"><span class="legend-box unreachable"></span>Unreachable</span>
   </footer>
+  </div>
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
     const NODE_W = 180;
@@ -218,7 +287,9 @@ export function getFlowPanelHtml(nonce: string): string {
     }
 
     function render(data) {
-      document.getElementById('title').textContent = data.circuitName;
+      current = { projectId: data.projectId || '', circuitName: data.circuitName || '', absolutePath: data.absolutePath || '' };
+      markSelected();
+      document.getElementById('title').textContent = data.circuitName || 'Policy Flow';
       document.getElementById('project').textContent = data.projectDisplayName || '';
 
       if (data.banner) {
@@ -233,9 +304,16 @@ export function getFlowPanelHtml(nonce: string): string {
 
       viewport.innerHTML = '';
 
+      if (data.noSelection) {
+        emptyEl.style.display = 'block';
+        emptyEl.textContent = 'Choose a policy from the tree on the left to see its flow.';
+        lastNodeKey = '';
+        return;
+      }
+
       if (!data.nodes || data.nodes.length === 0) {
         emptyEl.style.display = 'block';
-        emptyEl.textContent = 'This policy contains no filters.';
+        emptyEl.textContent = data.banner ? '' : 'This policy contains no filters.';
         return;
       }
       emptyEl.style.display = 'none';
@@ -367,9 +445,165 @@ export function getFlowPanelHtml(nonce: string): string {
 
     flowSearch.addEventListener('input', applyFlowSearch);
 
+
+    // ---- Policy tree -------------------------------------------------------
+    const treeEl = document.getElementById('tree');
+    const treeMessage = document.getElementById('tree-message');
+    const treeFilter = document.getElementById('tree-filter');
+    const saved = vscode.getState() || {};
+    const expanded = new Set(saved.expanded || []);
+    let treeData = [];
+    let current = { projectId: '', circuitName: '', absolutePath: '' };
+    let firstTree = !saved.expanded;
+
+    function saveState() {
+      vscode.setState({ expanded: Array.from(expanded), treeHidden: document.body.classList.contains('tree-collapsed') });
+    }
+
+    function setTreeHidden(hidden) {
+      document.body.classList.toggle('tree-collapsed', hidden);
+      document.getElementById('tree-show').style.display = hidden ? '' : 'none';
+      saveState();
+    }
+    document.getElementById('tree-hide').addEventListener('click', () => setTreeHidden(true));
+    document.getElementById('tree-show').addEventListener('click', () => setTreeHidden(false));
+    if (saved.treeHidden) setTreeHidden(true);
+    document.getElementById('tree-refresh').addEventListener('click', () => {
+      treeMessage.textContent = 'Reloading…';
+      vscode.postMessage({ type: 'refreshTree' });
+    });
+
+    function leafKey(leaf) {
+      return leaf.projectId + '::' + leaf.absolutePath + '::' + leaf.circuitName;
+    }
+
+    function isCurrent(leaf) {
+      return leaf.projectId === current.projectId && leaf.circuitName === current.circuitName &&
+        (!current.absolutePath || leaf.absolutePath === current.absolutePath);
+    }
+
+    // Returns the folder ids on the path to the current policy.
+    function pathToCurrent(nodes, trail) {
+      for (const node of nodes) {
+        if (node.kind === 'policy') {
+          if (isCurrent(node)) return trail;
+        } else {
+          const found = pathToCurrent(node.children, trail.concat(node.id));
+          if (found) return found;
+        }
+      }
+      return undefined;
+    }
+
+    function matches(node, needle) {
+      if (!needle) return true;
+      if (node.kind === 'policy') return node.label.toLowerCase().indexOf(needle) !== -1;
+      return node.children.some((child) => matches(child, needle));
+    }
+
+    function renderTreeNodes(nodes, depth, needle, parent) {
+      const ul = document.createElement('ul');
+      if (depth === 0) ul.setAttribute('role', 'group');
+      for (const node of nodes) {
+        if (!matches(node, needle)) continue;
+        const li = document.createElement('li');
+        const row = document.createElement('div');
+        row.className = 'row';
+        row.tabIndex = -1;
+        row.style.setProperty('--depth', String(depth));
+        row.setAttribute('role', 'treeitem');
+        const twisty = document.createElement('span');
+        twisty.className = 'twisty';
+        const icon = document.createElement('span');
+        icon.className = 'icon';
+        const label = document.createElement('span');
+        label.className = 'label';
+        label.textContent = node.label;
+
+        if (node.kind === 'policy') {
+          icon.textContent = '◇';
+          row.title = node.filePath;
+          row.dataset.key = leafKey(node);
+          if (isCurrent(node)) row.classList.add('selected');
+          row.addEventListener('click', () => {
+            vscode.postMessage({
+              type: 'selectPolicy',
+              projectId: node.projectId,
+              circuitName: node.circuitName,
+              absolutePath: node.absolutePath,
+            });
+          });
+        } else {
+          const open = !!needle || expanded.has(node.id);
+          li.classList.toggle('collapsed', !open);
+          row.setAttribute('aria-expanded', String(open));
+          twisty.textContent = open ? '▾' : '▸';
+          icon.textContent = node.kind === 'project' ? '▣' : '▢';
+          row.addEventListener('click', () => {
+            if (needle) return;
+            if (expanded.has(node.id)) expanded.delete(node.id); else expanded.add(node.id);
+            saveState();
+            renderTree();
+          });
+        }
+        row.append(twisty, icon, label);
+        li.appendChild(row);
+        if (node.kind !== 'policy') {
+          li.appendChild(renderTreeNodes(node.children, depth + 1, needle));
+        }
+        ul.appendChild(li);
+      }
+      return ul;
+    }
+
+    function renderTree() {
+      const needle = (treeFilter.value || '').trim().toLowerCase();
+      treeEl.innerHTML = '';
+      treeEl.appendChild(renderTreeNodes(treeData, 0, needle));
+      const visible = treeEl.querySelectorAll('.row[data-key]').length;
+      if (treeData.length === 0) {
+        treeMessage.textContent = treeMessage.dataset.error || 'No policies found in this project.';
+      } else if (needle && visible === 0) {
+        treeMessage.textContent = 'No policy matches “' + treeFilter.value.trim() + '”.';
+      } else {
+        treeMessage.textContent = '';
+      }
+    }
+
+    function markSelected() {
+      const trail = pathToCurrent(treeData, []);
+      if (trail && trail.some((id) => !expanded.has(id))) {
+        trail.forEach((id) => expanded.add(id));
+        saveState();
+        renderTree();
+      }
+      treeEl.querySelectorAll('.row[data-key]').forEach((row) => {
+        const leaf = row.dataset.key.split('::');
+        row.classList.toggle('selected',
+          leaf[0] === current.projectId && leaf[2] === current.circuitName &&
+          (!current.absolutePath || leaf[1] === current.absolutePath));
+      });
+    }
+
+    treeFilter.addEventListener('input', renderTree);
+
     window.addEventListener('message', (event) => {
       if (event.data.type === 'flowData') {
         render(event.data);
+      } else if (event.data.type === 'policyTree') {
+        treeData = event.data.tree || [];
+        treeMessage.dataset.error = event.data.error ? 'Could not load policies: ' + event.data.error : '';
+        if (firstTree) {
+          // First open: expand the top-level folders (e.g. "Policies").
+          firstTree = false;
+          treeData.forEach((node) => { if (node.kind !== 'policy') expanded.add(node.id); });
+          if (treeData.length === 1 && treeData[0].kind === 'project') {
+            treeData[0].children.forEach((node) => { if (node.kind !== 'policy') expanded.add(node.id); });
+          }
+          saveState();
+        }
+        renderTree();
+        markSelected();
       }
     });
 

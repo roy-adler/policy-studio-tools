@@ -1,5 +1,6 @@
 import type { ParsedCircuit, ParsedFilter } from './types';
 import { normalizeFilterNodeRef } from './textUtils';
+import { declaresNonCircuitType, parseYamlEsDocuments } from './yamlEsDocumentParser';
 
 function readScalarBlock(lines: string[], startIndex: number): { value: string; endIndex: number } {
   const firstLine = lines[startIndex]?.trim() ?? '';
@@ -34,7 +35,7 @@ function offsetAtLine(lines: string[], lineIndex: number): number {
   return lines.slice(0, lineIndex).join('\n').length + (lineIndex > 0 ? 1 : 0);
 }
 
-const STRUCTURAL_CHILD_KEYS = new Set(['fields', 'meta', 'routing']);
+const STRUCTURAL_CHILD_KEYS = new Set(['fields', 'meta', 'routing', 'logging', 'children']);
 
 function parseFlowLinkKey(
   trimmed: string,
@@ -65,6 +66,10 @@ function parseYamlEsPolicy(content: string): ParsedCircuit[] {
   const filters: ParsedFilter[] = [];
   let childrenKeyIndent = 0;
   let childIndent = 0;
+  let listItemIndent: number | undefined;
+  // Lines nested under a filter's `logging:` or nested `children:` block are
+  // skipped: logging carries success/failure *messages*, not routing links.
+  let skipDeeperThan: number | undefined;
 
   const flushChild = (endLine: number) => {
     if (!currentChild?.name) {
@@ -122,7 +127,7 @@ function parseYamlEsPolicy(content: string): ParsedCircuit[] {
       circuitStartFilter = normalizeFilterNodeRef(unquote(trimmed.slice('start:'.length)));
     }
 
-    if (trimmed === 'children:') {
+    if (trimmed === 'children:' && !inChildren) {
       inChildren = true;
       childrenKeyIndent = indent;
       childIndent = indent + 2;
@@ -146,9 +151,26 @@ function parseYamlEsPolicy(content: string): ParsedCircuit[] {
       continue;
     }
 
+    if (skipDeeperThan !== undefined) {
+      // A block sequence may sit at its key's own indent ("children:\n  - type").
+      if (
+        trimmed === '' ||
+        indent > skipDeeperThan ||
+        (indent === skipDeeperThan && trimmed.startsWith('-'))
+      ) {
+        continue;
+      }
+      skipDeeperThan = undefined;
+    }
+
     // List-style children: "- type: PathParameterFilter"
     const listTypeMatch = trimmed.match(/^- type:\s*(.*)$/);
-    if (listTypeMatch && indent >= childrenKeyIndent) {
+    if (
+      listTypeMatch &&
+      indent >= childrenKeyIndent &&
+      (listItemIndent === undefined || indent === listItemIndent)
+    ) {
+      listItemIndent = indent;
       flushChild(i - 1);
       currentChild = {
         type: unquote(listTypeMatch[1]),
@@ -162,7 +184,9 @@ function parseYamlEsPolicy(content: string): ParsedCircuit[] {
     // Map-style children: "Set Message:" — never treat structural keys as filters.
     if (inChildren && indent === childIndent && trimmed.endsWith(':') && !trimmed.startsWith('-')) {
       const childName = trimmed.slice(0, -1).trim();
-      if (!STRUCTURAL_CHILD_KEYS.has(childName)) {
+      if (childName === 'logging' || childName === 'children') {
+        skipDeeperThan = indent;
+      } else if (!STRUCTURAL_CHILD_KEYS.has(childName)) {
         flushChild(i - 1);
         currentChild = {
           name: childName,
@@ -175,6 +199,11 @@ function parseYamlEsPolicy(content: string): ParsedCircuit[] {
     }
 
     if (!currentChild) {
+      continue;
+    }
+
+    if (trimmed === 'logging:' || trimmed === 'children:') {
+      skipDeeperThan = indent;
       continue;
     }
 
@@ -354,6 +383,15 @@ function isMalformedYaml(content: string): boolean {
 
 export function parsePolicyYaml(content: string): { circuits: ParsedCircuit[]; error?: string } {
   try {
+    const fromDocument = parseYamlEsDocuments(content);
+    if (fromDocument && fromDocument.length > 0) {
+      return { circuits: fromDocument };
+    }
+    if (fromDocument && declaresNonCircuitType(content)) {
+      // Valid YAML for another entity type (folder `_parent.yaml`, KPS,
+      // libraries): not a policy, never guess one from its `name:`.
+      return { circuits: [] };
+    }
     const malformed = isMalformedYaml(content);
     const yamlEs = parseYamlEsPolicy(content);
     if (yamlEs.length > 0) {

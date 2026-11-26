@@ -1,0 +1,9 @@
+---
+type: FilterCircuit
+fields:
+  name: Introspect
+  'start': './Call IdP'
+children:
+- type: ConnectToURLFilter
+  fields:
+    name: Call IdP

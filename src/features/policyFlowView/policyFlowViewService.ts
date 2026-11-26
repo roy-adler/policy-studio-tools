@@ -12,29 +12,29 @@ import { getSharedToolsHubService } from '../toolsSidebar/toolsHubService';
 import { buildFlowGraph } from './flowGraph';
 import { layoutFlowGraph } from './flowLayout';
 import { getFlowPanelHtml } from './flowPanelHtml';
+import { buildPolicyTree } from './policyTree';
 import { POLICY_FLOW_TOOL } from './toolDescriptor';
 
 const REFRESH_DEBOUNCE_MS = 300;
 const LARGE_FLOW_NODE_HINT = 150;
 
-interface OpenPanel {
-  panel: vscode.WebviewPanel;
+interface ShownCircuit {
   project: PolicyStudioProject;
   circuitName: string;
   absolutePath: string;
-  watcher: vscode.FileSystemWatcher;
+}
+
+interface OpenPanel {
+  panel: vscode.WebviewPanel;
+  /** Policy shown in the panel; undefined until one is chosen in the tree. */
+  shown?: ShownCircuit;
+  watcher?: vscode.Disposable;
   refreshTimer?: ReturnType<typeof setTimeout>;
   nodeRanges: Map<string, { start: { line: number; character: number }; end: { line: number; character: number } }>;
 }
 
-type CircuitQuickPickItem = vscode.QuickPickItem & {
-  project: PolicyStudioProject;
-  circuitName: string;
-  absolutePath: string;
-};
-
 export class PolicyFlowViewService {
-  private readonly panels = new Map<string, OpenPanel>();
+  private readonly panels = new Set<OpenPanel>();
 
   constructor(private readonly context: vscode.ExtensionContext) {}
 
@@ -75,7 +75,9 @@ export class PolicyFlowViewService {
       return;
     }
 
-    await this.pickCircuit(projects);
+    // No circuit in context: open the panel with the policy tree so the user
+    // picks a policy from the project's folder structure.
+    await this.openFlowPanel();
   }
 
   private async circuitFromActiveEditor(): Promise<
@@ -103,42 +105,6 @@ export class PolicyFlowViewService {
     }
 
     return { project, circuitName: containing.name, absolutePath: filePath };
-  }
-
-  private async pickCircuit(projects: PolicyStudioProject[]): Promise<void> {
-    const items: CircuitQuickPickItem[] = [];
-    const includeProject = projects.length > 1;
-
-    for (const project of projects) {
-      const index = await buildCircuitIndex(project);
-      for (const [name, definitions] of index.circuitByName.entries()) {
-        for (const definition of definitions) {
-          items.push({
-            label: name,
-            description: definition.filePath,
-            detail: includeProject ? project.displayName : undefined,
-            project,
-            circuitName: name,
-            absolutePath: definition.absolutePath,
-          });
-        }
-      }
-    }
-
-    if (items.length === 0) {
-      void vscode.window.showInformationMessage('No circuits found in the current scope.');
-      return;
-    }
-
-    items.sort((a, b) => a.label.localeCompare(b.label));
-    const picked = await vscode.window.showQuickPick(items, {
-      placeHolder: 'Select a policy to visualize',
-      matchOnDescription: true,
-      matchOnDetail: true,
-    });
-    if (picked) {
-      await this.openFlowPanel(picked.project, picked.circuitName, picked.absolutePath);
-    }
   }
 
   private async openByName(circuitName: string, project: PolicyStudioProject): Promise<void> {
@@ -169,49 +135,73 @@ export class PolicyFlowViewService {
     }
   }
 
+  private findPanel(project: PolicyStudioProject, circuitName: string): OpenPanel | undefined {
+    for (const open of this.panels) {
+      if (open.shown?.project.id === project.id && open.shown.circuitName === circuitName) {
+        return open;
+      }
+    }
+    return undefined;
+  }
+
+  private includeProject(): boolean {
+    return getSharedProjectRegistryStore().getProjectRegistry().projects.length > 1;
+  }
+
   private async openFlowPanel(
-    project: PolicyStudioProject,
-    circuitName: string,
-    absolutePath: string,
+    project?: PolicyStudioProject,
+    circuitName?: string,
+    absolutePath?: string,
   ): Promise<void> {
-    const key = `${project.id}::${circuitName}`;
-    const existing = this.panels.get(key);
-    if (existing) {
-      existing.panel.reveal();
-      return;
+    if (project && circuitName && absolutePath) {
+      const existing = this.findPanel(project, circuitName);
+      if (existing) {
+        existing.panel.reveal();
+        return;
+      }
+    } else {
+      // Reuse a panel that is still waiting for a policy choice.
+      const waiting = [...this.panels].find((entry) => !entry.shown);
+      if (waiting) {
+        waiting.panel.reveal();
+        return;
+      }
     }
 
-    const includeProject = getSharedProjectRegistryStore().getProjectRegistry().projects.length > 1;
     const panel = vscode.window.createWebviewPanel(
       'policyStudio.policyFlow',
-      `Flow: ${circuitName}`,
+      circuitName ? `Flow: ${circuitName}` : 'Policy Flow',
       vscode.ViewColumn.Active,
       { enableScripts: true, retainContextWhenHidden: true },
     );
     panel.webview.html = getFlowPanelHtml(String(Date.now()));
 
-    const watcher = vscode.workspace.createFileSystemWatcher(
-      new vscode.RelativePattern(
-        vscode.Uri.file(path.dirname(absolutePath)),
-        path.basename(absolutePath),
-      ),
-    );
-
-    const open: OpenPanel = {
-      panel,
-      project,
-      circuitName,
-      absolutePath,
-      watcher,
-      nodeRanges: new Map(),
-    };
-    this.panels.set(key, open);
+    const open: OpenPanel = { panel, nodeRanges: new Map() };
+    this.panels.add(open);
+    if (project && circuitName && absolutePath) {
+      this.showCircuit(open, { project, circuitName, absolutePath }, false);
+    }
 
     panel.webview.onDidReceiveMessage(
-      (message: { type: string; nodeId?: string; circuitName?: string }) => {
+      (message: {
+        type: string;
+        nodeId?: string;
+        circuitName?: string;
+        projectId?: string;
+        absolutePath?: string;
+      }) => {
         switch (message.type) {
           case 'ready':
-            void this.postFlowData(open, includeProject);
+            void this.postPolicyTree(open);
+            void this.postFlowData(open);
+            break;
+          case 'refreshTree':
+            void this.postPolicyTree(open, true);
+            break;
+          case 'selectPolicy':
+            if (message.circuitName && message.projectId && message.absolutePath) {
+              void this.selectPolicy(open, message.projectId, message.circuitName, message.absolutePath);
+            }
             break;
           case 'openFilter':
             if (message.nodeId) {
@@ -219,93 +209,161 @@ export class PolicyFlowViewService {
             }
             break;
           case 'openCircuit':
-            if (message.circuitName) {
-              void this.openByName(message.circuitName, open.project);
+            if (message.circuitName && open.shown) {
+              void this.openByName(message.circuitName, open.shown.project);
             }
             break;
         }
       },
     );
 
+    panel.onDidDispose(() => {
+      if (open.refreshTimer) {
+        clearTimeout(open.refreshTimer);
+      }
+      open.watcher?.dispose();
+      this.panels.delete(open);
+    });
+  }
+
+  /** Tree click: show the chosen policy in this panel (or reveal the panel already showing it). */
+  private async selectPolicy(
+    open: OpenPanel,
+    projectId: string,
+    circuitName: string,
+    absolutePath: string,
+  ): Promise<void> {
+    const project = getSharedProjectRegistryStore()
+      .getProjectsInScope()
+      .find((entry) => entry.id === projectId);
+    if (!project) {
+      void vscode.window.showWarningMessage('That project is no longer in the current scope.');
+      return;
+    }
+    const other = this.findPanel(project, circuitName);
+    if (other && other !== open) {
+      other.panel.reveal();
+      return;
+    }
+    this.showCircuit(open, { project, circuitName, absolutePath }, true);
+  }
+
+  private showCircuit(open: OpenPanel, shown: ShownCircuit, post: boolean): void {
+    open.watcher?.dispose();
+    if (open.refreshTimer) {
+      clearTimeout(open.refreshTimer);
+      open.refreshTimer = undefined;
+    }
+    open.shown = shown;
+    open.nodeRanges.clear();
+    open.panel.title = `Flow: ${shown.circuitName}`;
+
+    const watcher = vscode.workspace.createFileSystemWatcher(
+      new vscode.RelativePattern(
+        vscode.Uri.file(path.dirname(shown.absolutePath)),
+        path.basename(shown.absolutePath),
+      ),
+    );
     const scheduleRefresh = () => {
       if (open.refreshTimer) {
         clearTimeout(open.refreshTimer);
       }
       open.refreshTimer = setTimeout(() => {
         open.refreshTimer = undefined;
-        void this.postFlowData(open, includeProject);
+        void this.postFlowData(open);
       }, REFRESH_DEBOUNCE_MS);
     };
-
-    panel.onDidDispose(() => {
-      if (open.refreshTimer) {
-        clearTimeout(open.refreshTimer);
-      }
-      open.watcher.dispose();
-      this.panels.delete(key);
-    });
-
-    this.context.subscriptions.push(
+    const subscriptions = [
+      watcher,
       watcher.onDidChange(scheduleRefresh),
+      watcher.onDidCreate(scheduleRefresh),
       watcher.onDidDelete(() => {
         void open.panel.webview.postMessage({
-          type: 'flowData',
-          circuitName: open.circuitName,
-          projectDisplayName: includeProject ? open.project.displayName : '',
-          banner: `File deleted: ${open.absolutePath}. Close this panel or restore the file.`,
-          nodes: [],
-          edges: [],
-          positions: {},
-          width: 0,
-          height: 0,
-          warnings: [],
+          ...this.emptyFlowMessage(open),
+          banner: `File deleted: ${shown.absolutePath}. Close this panel or restore the file.`,
         });
       }),
-    );
+    ];
+    open.watcher = { dispose: () => subscriptions.forEach((entry) => entry.dispose()) };
+
+    if (post) {
+      void this.postFlowData(open);
+    }
   }
 
-  private async loadCircuit(open: OpenPanel): Promise<{ circuit?: ParsedCircuit; content: string; parseError?: string }> {
-    const indexed = await readAndParsePolicyFile(open.project, open.absolutePath);
+  private async postPolicyTree(open: OpenPanel, force = false): Promise<void> {
+    const projects = getSharedProjectRegistryStore().getProjectsInScope();
+    try {
+      const indexes = await Promise.all(
+        projects.map((project) => buildCircuitIndex(project, { force })),
+      );
+      void open.panel.webview.postMessage({
+        type: 'policyTree',
+        tree: buildPolicyTree(indexes),
+      });
+    } catch (error) {
+      void open.panel.webview.postMessage({
+        type: 'policyTree',
+        tree: [],
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private emptyFlowMessage(open: OpenPanel) {
     return {
-      circuit: indexed.circuits.find((circuit) => circuit.name === open.circuitName),
+      type: 'flowData',
+      circuitName: open.shown?.circuitName ?? '',
+      projectId: open.shown?.project.id ?? '',
+      absolutePath: open.shown?.absolutePath ?? '',
+      projectDisplayName: open.shown && this.includeProject() ? open.shown.project.displayName : '',
+      banner: undefined as string | undefined,
+      nodes: [],
+      edges: [],
+      positions: {},
+      width: 0,
+      height: 0,
+      warnings: [],
+    };
+  }
+
+  private async loadCircuit(shown: ShownCircuit): Promise<{ circuit?: ParsedCircuit; content: string; parseError?: string }> {
+    const indexed = await readAndParsePolicyFile(shown.project, shown.absolutePath);
+    return {
+      circuit: indexed.circuits.find((circuit) => circuit.name === shown.circuitName),
       content: indexed.content,
       parseError: indexed.parseError,
     };
   }
 
-  private async postFlowData(open: OpenPanel, includeProject: boolean): Promise<void> {
+  private async postFlowData(open: OpenPanel): Promise<void> {
+    const shown = open.shown;
+    if (!shown) {
+      void open.panel.webview.postMessage({ ...this.emptyFlowMessage(open), noSelection: true });
+      return;
+    }
+    const includeProject = this.includeProject();
     let banner: string | undefined;
     let circuit: ParsedCircuit | undefined;
     let content = '';
 
     try {
-      const loaded = await this.loadCircuit(open);
+      const loaded = await this.loadCircuit(shown);
       circuit = loaded.circuit;
       content = loaded.content;
       if (loaded.parseError) {
-        banner = `Parse error in ${open.absolutePath}: ${loaded.parseError}`;
+        banner = `Parse error in ${shown.absolutePath}: ${loaded.parseError}`;
       } else if (!circuit) {
-        banner = `Circuit '${open.circuitName}' no longer exists in ${open.absolutePath}.`;
+        banner = `Circuit '${shown.circuitName}' no longer exists in ${shown.absolutePath}.`;
       }
     } catch (error) {
-      banner = `Unable to read ${open.absolutePath}: ${
+      banner = `Unable to read ${shown.absolutePath}: ${
         error instanceof Error ? error.message : String(error)
       }`;
     }
 
     if (!circuit) {
-      void open.panel.webview.postMessage({
-        type: 'flowData',
-        circuitName: open.circuitName,
-        projectDisplayName: includeProject ? open.project.displayName : '',
-        banner,
-        nodes: [],
-        edges: [],
-        positions: {},
-        width: 0,
-        height: 0,
-        warnings: [],
-      });
+      void open.panel.webview.postMessage({ ...this.emptyFlowMessage(open), banner });
       return;
     }
 
@@ -334,7 +392,9 @@ export class PolicyFlowViewService {
     void open.panel.webview.postMessage({
       type: 'flowData',
       circuitName: graph.circuitName,
-      projectDisplayName: includeProject ? open.project.displayName : '',
+      projectId: shown.project.id,
+      absolutePath: shown.absolutePath,
+      projectDisplayName: includeProject ? shown.project.displayName : '',
       banner,
       nodes: graph.nodes,
       edges: graph.edges,
@@ -347,11 +407,12 @@ export class PolicyFlowViewService {
 
   private async openFilterDefinition(open: OpenPanel, nodeId: string): Promise<void> {
     const range = open.nodeRanges.get(nodeId);
-    if (!range) {
+    const shown = open.shown;
+    if (!range || !shown) {
       return;
     }
 
-    const document = await vscode.workspace.openTextDocument(vscode.Uri.file(open.absolutePath));
+    const document = await vscode.workspace.openTextDocument(vscode.Uri.file(shown.absolutePath));
     const selection = new vscode.Range(
       range.start.line,
       range.start.character,
