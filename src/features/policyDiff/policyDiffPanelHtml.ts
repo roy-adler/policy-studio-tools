@@ -1,3 +1,4 @@
+import * as crypto from 'crypto';
 import type { PolicyDiffReport } from './types';
 
 function escapeHtml(value: string): string {
@@ -12,10 +13,11 @@ function renderList(title: string, items: string[]): string {
   if (items.length === 0) {
     return '';
   }
-  return `<section><h3>${escapeHtml(title)}</h3><ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul></section>`;
+  return `<section class="searchable"><h3>${escapeHtml(title)}</h3><ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul></section>`;
 }
 
-export function renderPolicyDiffReportHtml(report: PolicyDiffReport): string {
+export function renderPolicyDiffReportHtml(report: PolicyDiffReport, nonce?: string): string {
+  const scriptNonce = nonce ?? crypto.randomBytes(16).toString('hex');
   const summaryItems = [
     `${report.summary.addedCircuits} added circuit(s)`,
     `${report.summary.removedCircuits} removed circuit(s)`,
@@ -80,7 +82,7 @@ export function renderPolicyDiffReportHtml(report: PolicyDiffReport): string {
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline';" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${scriptNonce}';" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     body {
@@ -107,6 +109,21 @@ export function renderPolicyDiffReportHtml(report: PolicyDiffReport): string {
       word-break: break-word;
     }
     section { margin-bottom: 16px; }
+    .search-wrap { display: flex; align-items: center; gap: 8px; margin: 12px 0; }
+    #diff-search {
+      flex: 1;
+      max-width: 420px;
+      background: var(--vscode-input-background);
+      color: var(--vscode-input-foreground);
+      border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+      border-radius: 3px;
+      padding: 4px 8px;
+      font-size: 12px;
+    }
+    #diff-search-count { opacity: 0.7; font-size: 11px; }
+    .search-hidden { display: none; }
+    .empty-filter { display: none; opacity: 0.7; font-size: 12px; }
+    .empty-filter.visible { display: block; }
   </style>
 </head>
 <body>
@@ -116,10 +133,36 @@ export function renderPolicyDiffReportHtml(report: PolicyDiffReport): string {
   ${identicalBanner}
   <h2>Summary</h2>
   <ul>${summaryItems.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>
+  <div class="search-wrap">
+    <input id="diff-search" type="search" aria-label="Search changes" placeholder="Search circuits, filters or values…" />
+    <span id="diff-search-count"></span>
+  </div>
+  <p class="empty-filter">No changes match the current search.</p>
   ${renderList('Added circuits', added)}
   ${renderList('Removed circuits', removed)}
-  ${modifiedSections.length > 0 ? `<section><h3>Modified circuits</h3><ul>${modifiedSections.join('')}</ul></section>` : ''}
+  ${modifiedSections.length > 0 ? `<section class="searchable"><h3>Modified circuits</h3><ul>${modifiedSections.join('')}</ul></section>` : ''}
   ${renderList('Warnings', warnings)}
+  <script nonce="${scriptNonce}">
+    const search = document.getElementById('diff-search');
+    const count = document.getElementById('diff-search-count');
+    const empty = document.querySelector('.empty-filter');
+    function applyDiffFilter() {
+      const needle = (search.value || '').trim().toLowerCase();
+      const items = Array.from(document.querySelectorAll('section.searchable li'));
+      let visible = 0;
+      items.forEach((item) => {
+        const match = !needle || (item.textContent || '').toLowerCase().indexOf(needle) !== -1;
+        item.classList.toggle('search-hidden', !match);
+        if (match) visible += 1;
+      });
+      document.querySelectorAll('section.searchable').forEach((section) => {
+        section.classList.toggle('search-hidden', !section.querySelector('li:not(.search-hidden)'));
+      });
+      count.textContent = needle ? visible + ' of ' + items.length + ' entries' : '';
+      empty.classList.toggle('visible', !!needle && visible === 0);
+    }
+    search.addEventListener('input', applyDiffFilter);
+  </script>
 </body>
 </html>`;
 }

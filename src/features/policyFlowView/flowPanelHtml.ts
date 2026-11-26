@@ -40,6 +40,20 @@ export function getFlowPanelHtml(nonce: string): string {
       cursor: pointer;
       font-size: 12px;
     }
+    #flow-search {
+      margin-left: auto;
+      width: 220px;
+      max-width: 40%;
+      background: var(--vscode-input-background);
+      color: var(--vscode-input-foreground);
+      border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+      border-radius: 3px;
+      padding: 3px 8px;
+      font-size: 12px;
+    }
+    #flow-search-count { opacity: 0.7; font-size: 11px; }
+    .node.search-match rect { stroke: var(--vscode-focusBorder, #0969da); stroke-width: 3; }
+    .node.search-dim, .edge.search-dim { opacity: 0.2; }
     #banner {
       display: none;
       padding: 6px 12px;
@@ -101,6 +115,8 @@ export function getFlowPanelHtml(nonce: string): string {
   <header>
     <span class="title" id="title"></span>
     <span class="project" id="project"></span>
+    <input id="flow-search" type="search" aria-label="Search filters" placeholder="Search filters…" />
+    <span id="flow-search-count"></span>
     <button id="fit">Fit to screen</button>
   </header>
   <div id="banner"></div>
@@ -246,6 +262,8 @@ export function getFlowPanelHtml(nonce: string): string {
         const midY = (y1 + y2) / 2;
 
         const path = el('path', {
+          'data-from': edge.from,
+          'data-to': edge.to,
           d: 'M ' + x1 + ' ' + y1 + ' C ' + x1 + ' ' + midY + ', ' + x2 + ' ' + midY + ', ' + x2 + ' ' + y2,
           class: 'edge ' + edge.kind + (edge.dangling ? ' dangling' : ''),
           'marker-end': 'url(#arrow-' + edge.kind + ')',
@@ -265,9 +283,14 @@ export function getFlowPanelHtml(nonce: string): string {
         if (node.missing) classes.push('missing');
 
         const group = el('g', {
+          'data-id': node.id,
           class: classes.join(' '),
           transform: 'translate(' + pos.x + ',' + pos.y + ')',
         }, viewport);
+        group.setAttribute(
+          'data-search',
+          [node.name, node.filterType || '', node.circuitRef || ''].join(' ').toLowerCase()
+        );
 
         el('rect', { width: NODE_W, height: NODE_H, rx: 6 }, group);
 
@@ -313,12 +336,36 @@ export function getFlowPanelHtml(nonce: string): string {
         }
       }
 
+      applyFlowSearch();
+
       const nodeKey = data.nodes.map((n) => n.id).sort().join('|');
       if (nodeKey !== lastNodeKey) {
         lastNodeKey = nodeKey;
         fitToScreen();
       }
     }
+
+    const flowSearch = document.getElementById('flow-search');
+    const flowSearchCount = document.getElementById('flow-search-count');
+
+    function applyFlowSearch() {
+      const needle = (flowSearch.value || '').trim().toLowerCase();
+      const nodes = Array.from(viewport.querySelectorAll('g.node'));
+      const matched = new Set();
+      nodes.forEach((group) => {
+        const match = !!needle && (group.getAttribute('data-search') || '').indexOf(needle) !== -1;
+        if (match) matched.add(group.getAttribute('data-id'));
+        group.classList.toggle('search-match', match);
+        group.classList.toggle('search-dim', !!needle && !match);
+      });
+      viewport.querySelectorAll('path.edge').forEach((edge) => {
+        const touches = matched.has(edge.getAttribute('data-from')) || matched.has(edge.getAttribute('data-to'));
+        edge.classList.toggle('search-dim', !!needle && !touches);
+      });
+      flowSearchCount.textContent = needle ? matched.size + ' of ' + nodes.length + ' filters' : '';
+    }
+
+    flowSearch.addEventListener('input', applyFlowSearch);
 
     window.addEventListener('message', (event) => {
       if (event.data.type === 'flowData') {

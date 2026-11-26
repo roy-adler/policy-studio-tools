@@ -89,6 +89,7 @@ As a Policy Studio developer, I want to see a policy's filters and their success
 - [ ] The view never writes to policy files.
 - [ ] Unit tests cover flow model extraction (nodes, success edges, failure edges, start filter), reachability analysis, and dangling-link detection — independent of the webview.
 - [ ] Integration test (or documented manual test) verifies the panel opens for a fixture circuit and click-to-navigate works.
+- [ ] A header search box highlights filter nodes whose name, type, or referenced circuit matches the query, dims the rest (and edges that touch no match), and shows `N of M filters`.
 
 ### Non-goals (v1)
 

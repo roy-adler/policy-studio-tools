@@ -131,6 +131,7 @@ As a Policy Studio developer, I want to see and edit all stage copies of a KPS d
 - [ ] Unit tests cover discovery, column union, mutations (including row reorder, single-stage and group), and write-back using fixtures under `test/fixtures/kps-editor/`.
 - [ ] Toolbar/source actions can open the current table’s JSON (active stage), Store Group YAML, and Type Group YAML.
 - [ ] A table whose present stages share the same rows shows a group badge (for example `DEVL/TEST`) that edits those stages together, highlights the member badges, and still allows selecting one stage on its own. Stages that differ, and missing or invalid stages, stay individual.
+- [ ] A search box above the grid filters the active table's rows by any cell value (same behaviour as the ENV editor search), shows `N of M rows`, and stays in place when switching tables or stages until another KPS set is loaded. Filtering only hides rows; edits, drag-and-drop, and saved row order are unaffected.
 
 ## Non-goals
 

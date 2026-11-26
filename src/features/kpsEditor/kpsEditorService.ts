@@ -66,6 +66,7 @@ type IncomingMessage = {
   | { type: 'pickKps' }
   | { type: 'switchKps' }
   | { type: 'openSource'; source: 'json' | 'storeGroup' | 'typeGroup'; tableName: string; stageId: string }
+  | { type: 'search'; query: string }
 );
 
 type KpsQuickPickItem = vscode.QuickPickItem & {
@@ -84,6 +85,7 @@ export class KpsEditorService {
   private gridScrollTop = 0;
   private gridScrollLeft = 0;
   private gridAtBottom = false;
+  private searchQuery = '';
 
   constructor(private readonly context: vscode.ExtensionContext) {}
 
@@ -270,6 +272,7 @@ export class KpsEditorService {
       this.kpsLabel = label ?? path.basename(path.dirname(kpsRoot)) ?? path.basename(kpsRoot);
 
       if (!sameKps) {
+        this.searchQuery = '';
         this.selectedTableName = this.session.tableNames[0];
         const table = this.selectedTableName
           ? this.session.tables[this.selectedTableName]
@@ -371,6 +374,7 @@ export class KpsEditorService {
       gridScrollLeft: view?.preserveGridScroll ? this.gridScrollLeft : undefined,
       scrollGridToEnd: view?.scrollGridToEnd,
       focusCell: view?.focusCell,
+      searchQuery: this.searchQuery,
     });
   }
 
@@ -502,6 +506,10 @@ export class KpsEditorService {
         break;
       case 'openSource':
         await this.handleOpenSource(message.source, message.tableName, message.stageId);
+        break;
+      case 'search':
+        // Rows are filtered in the webview; only remember the query for re-renders.
+        this.searchQuery = typeof message.query === 'string' ? message.query : '';
         break;
     }
   }

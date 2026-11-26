@@ -287,6 +287,21 @@ function getStyles(): string {
       border-color: var(--vscode-charts-orange, #bf8700);
     }
     .footer-actions { display: flex; gap: 8px; align-items: center; }
+    .grid-search-wrap { flex: none; display: flex; align-items: center; gap: 8px; }
+    #grid-search {
+      flex: 1;
+      max-width: 420px;
+      background: var(--vscode-input-background);
+      color: var(--vscode-input-foreground);
+      border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+      border-radius: 3px;
+      padding: 4px 8px;
+      font-size: 12px;
+    }
+    #grid-search-count { opacity: 0.7; font-size: 11px; }
+    table.grid tbody tr.search-hidden { display: none; }
+    .grid-empty-filter { display: none; padding: 8px; opacity: 0.7; font-size: 12px; }
+    .grid-empty-filter.visible { display: block; }
     .empty-state {
       max-width: 520px;
       margin: 32px auto;
@@ -387,6 +402,7 @@ function renderStageBody(
     .join('');
 
   return `<div class="grid-wrap">
+    <p class="placeholder grid-empty-filter">No rows match the current search.</p>
     <table class="grid">
       <thead><tr>${header}</tr></thead>
       <tbody>${rows}</tbody>
@@ -696,6 +712,7 @@ export function renderKpsEditorHtml(
     gridScrollLeft?: number;
     scrollGridToEnd?: boolean;
     focusCell?: KpsGridFocus;
+    searchQuery?: string;
   },
 ): string {
   const nonce = options.nonce ?? createNonce();
@@ -769,6 +786,14 @@ export function renderKpsEditorHtml(
 
   const stageTabs = renderStageTabButtons(session, tableName, target, gridStageId);
   const banners = renderBanners(session, tableName, stage);
+  const searchQuery = options.searchQuery ?? '';
+  const searchHtml =
+    stage.status === 'present'
+      ? `<div class="grid-search-wrap">
+      <input id="grid-search" type="search" aria-label="Search rows" placeholder="Search keys or values…" value="${escapeHtml(searchQuery)}" />
+      <span id="grid-search-count"></span>
+    </div>`
+      : '';
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -798,6 +823,7 @@ export function renderKpsEditorHtml(
       <button id="openStoreGroup"${table.storeGroupPath ? '' : ' disabled'}>Store Group</button>
       <button id="openTypeGroup"${table.typeGroupPath ? '' : ' disabled'}>Type Group</button>
     </div>
+    ${searchHtml}
     ${renderStageBody(stage, table, tableName, gridStageId)}
   </div>
   <script nonce="${nonce}">
@@ -996,6 +1022,43 @@ export function renderKpsEditorHtml(
         vscode.postMessage({ type: 'removeRow', tableName, target: activeTarget, rowIndex });
       });
     });
+    function rowSearchText(row) {
+      const parts = [];
+      row.querySelectorAll('td').forEach((cell) => {
+        const input = cell.querySelector('input');
+        parts.push(input instanceof HTMLInputElement ? input.value : (cell.textContent || ''));
+      });
+      return parts.join(' ').toLowerCase();
+    }
+
+    function applyGridFilter(query) {
+      const needle = (query || '').trim().toLowerCase();
+      const rows = Array.from(document.querySelectorAll('table.grid tbody tr'));
+      let visible = 0;
+      rows.forEach((row) => {
+        const match = !needle || rowSearchText(row).indexOf(needle) !== -1;
+        row.classList.toggle('search-hidden', !match);
+        if (match) visible += 1;
+      });
+      const empty = document.querySelector('.grid-empty-filter');
+      if (empty) empty.classList.toggle('visible', !!needle && rows.length > 0 && visible === 0);
+      const count = document.getElementById('grid-search-count');
+      if (count) count.textContent = needle ? visible + ' of ' + rows.length + ' rows' : '';
+    }
+
+    const gridSearch = document.getElementById('grid-search');
+    if (gridSearch instanceof HTMLInputElement) {
+      applyGridFilter(gridSearch.value);
+      let searchTimer = undefined;
+      gridSearch.addEventListener('input', () => {
+        applyGridFilter(gridSearch.value);
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => {
+          vscode.postMessage({ type: 'search', query: gridSearch.value });
+        }, 150);
+      });
+    }
+
     document.querySelectorAll('table.grid input').forEach((input) => {
       input.addEventListener('change', () => {
         vscode.postMessage({
