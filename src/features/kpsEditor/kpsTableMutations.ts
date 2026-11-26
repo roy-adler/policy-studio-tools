@@ -102,7 +102,7 @@ export function setCell(
   stage.dirty = true;
 }
 
-function emptyRow(columns: string[], columnTypes: Record<string, KpsColumnType>): KpsRow {
+export function emptyRow(columns: string[], columnTypes: Record<string, KpsColumnType>): KpsRow {
   const cells: KpsRow['cells'] = {};
   for (const column of columns) {
     cells[column] = { editable: true, value: defaultValueForColumnType(columnTypes[column]) };

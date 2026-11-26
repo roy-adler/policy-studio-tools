@@ -29,6 +29,7 @@ import {
 import { listKpsRootsForProjects, type KpsRootCandidate } from './listKpsRoots';
 import { syncRowOrderAcrossStages } from './kpsRowOrderSync';
 import { rowKeyIdAt } from './kpsRowStages';
+import { addKeyRowToOtherStages } from './kpsRowKeyPropagation';
 import { loadKpsSession } from './loadKpsSession';
 import { resolveKpsFollowActiveProject, resolveKpsOpenDecision } from './resolveKpsSelection';
 import { KPS_EDITOR_TOOL } from './toolDescriptor';
@@ -474,6 +475,25 @@ export class KpsEditorService {
             if (keyBefore !== keyAfter) {
               // The row's key changed: its open all-stages panel follows the row.
               this.moveExpandedKey(message.tableName, keyBefore, keyAfter);
+              if (keyBefore === undefined && keyAfter !== undefined) {
+                // A row (usually a new one) just got its key: add that key to every other stage.
+                const edited = message.target.kind === 'group' ? message.target.memberIds : [gridStageId];
+                const added = addKeyRowToOtherStages(
+                  this.session,
+                  message.tableName,
+                  gridStageId,
+                  message.rowIndex,
+                  edited,
+                );
+                if (added.length > 0) {
+                  const table = this.session.tables[message.tableName];
+                  this.stageTarget = resolveStageTarget(result.target, table, this.session.stageIds);
+                  void vscode.window.setStatusBarMessage(
+                    `KPS: row also added to ${added.join(', ')}`,
+                    5000,
+                  );
+                }
+              }
               this.render({ preserveGridScroll: true, focusCell: focusCellFromMessage(message) });
               break;
             }
