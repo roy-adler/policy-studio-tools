@@ -26,6 +26,7 @@ spaces —
 | `circuit-ref/` | `CallerPolicy.yaml` + `AuthPolicy.yaml` | `CallAuth` references circuit `AuthPolicy` (delegation) |
 | `no-start/` | `NoStartPolicy.yaml` | Circuit without a `start` declaration |
 | `axway-es/` | `Health Check.yaml` | Axway entity-store YAML with start/success/failure fields |
+| `studio-export/AUTH_GATEWAY/AUTH_GATEWAY_YAML/` | `Policies/Auth/Check Token.yaml` and others | Realistic export layout (folders with `_parent.yaml`), quoted/next-line/quoted-key start refs, `logging:` blocks, nested `children:`. Drives the policy tree tests. |
 
 A `large/` fixture (100+ filters) is intentionally not committed; generate one
 locally if a performance smoke test is needed.
@@ -33,8 +34,8 @@ locally if a performance smoke test is needed.
 ## Manual verification in VS Code (Extension Development Host)
 
 1. Open one of the fixture folders (prefer `yaml-es/`, the primary format) as the workspace.
-2. Run **Policy Studio: Show Policy Flow** from the command palette and pick the circuit,
-   or click **Policy flow** in the Policy Studio sidebar under *Analyze*.
+2. Run **Policy Studio: Show Policy Flow** from the command palette (or click **Policy flow**
+   in the Policy Studio sidebar under *Analyze*) and pick the policy in the tree on the left.
 3. Verify:
    - Success edges are green and solid; failure edges are red and dashed.
    - The start filter shows a `START` badge and sits on the top layer.

@@ -10,6 +10,7 @@ Supports both Policy Studio project formats: the **YAML entity store** (Axway's 
 - Search circuits, filters, attributes, scripts, and references
 - Jump to circuit definitions from references
 - Visualize a policy's filter flow with green success and red failure paths
+  (pick the policy from a folder tree of the loaded project inside the flow view)
 - Visualize inter-circuit reference graphs with entry points, cycles, and missing refs
 - Validate URI path templates with live diagnostics
 - Compare two policy snapshots semantically (circuits, scripts, paths, URLs)

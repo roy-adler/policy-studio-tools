@@ -1,0 +1,51 @@
+---
+type: FilterCircuit
+fields:
+  name: Check Token
+  description: |-
+    Validates the bearer token.
+    start: this line is part of the description, not the start filter
+  start: "./Get Authorization Header"
+  category: /System/Policy Categories/security
+logging:
+  fatal: 'Error in policy. Error: ${circuit.exception}'
+children:
+- type: HttpHeaderAttributeFilter
+  fields:
+    name: Get Authorization Header
+    headerName: Authorization
+    attributeName: http.header.authorization
+  routing:
+    success: ../Token Type?
+    failure: "../Reject: missing header"
+  logging:
+    fatal: 'Error retrieving header. Error: ${circuit.exception}'
+    failure: Failed to retrieve header
+    success: Retrieved header
+- type: SwitchFilter
+  fields:
+    name: Token Type?
+  children:
+  - type: SwitchCase
+    fields:
+      name: Bearer
+      start: ../Not a filter of this circuit
+  routing:
+    success: ../Verify JWT
+    failure: "../Reject: missing header"
+  logging:
+    success: Switch matched
+    failure: No case matched
+- type: CircuitDelegateFilter
+  fields:
+    name: Verify JWT
+    circuit: /Policies/Commons/JWT verify
+  routing:
+    success: ../Allow
+    failure: "../Reject: missing header"
+- type: TrueFilter
+  fields:
+    name: Allow
+- type: Return401Filter
+  fields:
+    name: "Reject: missing header"

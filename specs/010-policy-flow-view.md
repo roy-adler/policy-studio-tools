@@ -17,7 +17,8 @@ As a Policy Studio developer, I want to see a policy's filters and their success
 ## Inputs
 
 - A **target circuit**, identified by circuit name plus owning `projectId`, obtained from:
-  - Command `policyStudioTools.showPolicyFlow` (from palette: quick pick of circuits in scope; with the cursor inside a circuit definition in the active editor: that circuit)
+  - Command `policyStudioTools.showPolicyFlow` (with the cursor inside a circuit definition in the active editor: that circuit; otherwise the panel opens with the **policy tree** and no policy selected)
+  - The **policy tree** pane on the left of every Policy Flow panel (see Outputs)
   - Circuit search results (`002-circuit-search.md`) — "Show flow" action
   - Node action in the visual circuit graph (`008-visual-circuit-graph.md`)
 - **Per-circuit filter model** extracted from policy configuration (YAML — the primary Policy Studio format — or legacy XML; see `AGENTS.md`):
@@ -44,6 +45,7 @@ As a Policy Studio developer, I want to see a policy's filters and their success
   - Click filter node → open the policy file and reveal that filter's definition range
   - Filter node that references another circuit → secondary action "Open referenced policy" opening the Policy Flow view for the target circuit (resolution via `003-jump-to-circuit.md` service); missing target shown with the standard not-found warning
 - **Legend** explaining green/red edges, start marker, and warning styles.
+- **Policy tree pane** (left side of the panel, collapsible): the policies of the projects in scope, grouped by the folders (Policy Studio containers) they live in, e.g. `Policies › Auth › Check Token`. Built from the circuit index — only real `FilterCircuit` entities appear; folder `_parent.yaml` containers, KPS stores and libraries never do. One project in scope: its folders are the roots; several: one root per project. Folders sort before policies, alphabetically. A filter box narrows the tree to matching policy names; a reload button rebuilds the index. Clicking a policy shows its flow in the same panel (or reveals the panel already showing it); the current policy is highlighted and its folders expanded. XML projects (one store file) list their circuits under the store file name.
 - Panel title and header show circuit name and `projectDisplayName` (when multiple projects are in scope).
 - View is strictly **read-only** — no modification of policy files.
 
@@ -113,6 +115,7 @@ fixture.
 - `test/fixtures/policy-flow/no-start/` — circuit without a resolvable start filter.
 - `test/fixtures/policy-flow/axway-es/` — Axway YAML entity-store dialect (`fields.start`, `successNode`, `failureNode`).
 - `test/fixtures/policy-flow/list-routing/` — primary exported dialect: list-style `children` (`- type: …`), `fields.start` with `./` refs, and `routing.success` / `routing.failure` (including `../` refs).
+- `test/fixtures/policy-flow/studio-export/` — realistic export layout mirroring the example repo (`NAME/NAME_YAML/Policies/<folder>/…` with `_parent.yaml` containers): quoted `./` start refs, start on the next line, quoted keys, `logging:` blocks with `success:`/`failure:` messages, filters with their own nested `children:`, and CRLF line endings (inline). Also drives the policy tree tests.
 - `test/fixtures/policy-flow/large/` — generated policy with 100+ filters for performance smoke test (may be gitignored and generated in CI).
 
 ### YAML flow-link dialects
@@ -137,6 +140,16 @@ identical flow graph models:
 2. **Map + successNode (fixture / older shape):** named `children` keys with
    `fields.successNode` / `fields.failureNode` (or the same keys under
    `routing:`).
+
+Parsing rules (both shapes): YAML policies are read with a real YAML parser;
+`start` comes only from the circuit's `fields`, success/failure links only from
+a filter's `routing` (or `successNode`/`failureNode`). A filter's `logging:`
+block (`success:`/`failure:` log messages) and its nested `children:` (switch
+cases, criteria) are never flow links or filters of the circuit. Only when the
+file is not valid YAML does the tolerant line parser take over, with the same
+rules. In Axway XML, `start`/`successNode`/`failureNode` are entity references
+(`<value contentType="reference"><key …><id field="name" value="…"/>…`): the
+innermost key names the filter.
 
 ## Future Ideas
 
