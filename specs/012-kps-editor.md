@@ -39,6 +39,7 @@ As a Policy Studio developer, I want to see and edit all stage copies of a KPS d
   - **Warnings:** Stage file missing; invalid JSON; nested non-scalar fields; list element type mismatch.
   - **Actions:** Save, Reload, Add row, Remove row, Reorder rows (drag the ⋮⋮ handle), Create missing (per stage), Switch KPS…, Open KPS folder…, **Open JSON**, **Open Store Group**, **Open Type Group** (current table; JSON is the active stage file).
 - On Save: write updated JSON only to stage files that changed.
+- **Keyboard save:** Ctrl+S (Cmd+S on macOS) runs Save while this panel is the active editor. The value being typed in the focused input is committed first, so it is included. The keybinding applies only while the panel is active (`activeWebviewPanelId`), so Ctrl+S in text editors keeps its normal behaviour.
 
 ## Behaviour
 

@@ -1,4 +1,5 @@
 import * as crypto from 'crypto';
+import { getSaveShortcutScript } from '../webviewSave/saveShortcut';
 import type {
   EnvAttributeUsage,
   EnvScalar,
@@ -970,6 +971,7 @@ export function renderEnvValuesEditorHtml(
     document.getElementById('save').addEventListener('click', () => {
       vscode.postMessage({ type: 'save' });
     });
+    ${getSaveShortcutScript()}
     document.getElementById('reload').addEventListener('click', () => {
       vscode.postMessage({ type: 'reload' });
     });

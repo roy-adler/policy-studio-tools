@@ -484,6 +484,8 @@ describe('kps panel html', () => {
     });
     expect(html).toContain('T_CC_Sample_WebServices');
     expect(html).toContain('T_CC_Sample_Routes');
+    // Ctrl+S / Cmd+S: the webview answers the shortcut's requestSave.
+    expect(html).toContain("message.type !== 'requestSave'");
     expect(html).toContain('DEVL');
     expect(html).toContain('TEST');
     expect(html).toContain('HUTL');

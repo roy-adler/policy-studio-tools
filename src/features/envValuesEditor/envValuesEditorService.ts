@@ -34,6 +34,7 @@ import type {
   EnvValuesModel,
 } from './types';
 import type { PolicyStudioProject } from '../projectRegistry/types';
+import { SAVE_REQUEST_MESSAGE, SAVE_SHORTCUT_PANELS } from '../webviewSave/saveShortcut';
 
 function createNonce(): string {
   return crypto.randomBytes(16).toString('hex');
@@ -98,10 +99,18 @@ export class EnvValuesEditorService {
       vscode.commands.registerCommand('policyStudioTools.openEnvValuesEditor', () =>
         this.openEditor(),
       ),
+      vscode.commands.registerCommand(SAVE_SHORTCUT_PANELS.envValuesEditor.command, () =>
+        this.requestSaveFromShortcut(),
+      ),
       store.onScopeChanged(() => {
         void this.handleActiveProjectChanged();
       }),
     );
+  }
+
+  /** Ctrl+S / Cmd+S while the panel is active: let the webview commit its focused input, then save. */
+  private requestSaveFromShortcut(): void {
+    void this.panel?.webview.postMessage({ type: SAVE_REQUEST_MESSAGE });
   }
 
   private async handleActiveProjectChanged(): Promise<void> {
@@ -323,7 +332,7 @@ export class EnvValuesEditorService {
 
     const nonce = createNonce();
     this.panel = vscode.window.createWebviewPanel(
-      'policyStudio.envValuesEditor',
+      SAVE_SHORTCUT_PANELS.envValuesEditor.viewType,
       'ENV values editor',
       vscode.ViewColumn.Active,
       { enableScripts: true, retainContextWhenHidden: true },

@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { getSharedProjectRegistryStore } from '../projectRegistry/projectRegistryService';
 import type { PolicyStudioProject } from '../projectRegistry/types';
+import { SAVE_REQUEST_MESSAGE, SAVE_SHORTCUT_PANELS } from '../webviewSave/saveShortcut';
 import { getSharedToolsHubService } from '../toolsSidebar/toolsHubService';
 import {
   applyKpsTargetEdit,
@@ -109,10 +110,18 @@ export class KpsEditorService {
     const store = getSharedProjectRegistryStore();
     this.context.subscriptions.push(
       vscode.commands.registerCommand('policyStudioTools.openKpsEditor', () => this.openEditor()),
+      vscode.commands.registerCommand(SAVE_SHORTCUT_PANELS.kpsEditor.command, () =>
+        this.requestSaveFromShortcut(),
+      ),
       store.onScopeChanged(() => {
         void this.handleActiveProjectChanged();
       }),
     );
+  }
+
+  /** Ctrl+S / Cmd+S while the panel is active: let the webview commit its focused input, then save. */
+  private requestSaveFromShortcut(): void {
+    void this.panel?.webview.postMessage({ type: SAVE_REQUEST_MESSAGE });
   }
 
   private async handleActiveProjectChanged(): Promise<void> {
@@ -336,7 +345,7 @@ export class KpsEditorService {
 
     const nonce = createNonce();
     this.panel = vscode.window.createWebviewPanel(
-      'policyStudio.kpsEditor',
+      SAVE_SHORTCUT_PANELS.kpsEditor.viewType,
       'KPS editor',
       vscode.ViewColumn.Active,
       { enableScripts: true, retainContextWhenHidden: true },

@@ -1,4 +1,5 @@
 import * as crypto from 'crypto';
+import { getSaveShortcutScript } from '../webviewSave/saveShortcut';
 import {
   defaultStageTarget,
   findStageGroups,
@@ -905,6 +906,7 @@ export function getKpsPanelShellHtml(nonce: string): string {
   <div id="main"><p>Loading…</p></div>
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
+    ${getSaveShortcutScript()}
     vscode.postMessage({ type: 'ready' });
   </script>
 </body>
@@ -967,6 +969,7 @@ export function renderKpsEditorHtml(
     document.getElementById('pickKps')?.addEventListener('click', () => vscode.postMessage({ type: 'pickKps' }));
     document.getElementById('reload')?.addEventListener('click', () => vscode.postMessage({ type: 'reload' }));
     document.getElementById('save')?.addEventListener('click', () => vscode.postMessage({ type: 'save' }));
+    ${getSaveShortcutScript()}
   </script>
 </body>
 </html>`;
@@ -1323,6 +1326,7 @@ export function renderKpsEditorHtml(
 
     document.getElementById('save')?.addEventListener('click', () => vscode.postMessage({ type: 'save' }));
     document.getElementById('reload')?.addEventListener('click', () => vscode.postMessage({ type: 'reload' }));
+    ${getSaveShortcutScript()}
     document.getElementById('switchKps')?.addEventListener('click', () => vscode.postMessage({ type: 'switchKps' }));
     document.getElementById('pickKps')?.addEventListener('click', () => vscode.postMessage({ type: 'pickKps' }));
     document.getElementById('openJson')?.addEventListener('click', () => {

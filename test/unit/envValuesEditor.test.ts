@@ -636,6 +636,8 @@ describe('renderEnvValuesEditorHtml empty state', () => {
     expect(html).toContain('id="tree"');
     expect(html).toContain('id="detail"');
     expect(html).not.toContain('No ENV stages found');
+    // Ctrl+S / Cmd+S: the webview answers the shortcut's requestSave.
+    expect(html).toContain("message.type !== 'requestSave'");
   });
 
   it('renders scalar lists as per-item inputs with add/remove controls', () => {
