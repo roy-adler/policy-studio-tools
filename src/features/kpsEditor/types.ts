@@ -41,9 +41,21 @@ export interface KpsStageTable {
   dirty: boolean;
 }
 
+export interface KpsSchemaFiles {
+  storeGroupPath: string;
+  typeGroupPath: string;
+  /** Store Group `fields.readKey`, when set: the column that identifies a row. */
+  readKey?: string;
+}
+
 export interface KpsTableModel {
   tableName: string;
   columns: string[];
+  /**
+   * Column whose value identifies a row across stages (Store Group `readKey`
+   * when it names a column, else the first column). Used to sync row order.
+   */
+  keyColumn?: string;
   schemaColumns: string[];
   columnTypes: Record<string, KpsColumnType>;
   listElementTypes: Record<string, KpsScalarColumnType>;
