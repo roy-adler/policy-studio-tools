@@ -78,6 +78,7 @@ As a Policy Studio developer, I want to see what actually changed between two pr
 - [ ] Summary counts match the detailed change list.
 - [ ] Unit tests cover added/removed/modified circuits, script diff, path change, URL change, and formatting-only YAML.
 - [ ] Source adapter interface is defined and directory-based adapter is implemented.
+- [ ] A search box under the summary filters the added, removed, modified, and warning entries by text, hides sections with no matching entry, and shows `N of M entries`.
 
 ### Non-goals (v1)
 
