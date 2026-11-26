@@ -5,7 +5,13 @@ import {
   resolveStageTarget,
   type KpsStageTarget,
 } from './kpsStageGroups';
-import type { KpsSession, KpsStageTable } from './types';
+import {
+  collectRowAcrossStages,
+  keyIdLabel,
+  rowKeyIdAt,
+  stageRowKeyIds,
+} from './kpsRowStages';
+import type { KpsCell, KpsSession, KpsStageTable, KpsTableModel } from './types';
 
 function createNonce(): string {
   return crypto.randomBytes(16).toString('hex');
@@ -55,6 +61,17 @@ export interface KpsCellPatch {
     value: string;
     warning?: string;
   } | null;
+  /**
+   * The edited column's value in every stage that has the edited row's key,
+   * so open all-stages panels (and the grid) show the committed values.
+   */
+  stageValues: {
+    keyId: string;
+    column: string;
+    values: Array<{ stageId: string; rowIndex: number; value: string; warning?: string }>;
+  } | null;
+  /** Set when the edit came from an all-stages panel: anchors the edit warning there. */
+  detailAnchor: { keyId: string; stageId: string; column: string } | null;
 }
 
 function renderBanners(session: KpsSession, tableName: string, stage: KpsStageTable): string {
@@ -106,7 +123,7 @@ export function buildKpsCellPatch(
   session: KpsSession,
   tableName: string,
   stageTarget: KpsStageTarget,
-  edited: { rowIndex: number; column: string },
+  edited: { rowIndex: number; column: string; stageId?: string; fromDetail?: boolean },
 ): KpsCellPatch | undefined {
   const table = session.tables[tableName];
   if (!table) {
@@ -118,7 +135,45 @@ export function buildKpsCellPatch(
   if (!stage) {
     return undefined;
   }
-  const modelCell = stage.status === 'present' ? stage.rows[edited.rowIndex]?.cells[edited.column] : undefined;
+  const editedStageId = edited.stageId ?? gridStageId;
+  const gridRowIndex =
+    editedStageId === gridStageId
+      ? edited.rowIndex
+      : (() => {
+          const keyId = rowKeyIdAt(session, tableName, editedStageId, edited.rowIndex);
+          return keyId === undefined
+            ? -1
+            : stageRowKeyIds(session, tableName, gridStageId).indexOf(keyId);
+        })();
+  const modelCell =
+    stage.status === 'present' && gridRowIndex >= 0
+      ? stage.rows[gridRowIndex]?.cells[edited.column]
+      : undefined;
+  const keyId = rowKeyIdAt(session, tableName, editedStageId, edited.rowIndex);
+  const stageValues =
+    keyId === undefined
+      ? null
+      : {
+          keyId,
+          column: edited.column,
+          values: collectRowAcrossStages(session, tableName, keyId).flatMap((entry) => {
+            if (entry.status !== 'present') {
+              return [];
+            }
+            const cell = entry.row.cells[edited.column];
+            if (!cell || !cell.editable) {
+              return [];
+            }
+            return [
+              {
+                stageId: entry.stageId,
+                rowIndex: entry.rowIndex,
+                value: scalarToInputValue(cell.value),
+                warning: cell.warning,
+              },
+            ];
+          }),
+        };
   return {
     bannersHtml: renderBanners(session, tableName, stage),
     saveLabel: `Save${countDirty(session) > 0 ? ` (${countDirty(session)})` : ''}`,
@@ -129,13 +184,92 @@ export function buildKpsCellPatch(
     editWarning: session.editWarning ?? null,
     cell: modelCell
       ? {
-          rowIndex: edited.rowIndex,
+          rowIndex: gridRowIndex,
           column: edited.column,
           value: scalarToInputValue(modelCell.value),
           warning: modelCell.warning,
         }
       : null,
+    stageValues,
+    detailAnchor:
+      edited.fromDetail && keyId !== undefined
+        ? { keyId, stageId: editedStageId, column: edited.column }
+        : null,
   };
+}
+
+function renderCell(cell: KpsCell | undefined, inputAttrs: string): string {
+  if (!cell || !cell.editable) {
+    const preview =
+      cell?.nested !== undefined ? JSON.stringify(cell.nested) : scalarToInputValue(cell?.value);
+    const lockedWarning = cell?.warning ?? 'Non-editable';
+    return `<td class="locked" data-warning="${escapeHtml(lockedWarning)}">${escapeHtml(preview)}</td>`;
+  }
+  const warnClass = cell.warning ? ' class="warn"' : '';
+  const warning = cell.warning ? ` data-warning="${escapeHtml(cell.warning)}"` : '';
+  return `<td${warnClass}${warning}><input ${inputAttrs} value="${escapeHtml(scalarToInputValue(cell.value))}" /></td>`;
+}
+
+/** Grid columns before the table's own columns: drag handle and row number. */
+const LEADING_GRID_COLUMNS = 2;
+
+/**
+ * The inline panel under a grid row: that key's row in every stage, editable
+ * per stage. Stages without the key, without the table file, or with invalid
+ * JSON are listed with the reason instead of values.
+ */
+export function renderKpsRowDetail(
+  session: KpsSession,
+  tableName: string,
+  keyId: string,
+  gridStageId: string,
+): string {
+  const table = session.tables[tableName];
+  if (!table) {
+    return '';
+  }
+  const entries = collectRowAcrossStages(session, tableName, keyId);
+  const colspan = LEADING_GRID_COLUMNS + table.columns.length + 1;
+  const header =
+    '<th class="stage-col">Stage</th><th class="row-col">Row</th>' +
+    table.columns.map((column) => `<th>${escapeHtml(column)}</th>`).join('');
+  const body = entries
+    .map((entry) => {
+      const current = entry.stageId === gridStageId ? ' current' : '';
+      const label = `<td class="stage-col">${escapeHtml(entry.stageId)}</td>`;
+      if (entry.status !== 'present') {
+        const reason =
+          entry.status === 'absent'
+            ? 'No row with this key in this stage'
+            : entry.status === 'missing'
+              ? 'Table file missing in this stage'
+              : `Invalid JSON: ${entry.parseError ?? 'parse error'}`;
+        return `<tr class="stage-line ${entry.status}${current}" data-stage="${escapeHtml(entry.stageId)}">${label}<td class="row-col">–</td><td class="stage-reason" colspan="${table.columns.length}">${escapeHtml(reason)}</td></tr>`;
+      }
+      const cells = table.columns
+        .map((column) =>
+          renderCell(
+            entry.row.cells[column],
+            `class="stage-input" data-key-id="${escapeHtml(keyId)}" data-stage="${escapeHtml(entry.stageId)}" data-stage-row="${entry.rowIndex}" data-column="${escapeHtml(column)}"`,
+          ),
+        )
+        .join('');
+      return `<tr class="stage-line present${current}" data-stage="${escapeHtml(entry.stageId)}">${label}<td class="row-col">${entry.rowIndex + 1}</td>${cells}</tr>`;
+    })
+    .join('');
+  const presentCount = entries.filter((entry) => entry.status === 'present').length;
+  const keyLabel = table.keyColumn
+    ? `${escapeHtml(table.keyColumn)} = <code>${escapeHtml(keyIdLabel(keyId))}</code>`
+    : '';
+  return `<tr class="row-detail" data-key-id="${escapeHtml(keyId)}"><td colspan="${colspan}">
+    <div class="row-detail-panel">
+      <div class="row-detail-title">All stages for ${keyLabel} <span class="row-detail-count">${presentCount} of ${entries.length} stages have this key</span></div>
+      <table class="stage-values">
+        <thead><tr>${header}</tr></thead>
+        <tbody>${body}</tbody>
+      </table>
+    </div>
+  </td></tr>`;
 }
 
 function getStyles(): string {
@@ -338,6 +472,78 @@ function getStyles(): string {
     }
     .drag-grip:hover { color: var(--vscode-foreground); }
     .drag-grip:active { cursor: grabbing; }
+    .row-num-cell {
+      white-space: nowrap;
+      width: 1%;
+      padding-right: 8px;
+      user-select: none;
+    }
+    .row-expand {
+      background: transparent;
+      border: none;
+      color: var(--vscode-foreground);
+      cursor: pointer;
+      padding: 0 4px 0 0;
+      font-size: 11px;
+      width: 16px;
+      opacity: 0.8;
+    }
+    .row-expand:hover { opacity: 1; }
+    .row-expand:disabled { opacity: 0.3; cursor: default; }
+    .row-num {
+      display: inline-block;
+      min-width: 2ch;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      color: var(--vscode-editorLineNumber-foreground, var(--vscode-descriptionForeground));
+    }
+    tr.draggable-row.expanded > td { border-bottom-color: transparent; }
+    tr.row-detail > td {
+      padding: 0 6px 8px 30px;
+    }
+    .row-detail-panel {
+      border: 1px solid var(--vscode-panel-border);
+      border-left: 3px solid var(--vscode-focusBorder, #007fd4);
+      border-radius: 3px;
+      padding: 6px 8px;
+      background: var(--vscode-textCodeBlock-background, rgba(127, 127, 127, 0.06));
+    }
+    .row-detail-title { font-size: 11px; margin-bottom: 4px; }
+    .row-detail-count { opacity: 0.7; margin-left: 8px; }
+    table.grid table.stage-values {
+      border-collapse: collapse;
+      width: 100%;
+    }
+    table.grid table.stage-values th {
+      position: static;
+      background: transparent;
+      font-weight: 600;
+      font-size: 11px;
+      opacity: 0.8;
+    }
+    table.grid table.stage-values td, table.grid table.stage-values th {
+      padding: 2px 6px;
+    }
+    table.grid table.stage-values tr:last-child td { border-bottom: none; }
+    .stage-values .stage-col { font-weight: 600; white-space: nowrap; width: 1%; }
+    .stage-values .row-col {
+      white-space: nowrap;
+      width: 1%;
+      font-variant-numeric: tabular-nums;
+      color: var(--vscode-editorLineNumber-foreground, var(--vscode-descriptionForeground));
+    }
+    .stage-values tr.current .stage-col::after { content: ' (shown)'; font-weight: normal; opacity: 0.7; }
+    .stage-values tr.absent .stage-reason,
+    .stage-values tr.missing .stage-reason {
+      font-style: italic;
+      color: var(--vscode-disabledForeground, var(--vscode-descriptionForeground));
+    }
+    .stage-values tr.absent .stage-col,
+    .stage-values tr.missing .stage-col { opacity: 0.6; }
+    .stage-values tr.error .stage-reason { color: var(--vscode-errorForeground, #be1100); }
+    .stage-values td.differs input {
+      border-left: 3px solid var(--vscode-charts-yellow, #cca700);
+    }
     table.grid tbody tr.drag-over-top td {
       box-shadow: inset 0 2px 0 0 var(--vscode-focusBorder, #007fd4);
     }
@@ -348,10 +554,12 @@ function getStyles(): string {
 }
 
 function renderStageBody(
+  session: KpsSession,
   stage: KpsStageTable,
-  table: { columns: string[]; schemaColumns: string[] },
+  table: KpsTableModel,
   tableName: string,
   stageId: string,
+  expandedKeys: Set<string>,
 ): string {
   if (stage.status === 'missing') {
     return `<div class="empty-state">
@@ -371,6 +579,7 @@ function renderStageBody(
   const schemaSet = new Set(table.schemaColumns);
   const header =
     '<th class="drag-handle-header" style="width:24px;text-align:center;"></th>' +
+    '<th class="row-num-cell" title="Row position in this stage file (display only)">#</th>' +
     table.columns
       .map((column) => {
         const unexpected = schemaSet.size > 0 && !schemaSet.has(column);
@@ -379,25 +588,28 @@ function renderStageBody(
         return `<th${cls}${warning}>${escapeHtml(column)}</th>`;
       })
       .join('') + '<th></th>';
+  const keyIds = stageRowKeyIds(session, tableName, stageId);
   const rows = stage.rows
     .map((row, rowIndex) => {
       const cells = table.columns
-        .map((column) => {
-          const cell = row.cells[column];
-          if (!cell || !cell.editable) {
-            const preview =
-              cell?.nested !== undefined
-                ? JSON.stringify(cell.nested)
-                : scalarToInputValue(cell?.value);
-            const lockedWarning = cell?.warning ?? 'Non-editable';
-            return `<td class="locked" data-warning="${escapeHtml(lockedWarning)}">${escapeHtml(preview)}</td>`;
-          }
-          const warnClass = cell.warning ? ' class="warn"' : '';
-          const warning = cell.warning ? ` data-warning="${escapeHtml(cell.warning)}"` : '';
-          return `<td${warnClass}${warning}><input data-row="${rowIndex}" data-column="${escapeHtml(column)}" value="${escapeHtml(scalarToInputValue(cell.value))}" /></td>`;
-        })
+        .map((column) =>
+          renderCell(
+            row.cells[column],
+            `class="grid-input" data-row="${rowIndex}" data-column="${escapeHtml(column)}"`,
+          ),
+        )
         .join('');
-      return `<tr data-row-index="${rowIndex}" class="draggable-row"><td class="drag-handle"><span class="drag-grip" draggable="true" data-row-index="${rowIndex}" title="Drag to reorder">⋮⋮</span></td>${cells}<td class="row-actions"><button class="remove-row" data-row="${rowIndex}">−</button></td></tr>`;
+      const keyId = keyIds[rowIndex];
+      const expanded = keyId !== undefined && expandedKeys.has(keyId);
+      const expander =
+        keyId === undefined
+          ? `<button class="row-expand" disabled title="No ${escapeHtml(table.keyColumn ?? 'key')} value: cannot match this row in other stages">▸</button>`
+          : `<button class="row-expand" aria-expanded="${expanded}" title="Show this ${escapeHtml(table.keyColumn ?? 'key')} in all stages">${expanded ? '▾' : '▸'}</button>`;
+      const keyAttr = keyId === undefined ? '' : ` data-key-id="${escapeHtml(keyId)}"`;
+      const gridRow = `<tr data-row-index="${rowIndex}"${keyAttr} class="draggable-row${expanded ? ' expanded' : ''}"><td class="drag-handle"><span class="drag-grip" draggable="true" data-row-index="${rowIndex}" title="Drag to reorder">⋮⋮</span></td><td class="row-num-cell">${expander}<span class="row-num">${rowIndex + 1}</span></td>${cells}<td class="row-actions"><button class="remove-row" data-row="${rowIndex}">−</button></td></tr>`;
+      return expanded && keyId !== undefined
+        ? gridRow + renderKpsRowDetail(session, tableName, keyId, stageId)
+        : gridRow;
     })
     .join('');
 
@@ -457,7 +669,7 @@ function gridViewScript(options: {
       : '';
 
   const focusScript = focus
-    ? `const focusInput = Array.from(document.querySelectorAll('table.grid input')).find((input) =>
+    ? `const focusInput = Array.from(document.querySelectorAll('table.grid input.grid-input')).find((input) =>
         input.getAttribute('data-row') === ${JSON.stringify(String(focus.rowIndex))} &&
         input.getAttribute('data-column') === ${JSON.stringify(focus.column)}
       );
@@ -653,7 +865,7 @@ function gridViewScript(options: {
     const vscode = {
       postMessage(message) {
         const active = document.activeElement;
-        const focusCell = active instanceof HTMLInputElement && active.matches('table.grid input')
+        const focusCell = active instanceof HTMLInputElement && active.matches('table.grid input.grid-input')
           ? {
               rowIndex: Number(active.getAttribute('data-row')),
               column: active.getAttribute('data-column'),
@@ -713,6 +925,8 @@ export function renderKpsEditorHtml(
     scrollGridToEnd?: boolean;
     focusCell?: KpsGridFocus;
     searchQuery?: string;
+    /** Key ids of the selected table's rows whose all-stages panel is open. */
+    expandedRowKeys?: Iterable<string>;
   },
 ): string {
   const nonce = options.nonce ?? createNonce();
@@ -824,7 +1038,7 @@ export function renderKpsEditorHtml(
       <button id="openTypeGroup"${table.typeGroupPath ? '' : ' disabled'}>Type Group</button>
     </div>
     ${searchHtml}
-    ${renderStageBody(stage, table, tableName, gridStageId)}
+    ${renderStageBody(session, stage, table, tableName, gridStageId, new Set(options.expandedRowKeys ?? []))}
   </div>
   <script nonce="${nonce}">
     ${gridViewScript(options)}
@@ -864,7 +1078,7 @@ export function renderKpsEditorHtml(
     }
 
     function findCellAnchor(rowIndex, column) {
-      return Array.from(document.querySelectorAll('table.grid input')).find((candidate) =>
+      return Array.from(document.querySelectorAll('table.grid input.grid-input')).find((candidate) =>
         candidate.getAttribute('data-row') === String(rowIndex) &&
         candidate.getAttribute('data-column') === column
       ) || null;
@@ -889,13 +1103,24 @@ export function renderKpsEditorHtml(
       }
     }
 
+    function findStageInput(keyId, stageId, column) {
+      return Array.from(document.querySelectorAll('table.grid input.stage-input')).find((candidate) =>
+        candidate.getAttribute('data-key-id') === keyId &&
+        candidate.getAttribute('data-stage') === stageId &&
+        candidate.getAttribute('data-column') === column
+      ) || null;
+    }
+
     function refreshCellNotice() {
       if (hoverNotice) {
         placeCellNotice(hoverNotice.anchor, hoverNotice.message);
         return;
       }
       if (stickyNotice) {
-        placeCellNotice(findCellAnchor(stickyNotice.rowIndex, stickyNotice.column), stickyNotice.message);
+        const anchor = stickyNotice.detail
+          ? findStageInput(stickyNotice.detail.keyId, stickyNotice.detail.stageId, stickyNotice.detail.column)
+          : findCellAnchor(stickyNotice.rowIndex, stickyNotice.column);
+        placeCellNotice(anchor, stickyNotice.message);
         return;
       }
       placeCellNotice(null, '');
@@ -945,7 +1170,7 @@ export function renderKpsEditorHtml(
       const openJson = document.getElementById('openJson');
       if (openJson) openJson.disabled = Boolean(patch.openJsonDisabled);
       if (patch.cell) {
-        const input = Array.from(document.querySelectorAll('table.grid input')).find((candidate) =>
+        const input = Array.from(document.querySelectorAll('table.grid input.grid-input')).find((candidate) =>
           candidate.getAttribute('data-row') === String(patch.cell.rowIndex) &&
           candidate.getAttribute('data-column') === patch.cell.column
         );
@@ -958,15 +1183,29 @@ export function renderKpsEditorHtml(
           if (patch.cell.warning) cellElement.setAttribute('data-warning', patch.cell.warning);
           else cellElement.removeAttribute('data-warning');
         }
-        if (patch.editWarning) {
-          stickyNotice = {
-            rowIndex: patch.cell.rowIndex,
-            column: patch.cell.column,
-            message: patch.editWarning,
-          };
-        } else {
-          stickyNotice = null;
-        }
+      }
+      if (patch.stageValues) {
+        patch.stageValues.values.forEach((entry) => {
+          const input = findStageInput(patch.stageValues.keyId, entry.stageId, patch.stageValues.column);
+          if (!(input instanceof HTMLInputElement)) return;
+          if (document.activeElement !== input) input.value = entry.value;
+          const td = input.closest('td');
+          if (td) {
+            td.classList.toggle('warn', Boolean(entry.warning));
+            if (entry.warning) td.setAttribute('data-warning', entry.warning);
+            else td.removeAttribute('data-warning');
+          }
+        });
+        document.querySelectorAll('tr.row-detail').forEach(refreshDetailDiffs);
+      }
+      if (patch.editWarning && patch.detailAnchor) {
+        stickyNotice = { detail: patch.detailAnchor, message: patch.editWarning };
+      } else if (patch.editWarning && patch.cell) {
+        stickyNotice = {
+          rowIndex: patch.cell.rowIndex,
+          column: patch.cell.column,
+          message: patch.editWarning,
+        };
       } else {
         stickyNotice = null;
       }
@@ -979,9 +1218,106 @@ export function renderKpsEditorHtml(
       refreshCellNotice();
     }
 
+    function findGridRowByKey(keyId) {
+      return Array.from(document.querySelectorAll('table.grid tr.draggable-row')).find((row) =>
+        row.getAttribute('data-key-id') === keyId
+      ) || null;
+    }
+
+    function detailRowOf(gridRow) {
+      const next = gridRow ? gridRow.nextElementSibling : null;
+      return next && next.classList.contains('row-detail') ? next : null;
+    }
+
+    function cellText(td) {
+      const input = td.querySelector('input');
+      return input instanceof HTMLInputElement ? input.value : (td.textContent || '');
+    }
+
+    // Marks values that differ from the stage shown in the grid.
+    function refreshDetailDiffs(detail) {
+      const lines = Array.from(detail.querySelectorAll('tr.stage-line.present'));
+      const reference = lines.find((line) => line.getAttribute('data-stage') === activeGridStageId);
+      lines.forEach((line) => {
+        const cells = Array.from(line.children).slice(2);
+        const refCells = reference ? Array.from(reference.children).slice(2) : [];
+        cells.forEach((td, index) => {
+          const differs = !!reference && line !== reference && refCells[index] && cellText(td) !== cellText(refCells[index]);
+          td.classList.toggle('differs', differs);
+          if (differs && !td.hasAttribute('data-warning')) td.title = 'Differs from ' + activeGridStageId;
+          else td.removeAttribute('title');
+        });
+      });
+    }
+
+    function bindDetail(detail) {
+      if (!detail || detail.dataset.bound === 'true') return;
+      detail.dataset.bound = 'true';
+      detail.querySelectorAll('input.stage-input').forEach((input) => {
+        input.addEventListener('input', () => refreshDetailDiffs(detail));
+        input.addEventListener('change', () => {
+          vscode.postMessage({
+            type: 'setStageCell',
+            tableName,
+            stageId: input.getAttribute('data-stage'),
+            rowIndex: Number(input.getAttribute('data-stage-row')),
+            column: input.getAttribute('data-column'),
+            value: input.value,
+          });
+        });
+      });
+      refreshDetailDiffs(detail);
+    }
+
+    function setExpanderState(gridRow, expanded) {
+      const button = gridRow ? gridRow.querySelector('.row-expand') : null;
+      if (button) {
+        button.textContent = expanded ? '▾' : '▸';
+        button.setAttribute('aria-expanded', String(expanded));
+      }
+      if (gridRow) gridRow.classList.toggle('expanded', expanded);
+    }
+
+    function insertRowDetail(keyId, html) {
+      const gridRow = findGridRowByKey(keyId);
+      if (!gridRow || !html) return;
+      const existing = detailRowOf(gridRow);
+      if (existing) existing.remove();
+      const holder = document.createElement('tbody');
+      holder.innerHTML = html;
+      const detail = holder.firstElementChild;
+      if (!detail) return;
+      gridRow.after(detail);
+      detail.classList.toggle('search-hidden', gridRow.classList.contains('search-hidden'));
+      setExpanderState(gridRow, true);
+      bindDetail(detail);
+    }
+
+    document.querySelectorAll('table.grid tr.draggable-row .row-expand').forEach((button) => {
+      button.addEventListener('click', () => {
+        const gridRow = button.closest('tr.draggable-row');
+        const keyId = gridRow ? gridRow.getAttribute('data-key-id') : null;
+        if (!gridRow || !keyId) return;
+        const open = detailRowOf(gridRow);
+        if (open) {
+          open.remove();
+          setExpanderState(gridRow, false);
+          vscode.postMessage({ type: 'toggleRowDetail', tableName, keyId, expanded: false });
+        } else {
+          vscode.postMessage({ type: 'toggleRowDetail', tableName, keyId, expanded: true });
+        }
+      });
+    });
+    document.querySelectorAll('table.grid tr.row-detail').forEach(bindDetail);
+
     window.addEventListener('message', (event) => {
       const message = event.data;
-      if (!message || message.type !== 'cellPatch' || !message.patch) return;
+      if (!message) return;
+      if (message.type === 'rowDetail') {
+        insertRowDetail(message.keyId, message.html);
+        return;
+      }
+      if (message.type !== 'cellPatch' || !message.patch) return;
       applyCellPatch(message.patch);
     });
 
@@ -1025,6 +1361,7 @@ export function renderKpsEditorHtml(
     function rowSearchText(row) {
       const parts = [];
       row.querySelectorAll('td').forEach((cell) => {
+        if (cell.classList.contains('row-num-cell') || cell.classList.contains('drag-handle')) return;
         const input = cell.querySelector('input');
         parts.push(input instanceof HTMLInputElement ? input.value : (cell.textContent || ''));
       });
@@ -1033,11 +1370,13 @@ export function renderKpsEditorHtml(
 
     function applyGridFilter(query) {
       const needle = (query || '').trim().toLowerCase();
-      const rows = Array.from(document.querySelectorAll('table.grid tbody tr'));
+      const rows = Array.from(document.querySelectorAll('table.grid tr.draggable-row'));
       let visible = 0;
       rows.forEach((row) => {
         const match = !needle || rowSearchText(row).indexOf(needle) !== -1;
         row.classList.toggle('search-hidden', !match);
+        const detail = detailRowOf(row);
+        if (detail) detail.classList.toggle('search-hidden', !match);
         if (match) visible += 1;
       });
       const empty = document.querySelector('.grid-empty-filter');
@@ -1059,7 +1398,7 @@ export function renderKpsEditorHtml(
       });
     }
 
-    document.querySelectorAll('table.grid input').forEach((input) => {
+    document.querySelectorAll('table.grid input.grid-input').forEach((input) => {
       input.addEventListener('change', () => {
         vscode.postMessage({
           type: 'setCell',

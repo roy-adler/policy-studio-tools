@@ -5,7 +5,7 @@ import type { KpsRow, KpsSession } from './types';
  * occurrence number, so duplicate keys still match first-to-first.
  * Returns undefined when the row has no usable key value.
  */
-function rowKeyIds(rows: KpsRow[], keyColumn: string): Array<string | undefined> {
+export function rowKeyIds(rows: KpsRow[], keyColumn: string): Array<string | undefined> {
   const seen = new Map<string, number>();
   return rows.map((row) => {
     const cell = row.cells[keyColumn];
