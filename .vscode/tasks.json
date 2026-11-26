@@ -17,7 +17,19 @@
       "script": "watch",
       "isBackground": true,
       "group": "build",
-      "problemMatcher": "$tsc-watch"
+      "problemMatcher": {
+        "owner": "esbuild",
+        "fileLocation": "relative",
+        "pattern": {
+          "regexp": "^\u2718 \\[ERROR\\] (.*)$",
+          "message": 1
+        },
+        "background": {
+          "activeBegins": true,
+          "beginsPattern": "^\\[watch\\] build started",
+          "endsPattern": "^\\[watch\\] build finished"
+        }
+      }
     }
   ]
 }
