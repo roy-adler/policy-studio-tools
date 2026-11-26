@@ -1,5 +1,5 @@
 import * as path from 'path';
-import type { KpsStageDiscovery } from './types';
+import type { KpsSchemaFiles, KpsStageDiscovery } from './types';
 import type {
   KpsCell,
   KpsColumnType,
@@ -188,7 +188,7 @@ export function buildKpsSession(
   fileContents: Record<string, string | null>,
   columnTypesByTable: Record<string, Record<string, KpsColumnType>> = {},
   schemaColumnsByTable: Record<string, string[]> = {},
-  schemaFilesByTable: Record<string, { storeGroupPath: string; typeGroupPath: string }> = {},
+  schemaFilesByTable: Record<string, KpsSchemaFiles> = {},
   listElementTypesByTable: Record<string, Record<string, KpsScalarColumnType>> = {},
 ): KpsSession {
   const warnings: string[] = [];
@@ -275,9 +275,11 @@ export function buildKpsSession(
       }
     }
 
+    const readKey = schemaFilesByTable[tableName]?.readKey;
     tables[tableName] = {
       tableName,
       columns,
+      keyColumn: readKey && columns.includes(readKey) ? readKey : columns[0],
       schemaColumns,
       columnTypes,
       listElementTypes,

@@ -25,6 +25,7 @@ import {
   type KpsGridFocus,
 } from './kpsPanelHtml';
 import { listKpsRootsForProjects, type KpsRootCandidate } from './listKpsRoots';
+import { syncRowOrderAcrossStages } from './kpsRowOrderSync';
 import { loadKpsSession } from './loadKpsSession';
 import { resolveKpsFollowActiveProject, resolveKpsOpenDecision } from './resolveKpsSelection';
 import { KPS_EDITOR_TOOL } from './toolDescriptor';
@@ -573,6 +574,17 @@ export class KpsEditorService {
       },
     );
     if (result.applied) {
+      const editedIds = target.kind === 'group' ? target.memberIds : [target.stageId];
+      const sourceId = this.session.stageIds.find((id) => editedIds.includes(id));
+      if (sourceId) {
+        const synced = syncRowOrderAcrossStages(this.session, tableName, sourceId, editedIds);
+        if (synced.length > 0) {
+          void vscode.window.setStatusBarMessage(
+            `KPS: row order also applied to ${synced.join(', ')}`,
+            5000,
+          );
+        }
+      }
       this.stageTarget = result.target;
       this.render({ preserveGridScroll: true });
     }

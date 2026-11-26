@@ -2,7 +2,13 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { parseMappingYaml } from '../envValuesEditor/yamlMaps';
 import { isPolicyStudioProject } from '../projectDetection/detectPolicyStudioProject';
-import type { KpsColumnType, KpsScalar, KpsScalarColumnType, KpsValue } from './types';
+import type {
+  KpsColumnType,
+  KpsScalar,
+  KpsScalarColumnType,
+  KpsSchemaFiles,
+  KpsValue,
+} from './types';
 
 const KEY_PROPERTY_STORES = path.join('Environment Configuration', 'Key Property Stores');
 
@@ -10,7 +16,7 @@ export interface KpsTypeSchemaLoad {
   columnTypesByTable: Record<string, Record<string, KpsColumnType>>;
   listElementTypesByTable: Record<string, Record<string, KpsScalarColumnType>>;
   schemaColumnsByTable: Record<string, string[]>;
-  schemaFilesByTable: Record<string, { storeGroupPath: string; typeGroupPath: string }>;
+  schemaFilesByTable: Record<string, KpsSchemaFiles>;
   warnings: string[];
 }
 
@@ -321,7 +327,7 @@ export function loadKpsTypeSchemas(projectRoot: string): KpsTypeSchemaLoad {
   const columnTypesByTable: Record<string, Record<string, KpsColumnType>> = {};
   const listElementTypesByTable: Record<string, Record<string, KpsScalarColumnType>> = {};
   const schemaColumnsByTable: Record<string, string[]> = {};
-  const schemaFilesByTable: Record<string, { storeGroupPath: string; typeGroupPath: string }> = {};
+  const schemaFilesByTable: Record<string, KpsSchemaFiles> = {};
   const storesRoot = path.join(projectRoot, KEY_PROPERTY_STORES);
   const yamlFiles: string[] = [];
   collectYamlFiles(storesRoot, yamlFiles);
@@ -342,7 +348,12 @@ export function loadKpsTypeSchemas(projectRoot: string): KpsTypeSchemaLoad {
     columnTypesByTable[tableName] = parsedType.columnTypes;
     listElementTypesByTable[tableName] = parsedType.listElementTypes;
     schemaColumnsByTable[tableName] = parsedType.columns;
-    schemaFilesByTable[tableName] = { storeGroupPath: filePath, typeGroupPath };
+    const readKey = typeof fields.readKey === 'string' ? fields.readKey.trim() : '';
+    schemaFilesByTable[tableName] = {
+      storeGroupPath: filePath,
+      typeGroupPath,
+      ...(readKey ? { readKey } : {}),
+    };
   }
 
   return {
