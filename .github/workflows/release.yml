@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  # Manual "Run workflow" button. Each run gets a new run number, so it
+  # publishes a fresh version (handy to retry a failed Marketplace signing).
+  workflow_dispatch:
 
 permissions:
   contents: write
