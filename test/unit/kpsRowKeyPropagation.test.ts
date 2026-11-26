@@ -107,6 +107,23 @@ describe('new KPS row key added to every stage', () => {
     expect(rows(s, 'TEST').map((row) => row.name)).toEqual(['x', 'new', 'b']);
   });
 
+  it('matches duplicate neighbour keys by occurrence', () => {
+    const s = session({
+      DEVL: [
+        { name: 'a', url: '1' },
+        { name: '', url: '' },
+        { name: 'a', url: '2' },
+      ],
+      TEST: [
+        { name: 'a', url: '3' },
+        { name: 'a', url: '4' },
+      ],
+    });
+    setCell(s, TABLE, 'DEVL', 1, 'name', 'new');
+    addKeyRowToOtherStages(s, TABLE, 'DEVL', 1, ['DEVL']);
+    expect(rows(s, 'TEST').map((row) => row.url)).toEqual(['3', '', '4']);
+  });
+
   it('uses the Store Group readKey column and copies the key value as stored', () => {
     const s = session(
       {

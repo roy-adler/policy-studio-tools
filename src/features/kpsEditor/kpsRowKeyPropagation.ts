@@ -1,3 +1,4 @@
+import { rowKeyIds } from './kpsRowOrderSync';
 import { emptyRow } from './kpsTableMutations';
 import type { KpsRow, KpsSession } from './types';
 
@@ -46,7 +47,8 @@ export function addKeyRowToOtherStages(
     return [];
   }
   const keyCell = sourceRow.cells[keyColumn];
-  const sourceKeys = source.rows.map((row) => keyValueOf(row, keyColumn));
+  // Neighbours match by key value + occurrence, like row-order sync.
+  const sourceIds = rowKeyIds(source.rows, keyColumn);
 
   const changed: string[] = [];
   for (const stageId of session.stageIds) {
@@ -57,24 +59,24 @@ export function addKeyRowToOtherStages(
     if (!stage || stage.status !== 'present') {
       continue;
     }
-    const stageKeys = stage.rows.map((row) => keyValueOf(row, keyColumn));
-    if (stageKeys.includes(key)) {
+    if (stage.rows.some((row) => keyValueOf(row, keyColumn) === key)) {
       continue;
     }
 
     let insertAt = stage.rows.length;
     let placed = false;
+    const stageIds = rowKeyIds(stage.rows, keyColumn);
     for (let i = rowIndex - 1; i >= 0 && !placed; i -= 1) {
-      const neighbour = sourceKeys[i];
-      const at = neighbour === undefined ? -1 : stageKeys.lastIndexOf(neighbour);
+      const neighbour = sourceIds[i];
+      const at = neighbour === undefined ? -1 : stageIds.indexOf(neighbour);
       if (at !== -1) {
         insertAt = at + 1;
         placed = true;
       }
     }
-    for (let i = rowIndex + 1; i < sourceKeys.length && !placed; i += 1) {
-      const neighbour = sourceKeys[i];
-      const at = neighbour === undefined ? -1 : stageKeys.indexOf(neighbour);
+    for (let i = rowIndex + 1; i < sourceIds.length && !placed; i += 1) {
+      const neighbour = sourceIds[i];
+      const at = neighbour === undefined ? -1 : stageIds.indexOf(neighbour);
       if (at !== -1) {
         insertAt = at;
         placed = true;
