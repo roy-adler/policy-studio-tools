@@ -199,6 +199,16 @@
         "command": "policyStudioTools.openCacheBrowser",
         "title": "Open Cache Browser",
         "category": "Policy Studio"
+      },
+      {
+        "command": "policyStudioTools.kpsEditor.save",
+        "title": "Save KPS Editor",
+        "category": "Policy Studio"
+      },
+      {
+        "command": "policyStudioTools.envValuesEditor.save",
+        "title": "Save ENV Values Editor",
+        "category": "Policy Studio"
       }
     ],
     "customEditors": [
@@ -265,6 +275,14 @@
         },
         {
           "command": "policyStudioTools.openTraceFile"
+        },
+        {
+          "command": "policyStudioTools.kpsEditor.save",
+          "when": "activeWebviewPanelId == 'policyStudio.kpsEditor'"
+        },
+        {
+          "command": "policyStudioTools.envValuesEditor.save",
+          "when": "activeWebviewPanelId == 'policyStudio.envValuesEditor'"
         }
       ],
       "view/title": [
@@ -279,7 +297,21 @@
           "group": "navigation"
         }
       ]
-    }
+    },
+    "keybindings": [
+      {
+        "command": "policyStudioTools.kpsEditor.save",
+        "key": "ctrl+s",
+        "mac": "cmd+s",
+        "when": "activeWebviewPanelId == 'policyStudio.kpsEditor'"
+      },
+      {
+        "command": "policyStudioTools.envValuesEditor.save",
+        "key": "ctrl+s",
+        "mac": "cmd+s",
+        "when": "activeWebviewPanelId == 'policyStudio.envValuesEditor'"
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run package:bundle",

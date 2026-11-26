@@ -38,6 +38,7 @@ As a Policy Studio developer, I want to see where a selected ENV key is referenc
   - **Warnings:** Key missing in a stage (distinct from empty value).
   - **Actions:** Save, Reload, Add key, Remove key, Create missing (per stage), optional Open ENV folder.
 - On Save: write updated nested YAML only to stage files that changed.
+- **Keyboard save:** Ctrl+S (Cmd+S on macOS) runs Save while this panel is the active editor. The value being typed in the focused input is committed first, so it is included. The keybinding applies only while the panel is active (`activeWebviewPanelId`), so Ctrl+S in text editors keeps its normal behaviour.
 
 ## Behaviour
 
