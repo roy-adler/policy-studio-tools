@@ -22,10 +22,12 @@ import {
   buildKpsCellPatch,
   getKpsPanelShellHtml,
   renderKpsEditorHtml,
+  renderKpsRowDetail,
   type KpsGridFocus,
 } from './kpsPanelHtml';
 import { listKpsRootsForProjects, type KpsRootCandidate } from './listKpsRoots';
 import { syncRowOrderAcrossStages } from './kpsRowOrderSync';
+import { rowKeyIdAt } from './kpsRowStages';
 import { loadKpsSession } from './loadKpsSession';
 import { resolveKpsFollowActiveProject, resolveKpsOpenDecision } from './resolveKpsSelection';
 import { KPS_EDITOR_TOOL } from './toolDescriptor';
@@ -68,6 +70,15 @@ type IncomingMessage = {
   | { type: 'switchKps' }
   | { type: 'openSource'; source: 'json' | 'storeGroup' | 'typeGroup'; tableName: string; stageId: string }
   | { type: 'search'; query: string }
+  | { type: 'toggleRowDetail'; tableName: string; keyId: string; expanded: boolean }
+  | {
+      type: 'setStageCell';
+      tableName: string;
+      stageId: string;
+      rowIndex: number;
+      column: string;
+      value: string;
+    }
 );
 
 type KpsQuickPickItem = vscode.QuickPickItem & {
@@ -87,6 +98,8 @@ export class KpsEditorService {
   private gridScrollLeft = 0;
   private gridAtBottom = false;
   private searchQuery = '';
+  /** Per table: key ids of rows whose all-stages panel is open (display only). */
+  private expandedRowKeys = new Map<string, Set<string>>();
 
   constructor(private readonly context: vscode.ExtensionContext) {}
 
@@ -274,6 +287,7 @@ export class KpsEditorService {
 
       if (!sameKps) {
         this.searchQuery = '';
+        this.expandedRowKeys.clear();
         this.selectedTableName = this.session.tableNames[0];
         const table = this.selectedTableName
           ? this.session.tables[this.selectedTableName]
@@ -376,6 +390,9 @@ export class KpsEditorService {
       scrollGridToEnd: view?.scrollGridToEnd,
       focusCell: view?.focusCell,
       searchQuery: this.searchQuery,
+      expandedRowKeys: this.selectedTableName
+        ? this.expandedRowKeys.get(this.selectedTableName)
+        : undefined,
     });
   }
 
@@ -425,6 +442,8 @@ export class KpsEditorService {
           return;
         }
         {
+          const gridStageId = gridStageOf(message.target);
+          const keyBefore = rowKeyIdAt(this.session, message.tableName, gridStageId, message.rowIndex);
           const result = applyKpsTargetEdit(
             this.session,
             message.tableName,
@@ -442,6 +461,13 @@ export class KpsEditorService {
           );
           if (result.applied) {
             this.stageTarget = result.target;
+            const keyAfter = rowKeyIdAt(this.session, message.tableName, gridStageId, message.rowIndex);
+            if (keyBefore !== keyAfter) {
+              // The row's key changed: its open all-stages panel follows the row.
+              this.moveExpandedKey(message.tableName, keyBefore, keyAfter);
+              this.render({ preserveGridScroll: true, focusCell: focusCellFromMessage(message) });
+              break;
+            }
             const patch = buildKpsCellPatch(this.session, message.tableName, result.target, {
               rowIndex: message.rowIndex,
               column: message.column,
@@ -512,6 +538,98 @@ export class KpsEditorService {
         // Rows are filtered in the webview; only remember the query for re-renders.
         this.searchQuery = typeof message.query === 'string' ? message.query : '';
         break;
+      case 'toggleRowDetail':
+        this.handleToggleRowDetail(message.tableName, message.keyId, message.expanded);
+        break;
+      case 'setStageCell':
+        this.handleSetStageCell(message);
+        break;
+    }
+  }
+
+  private moveExpandedKey(tableName: string, from: string | undefined, to: string | undefined): void {
+    const keys = this.expandedRowKeys.get(tableName);
+    if (!keys || from === undefined || !keys.has(from)) {
+      return;
+    }
+    keys.delete(from);
+    if (to !== undefined) {
+      keys.add(to);
+    }
+  }
+
+  private handleToggleRowDetail(tableName: string, keyId: string, expanded: boolean): void {
+    if (!this.session || typeof keyId !== 'string' || !this.session.tables[tableName]) {
+      return;
+    }
+    let keys = this.expandedRowKeys.get(tableName);
+    if (!keys) {
+      keys = new Set();
+      this.expandedRowKeys.set(tableName, keys);
+    }
+    if (!expanded) {
+      keys.delete(keyId);
+      return;
+    }
+    keys.add(keyId);
+    const table = this.session.tables[tableName];
+    const target = resolveStageTarget(
+      this.stageTarget ?? defaultStageTarget(table, this.session.stageIds),
+      table,
+      this.session.stageIds,
+    );
+    const html = renderKpsRowDetail(this.session, tableName, keyId, gridStageOf(target));
+    void this.panel?.webview.postMessage({ type: 'rowDetail', keyId, html });
+  }
+
+  /**
+   * An edit in a row's all-stages panel: writes that one stage only, whatever
+   * the grid shows, and keeps the grid's selection when it still exists.
+   */
+  private handleSetStageCell(message: IncomingMessage & { type: 'setStageCell' }): void {
+    if (!this.session) {
+      return;
+    }
+    const table = this.session.tables[message.tableName];
+    const stage = table?.stages[message.stageId];
+    if (!table || !stage || stage.status !== 'present' || !stage.rows[message.rowIndex]) {
+      return;
+    }
+    const before =
+      this.stageTarget ?? defaultStageTarget(table, this.session.stageIds);
+    const gridBefore = gridStageOf(resolveStageTarget(before, table, this.session.stageIds));
+    const keyBefore = rowKeyIdAt(this.session, message.tableName, message.stageId, message.rowIndex);
+
+    setCell(
+      this.session,
+      message.tableName,
+      message.stageId,
+      message.rowIndex,
+      message.column,
+      message.value,
+    );
+
+    const target = resolveStageTarget(before, table, this.session.stageIds);
+    this.stageTarget = target;
+    const keyAfter = rowKeyIdAt(this.session, message.tableName, message.stageId, message.rowIndex);
+    const targetChanged = JSON.stringify(target) !== JSON.stringify(before);
+    if (keyBefore !== keyAfter || targetChanged) {
+      if (keyBefore !== keyAfter && message.stageId === gridBefore) {
+        this.moveExpandedKey(message.tableName, keyBefore, keyAfter);
+      }
+      this.render({ preserveGridScroll: true });
+      return;
+    }
+    const patch = buildKpsCellPatch(this.session, message.tableName, target, {
+      rowIndex: message.rowIndex,
+      column: message.column,
+      stageId: message.stageId,
+      fromDetail: true,
+    });
+    if (patch && this.panel) {
+      void this.panel.webview.postMessage({ type: 'cellPatch', patch });
+    } else {
+      this.render({ preserveGridScroll: true });
     }
   }
 
@@ -689,6 +807,10 @@ export class KpsEditorService {
 
     this.loadAndShow(folder);
   }
+}
+
+function gridStageOf(target: KpsStageTarget): string {
+  return target.kind === 'group' ? target.memberIds[0] ?? '' : target.stageId;
 }
 
 function focusCellFromMessage(message: IncomingMessage): KpsGridFocus | undefined {
